@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -12,6 +13,21 @@ const CHATROOM_ID = 235222;
 const PREFIX      = '!';
 const STREAMER    = 'kosteze231';
 const CSV_FILE    = path.join(__dirname, 'marble.csv');
+const STATE_FILE  = path.join(__dirname, 'marble_state.json');
+const MAX_PLAYERS = 1000;
+
+// Пароль береться з Environment Variables на Render:
+//   Render Dashboard → твій сервіс → Environment → Add variable
+//   Key: WEB_PASSWORD    Value: твій_пароль
+const WEB_PASSWORD = process.env.WEB_PASSWORD;
+if (!WEB_PASSWORD) {
+  console.error('╔══════════════════════════════════════════════════╗');
+  console.error('║  ПОМИЛКА: WEB_PASSWORD не задано!                ║');
+  console.error('║  Render Dashboard → Environment → Add variable  ║');
+  console.error('║  Key: WEB_PASSWORD   Value: твій_пароль          ║');
+  console.error('╚══════════════════════════════════════════════════╝');
+  process.exit(1);
+}
 // ───────────────────────────────────────────────────────────
 
 const PUSHER_WS =
@@ -21,109 +37,285 @@ const PUSHER_WS =
 let players   = [];
 let accepting = true;
 
-function saveCSV() {
-  fs.writeFileSync(CSV_FILE, players.join('\n'), 'utf8');
-  console.log(`[CSV] Сохранено ${players.length} игроков`);
+// Активні сесії (token → expiry)
+const sessions = new Map();
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
 }
 
-// ── Веб-страница для стримера ───────────────────────────────
-const HTML = () => `<!DOCTYPE html>
-<html lang="ru">
+function isValidSession(token) {
+  if (!token) return false;
+  const expiry = sessions.get(token);
+  if (!expiry) return false;
+  if (Date.now() > expiry) {
+    sessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+// ── Збереження стану ────────────────────────────────────────
+function saveState() {
+  const state = { players, accepting, savedAt: new Date().toISOString() };
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[STATE] Помилка збереження:', e.message);
+  }
+}
+
+function loadState() {
+  if (!fs.existsSync(STATE_FILE)) return;
+  try {
+    const raw   = fs.readFileSync(STATE_FILE, 'utf8');
+    const state = JSON.parse(raw);
+    players   = Array.isArray(state.players) ? state.players : [];
+    accepting = typeof state.accepting === 'boolean' ? state.accepting : true;
+    console.log(`[STATE] Відновлено: ${players.length} гравців, реєстрація: ${accepting ? 'відкрита' : 'закрита'}`);
+  } catch (e) {
+    console.error('[STATE] Помилка завантаження:', e.message);
+  }
+}
+
+function saveCSV() {
+  try {
+    fs.writeFileSync(CSV_FILE, players.join('\n'), 'utf8');
+    console.log(`[CSV] Збережено ${players.length} гравців`);
+  } catch (e) {
+    console.error('[CSV] Помилка збереження:', e.message);
+  }
+}
+
+// Автозбереження кожні 30 секунд
+setInterval(() => { if (players.length > 0) saveState(); }, 30000);
+
+// ── Сторінка входу ──────────────────────────────────────────
+const LOGIN_HTML = () => `<!DOCTYPE html>
+<html lang="uk">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Список игроков</title>
+<title>Kick Marbles — Вхід</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0f0f0f; color: #fff; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-  .wrapper { width: 100%; max-width: 900px; padding: 24px; }
-  h1 { font-size: 22px; color: #53fc18; margin-bottom: 6px; text-align: center; }
-  .sub { color: #888; font-size: 14px; margin-bottom: 20px; text-align: center; }
-  .stats { display: flex; justify-content: center; gap: 16px; margin-bottom: 16px; }
-  .stat { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 14px 28px; text-align: center; }
-  .stat-num { font-size: 32px; font-weight: bold; color: #53fc18; }
-  .stat-label { font-size: 12px; color: #888; margin-top: 2px; }
-  .status-wrap { text-align: center; margin-bottom: 16px; }
-  .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }
-  .status.open { background: #1a3a1a; color: #53fc18; border: 1px solid #53fc18; }
-  .status.closed { background: #3a1a1a; color: #ff4444; border: 1px solid #ff4444; }
-  .buttons { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
-  button { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: opacity 0.2s; }
-  button:hover { opacity: 0.8; }
-  .btn-csv { background: #53fc18; color: #000; }
-  .btn-reset { background: #ff4444; color: #fff; }
-  .btn-refresh { background: #333; color: #fff; }
-  .list { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; overflow: hidden; }
-  .list-header { padding: 12px 16px; background: #222; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
-  .player { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #222; border-right: 1px solid #222; font-size: 13px; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .box {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 40px;
+    width: 320px;
+    text-align: center;
+  }
+  h1 { font-family: 'Rajdhani', sans-serif; font-size: 22px; color: #53fc18; margin-bottom: 6px; }
+  .sub { color: #444; font-size: 11px; margin-bottom: 28px; }
+  input {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 11px 14px;
+    color: #fff;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    margin-bottom: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: #53fc18; }
+  button {
+    width: 100%;
+    background: #53fc18;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.85; }
+  .err { color: #ff4444; font-size: 11px; margin-top: 10px; min-height: 16px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🎮 Marbles Bot</h1>
+  <div class="sub">тільки для стримера</div>
+  <input type="password" id="pw" placeholder="пароль..." onkeydown="if(event.key==='Enter')login()">
+  <button onclick="login()">Увійти</button>
+  <div class="err" id="err"></div>
+</div>
+<script>
+async function login() {
+  const pw = document.getElementById('pw').value;
+  if (!pw) return;
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw })
+  });
+  if (res.ok) {
+    const { token } = await res.json();
+    document.cookie = 'session=' + token + '; path=/; max-age=86400; SameSite=Strict';
+    location.reload();
+  } else {
+    const err = document.getElementById('err');
+    err.textContent = 'Невірний пароль';
+    setTimeout(() => err.textContent = '', 3000);
+    document.getElementById('pw').value = '';
+    document.getElementById('pw').focus();
+  }
+}
+document.getElementById('pw').focus();
+</script>
+</body>
+</html>`;
+
+// ── Головна сторінка ────────────────────────────────────────
+const HTML = () => `<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kick Marbles — Гравці</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .wrapper { width: 100%; max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 24px; color: #53fc18; text-align: center; letter-spacing: 1px; margin-bottom: 4px; }
+  .sub { color: #444; font-size: 11px; margin-bottom: 18px; text-align: center; font-family: 'Share Tech Mono', monospace; }
+
+  .stats { display: flex; justify-content: center; margin-bottom: 12px; }
+  .stat { background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 12px 40px; text-align: center; }
+  .stat-num { font-size: 38px; font-weight: 700; color: #53fc18; line-height: 1; }
+  .stat-label { font-size: 10px; color: #444; margin-top: 3px; font-family: 'Share Tech Mono', monospace; }
+
+  .bar-wrap { max-width: 320px; margin: 0 auto 12px; }
+  .bar-bg { background: #1a1a1a; border-radius: 4px; height: 5px; overflow: hidden; }
+  .bar { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.4s; }
+  .bar-label { font-size: 10px; color: #333; text-align: center; margin-top: 4px; font-family: 'Share Tech Mono', monospace; }
+
+  .status-wrap { text-align: center; margin-bottom: 14px; }
+  .status { display: inline-block; padding: 3px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; font-family: 'Share Tech Mono', monospace; }
+  .status.open   { background: #0d200d; color: #53fc18; border: 1px solid #2a5a2a; }
+  .status.closed { background: #200d0d; color: #ff4444; border: 1px solid #5a2a2a; }
+
+  .buttons { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
+  button { padding: 8px 18px; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px; transition: opacity 0.2s, transform 0.1s; }
+  button:hover  { opacity: 0.82; }
+  button:active { transform: scale(0.97); }
+  .btn-csv    { background: #53fc18; color: #000; }
+  .btn-reset  { background: #c0392b; color: #fff; }
+  .btn-upd    { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
+  .btn-out    { background: #111; color: #333; border: 1px solid #1a1a1a; font-size: 12px; }
+
+  .list { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; overflow: hidden; }
+  .list-head { padding: 9px 16px; background: #141414; color: #333; font-size: 10px; letter-spacing: 2px; text-align: center; font-family: 'Share Tech Mono', monospace; border-bottom: 1px solid #1a1a1a; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .player { display: flex; align-items: center; padding: 6px 10px; border-bottom: 1px solid #141414; border-right: 1px solid #141414; gap: 7px; transition: background 0.1s; }
+  .player:hover { background: #141414; }
   .player:nth-child(4n) { border-right: none; }
-  .player-num { color: #555; width: 28px; font-size: 11px; flex-shrink: 0; }
-  .player-name { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty { padding: 40px; text-align: center; color: #555; }
-  .auto { font-size: 12px; color: #555; margin-top: 12px; text-align: center; }
+  .pnum { color: #2a2a2a; width: 24px; font-size: 10px; flex-shrink: 0; font-family: 'Share Tech Mono', monospace; }
+  .pname { color: #ddd; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { padding: 32px; text-align: center; color: #2a2a2a; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+  .footer { font-size: 10px; color: #1e1e1e; margin-top: 8px; text-align: center; font-family: 'Share Tech Mono', monospace; }
 </style>
 </head>
 <body>
 <div class="wrapper">
-  <h1>🎮 Kick Marbles Bot</h1>
-  <div class="sub">Канал: kosteze231 · Обновляется автоматически каждые 5 секунд</div>
+  <h1>🎮 KICK MARBLES BOT</h1>
+  <div class="sub">kosteze231 · автооновлення 5с</div>
 
   <div class="stats">
     <div class="stat">
       <div class="stat-num" id="count">0</div>
-      <div class="stat-label">Игроков зарегистрировано</div>
+      <div class="stat-label">гравців зареєстровано</div>
     </div>
   </div>
 
+  <div class="bar-wrap">
+    <div class="bar-bg"><div class="bar" id="bar" style="width:0%"></div></div>
+    <div class="bar-label" id="bar-label">0 / 1000</div>
+  </div>
+
   <div class="status-wrap">
-    <div class="status open" id="status">● Регистрация открыта</div>
+    <div class="status open" id="status">● реєстрація відкрита</div>
   </div>
 
   <div class="buttons">
-    <button class="btn-csv" onclick="downloadCSV()">⬇ Скачать CSV</button>
-    <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
-    <button class="btn-refresh" onclick="loadPlayers()">↻ Обновить</button>
+    <button class="btn-csv"   onclick="downloadCSV()">⬇ Скачати CSV</button>
+    <button class="btn-reset" onclick="resetList()">🗑 Скинути список</button>
+    <button class="btn-upd"   onclick="loadPlayers()">↻ Оновити</button>
+    <button class="btn-out"   onclick="logout()">вийти</button>
   </div>
 
   <div class="list">
-    <div class="list-header">Список игроков</div>
-    <div id="players-list"><div class="empty">Никто ещё не зарегистрировался</div></div>
+    <div class="list-head">СПИСОК ГРАВЦІВ</div>
+    <div id="plist"><div class="empty">ніхто ще не зареєструвався</div></div>
   </div>
-  <div class="auto">Автообновление каждые 5 секунд</div>
+  <div class="footer">автооновлення кожні 5 секунд</div>
 </div>
 
 <script>
 async function loadPlayers() {
   const res = await fetch('/api/players');
-  const data = await res.json();
-  document.getElementById('count').textContent = data.players.length;
-  const statusEl = document.getElementById('status');
-  if (data.accepting) {
-    statusEl.textContent = '● Регистрация открыта';
-    statusEl.className = 'status open';
-  } else {
-    statusEl.textContent = '● Регистрация закрыта';
-    statusEl.className = 'status closed';
-  }
-  const list = document.getElementById('players-list');
-  if (data.players.length === 0) {
-    list.innerHTML = '<div class="empty">Никто ещё не зарегистрировался</div>';
+  if (res.status === 401) { location.reload(); return; }
+  const d = await res.json();
+
+  document.getElementById('count').textContent = d.players.length;
+
+  const pct = Math.min(d.players.length / 1000 * 100, 100);
+  const bar = document.getElementById('bar');
+  bar.style.width = pct + '%';
+  bar.style.background = d.players.length >= 1000 ? '#ff4444' : d.players.length >= 800 ? '#ffaa00' : '#53fc18';
+  document.getElementById('bar-label').textContent = d.players.length + ' / 1000';
+
+  const st = document.getElementById('status');
+  st.textContent = d.accepting ? '● реєстрація відкрита' : '● реєстрація закрита';
+  st.className = 'status ' + (d.accepting ? 'open' : 'closed');
+
+  const list = document.getElementById('plist');
+  if (!d.players.length) {
+    list.innerHTML = '<div class="empty">ніхто ще не зареєструвався</div>';
     return;
   }
-  list.innerHTML = '<div class="grid">' + data.players.map((name, i) =>
-    '<div class="player"><span class="player-num">' + (i+1) + '</span><span class="player-name">' + name + '</span></div>'
+  list.innerHTML = '<div class="grid">' + d.players.map((n, i) =>
+    '<div class="player"><span class="pnum">' + (i+1) + '</span><span class="pname">' + n + '</span></div>'
   ).join('') + '</div>';
 }
 
-function downloadCSV() {
-  window.location.href = '/api/csv';
-}
+function downloadCSV() { window.location.href = '/api/csv'; }
 
 async function resetList() {
-  if (!confirm('Сбросить список всех игроков?')) return;
+  if (!confirm('Скинути список всіх гравців?')) return;
   await fetch('/api/reset', { method: 'POST' });
   loadPlayers();
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
 }
 
 loadPlayers();
@@ -132,49 +324,105 @@ setInterval(loadPlayers, 5000);
 </body>
 </html>`;
 
+// ── Парсинг cookies ─────────────────────────────────────────
+function getCookie(req, name) {
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const [k, v] = part.trim().split('=');
+    if (k === name) return v;
+  }
+  return null;
+}
+
 // ── HTTP сервер ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+
+  // Логін — відкритий маршрут
+  if (req.url === '/api/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { password } = JSON.parse(body);
+        if (password === WEB_PASSWORD) {
+          const token = generateToken();
+          sessions.set(token, Date.now() + 86400000); // 24 год
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ token }));
+        } else {
+          // Затримка 1с щоб ускладнити брутфорс
+          setTimeout(() => { res.writeHead(401); res.end(); }, 1000);
+        }
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  // Перевірка сесії для всіх інших маршрутів
+  const token = getCookie(req, 'session');
+  if (!isValidSession(token)) {
+    if (req.url.startsWith('/api/')) {
+      res.writeHead(401); res.end();
+    } else {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(LOGIN_HTML());
+    }
+    return;
+  }
+
+  if (req.url === '/api/logout' && req.method === 'POST') {
+    sessions.delete(token);
+    res.writeHead(200); res.end();
+    return;
+  }
+
   if (req.url === '/api/players') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ players, accepting }));
     return;
   }
+
   if (req.url === '/api/csv') {
-    const csv = players.join('\n');
     res.writeHead(200, {
       'Content-Type': 'text/csv',
       'Content-Disposition': 'attachment; filename="marble.csv"'
     });
-    res.end(csv);
+    res.end(players.join('\n'));
     return;
   }
+
   if (req.url === '/api/reset' && req.method === 'POST') {
-    players = [];
+    players   = [];
     accepting = true;
-    if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE);
-    console.log('[BOT] Список сброшен через веб-интерфейс');
-    res.writeHead(200);
-    res.end('OK');
+    saveState();
+    try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
+    console.log('[BOT] Список скинуто через веб-інтерфейс');
+    res.writeHead(200); res.end();
     return;
   }
+
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(HTML());
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log(`[WEB] Сервер запущен на порту ${process.env.PORT || 3000}`);
+  console.log(`[WEB] Сервер запущено на порту ${process.env.PORT || 3000}`);
 });
 
 // ── Kick WebSocket ──────────────────────────────────────────
 function connect() {
   const ws = new WebSocket(PUSHER_WS);
+  let pingInterval = null;
 
   ws.on('open', () => {
-    console.log('[WS] Подключено к Kick Pusher');
+    console.log('[WS] Підключено до Kick Pusher');
     ws.send(JSON.stringify({
       event: 'pusher:subscribe',
       data: { auth: '', channel: `chatrooms.${CHATROOM_ID}.v2` }
     }));
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
+    }, 30000);
   });
 
   ws.on('message', (raw) => {
@@ -187,8 +435,8 @@ function connect() {
     }
 
     if (msg.event === 'pusher_internal:subscription_succeeded') {
-      console.log(`[WS] Подписка на chatroom ${CHATROOM_ID} активна`);
-      console.log('[BOT] Бот работает! Жду команды в чате...\n');
+      console.log(`[WS] Підписка на chatroom ${CHATROOM_ID} активна`);
+      console.log('[BOT] Бот працює! Жду команди в чаті...\n');
       return;
     }
 
@@ -204,55 +452,68 @@ function connect() {
 
       if (lower === `${PREFIX}play`) {
         if (!accepting) {
-          console.log(`[SKIP] ${username} написал !play но регистрация закрыта`);
+          console.log(`[SKIP] ${username}: реєстрація закрита`);
+          return;
+        }
+        if (players.length >= MAX_PLAYERS) {
+          accepting = false;
+          saveState();
+          console.log(`[BOT] Ліміт ${MAX_PLAYERS} досягнуто — реєстрацію закрито`);
           return;
         }
         if (players.includes(username)) {
-          console.log(`[DUP]  ${username} уже в списке`);
+          console.log(`[DUP]  ${username} вже в списку`);
           return;
         }
         players.push(username);
+        saveState();
         saveCSV();
-        console.log(`[+] ${username} добавлен (всего: ${players.length})`);
+        console.log(`[+] ${username} (${players.length}/${MAX_PLAYERS})`);
+        if (players.length >= MAX_PLAYERS) {
+          accepting = false;
+          saveState();
+          console.log(`[BOT] Ліміт ${MAX_PLAYERS} досягнуто — реєстрацію закрито`);
+        }
         return;
       }
 
       if (lower === `${PREFIX}stop` && username.toLowerCase() === STREAMER) {
         accepting = false;
-        console.log('[BOT] Регистрация ОСТАНОВЛЕНА командой !stop');
+        saveState();
+        console.log('[BOT] Реєстрацію ЗУПИНЕНО (!stop)');
         return;
       }
 
       if (lower === `${PREFIX}reset` && username.toLowerCase() === STREAMER) {
         players   = [];
         accepting = true;
-        if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE);
-        console.log('[BOT] Список ОЧИЩЕН командой !reset, регистрация открыта');
+        saveState();
+        try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
+        console.log('[BOT] Список ОЧИЩЕНО (!reset)');
         return;
       }
     }
   });
 
-  ws.on('error', (err) => console.error('[WS] Ошибка:', err.message));
+  ws.on('error', (err) => console.error('[WS] Помилка:', err.message));
 
   ws.on('close', () => {
-    console.log('[WS] Соединение закрыто, переподключение через 5с...');
+    if (pingInterval) clearInterval(pingInterval);
+    console.log('[WS] З\'єднання закрито, перепідключення через 5с...');
     setTimeout(connect, 5000);
   });
-
-  setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
-    }
-  }, 30000);
 }
 
+// ── Старт ───────────────────────────────────────────────────
 console.log('╔══════════════════════════════════════╗');
 console.log('║   Kick → Marbles on Stream  BOT      ║');
 console.log('╠══════════════════════════════════════╣');
 console.log(`║  Channel:  ${CHANNEL_ID}                  ║`);
 console.log(`║  Chatroom: ${CHATROOM_ID}                  ║`);
-console.log('║  Команды: !play / !stop / !reset     ║');
+console.log('║  Команди: !play / !stop / !reset     ║');
+console.log(`║  Ліміт: ${MAX_PLAYERS} гравців                ║`);
+console.log('║  Захист: пароль через env variable   ║');
 console.log('╚══════════════════════════════════════╝\n');
 
+loadState();
 connect();
