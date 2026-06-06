@@ -1,0 +1,9 @@
+{
+  "name": "kick-marbles-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "bot.js",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
