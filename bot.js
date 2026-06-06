@@ -22,9 +22,9 @@ const MAX_PLAYERS = 1000;
 const WEB_PASSWORD = process.env.WEB_PASSWORD;
 if (!WEB_PASSWORD) {
   console.error('╔══════════════════════════════════════════════════╗');
-  console.error('║  ПОМИЛКА: WEB_PASSWORD не задано!                ║');
+  console.error('║  ОШИБКА: WEB_PASSWORD не задан!                ║');
   console.error('║  Render Dashboard → Environment → Add variable  ║');
-  console.error('║  Key: WEB_PASSWORD   Value: твій_пароль          ║');
+  console.error('║  Key: WEB_PASSWORD   Value: твой_пароль          ║');
   console.error('╚══════════════════════════════════════════════════╝');
   process.exit(1);
 }
@@ -61,7 +61,7 @@ function saveState() {
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (e) {
-    console.error('[STATE] Помилка збереження:', e.message);
+    console.error('[STATE] Ошибка сохранения:', e.message);
   }
 }
 
@@ -72,18 +72,18 @@ function loadState() {
     const state = JSON.parse(raw);
     players   = Array.isArray(state.players) ? state.players : [];
     accepting = typeof state.accepting === 'boolean' ? state.accepting : true;
-    console.log(`[STATE] Відновлено: ${players.length} гравців, реєстрація: ${accepting ? 'відкрита' : 'закрита'}`);
+    console.log(`[STATE] Восстановлено: ${players.length} игроков, регистрация: ${accepting ? 'открыта' : 'закрыта'}`);
   } catch (e) {
-    console.error('[STATE] Помилка завантаження:', e.message);
+    console.error('[STATE] Ошибка загрузки:', e.message);
   }
 }
 
 function saveCSV() {
   try {
     fs.writeFileSync(CSV_FILE, players.join('\n'), 'utf8');
-    console.log(`[CSV] Збережено ${players.length} гравців`);
+    console.log(`[CSV] Сохранено ${players.length} игроков`);
   } catch (e) {
-    console.error('[CSV] Помилка збереження:', e.message);
+    console.error('[CSV] Ошибка сохранения:', e.message);
   }
 }
 
@@ -92,11 +92,11 @@ setInterval(() => { if (players.length > 0) saveState(); }, 30000);
 
 // ── Сторінка входу ──────────────────────────────────────────
 const LOGIN_HTML = () => `<!DOCTYPE html>
-<html lang="uk">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Вхід</title>
+<title>Kick Marbles — Вход</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -154,9 +154,9 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 <body>
 <div class="box">
   <h1>🎮 Marbles Bot</h1>
-  <div class="sub">тільки для стримера</div>
+  <div class="sub">только для стримера</div>
   <input type="password" id="pw" placeholder="пароль..." onkeydown="if(event.key==='Enter')login()">
-  <button onclick="login()">Увійти</button>
+  <button onclick="login()">Войти</button>
   <div class="err" id="err"></div>
 </div>
 <script>
@@ -174,7 +174,7 @@ async function login() {
     location.reload();
   } else {
     const err = document.getElementById('err');
-    err.textContent = 'Невірний пароль';
+    err.textContent = 'Неверный пароль';
     setTimeout(() => err.textContent = '', 3000);
     document.getElementById('pw').value = '';
     document.getElementById('pw').focus();
@@ -187,11 +187,11 @@ document.getElementById('pw').focus();
 
 // ── Головна сторінка ────────────────────────────────────────
 const HTML = () => `<!DOCTYPE html>
-<html lang="uk">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Гравці</title>
+<title>Kick Marbles — Игроки</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -245,12 +245,12 @@ const HTML = () => `<!DOCTYPE html>
 <body>
 <div class="wrapper">
   <h1>🎮 KICK MARBLES BOT</h1>
-  <div class="sub">kosteze231 · автооновлення 5с</div>
+  <div class="sub">kosteze231 · автообновление 5с</div>
 
   <div class="stats">
     <div class="stat">
       <div class="stat-num" id="count">0</div>
-      <div class="stat-label">гравців зареєстровано</div>
+      <div class="stat-label">игроков зарегистрировано</div>
     </div>
   </div>
 
@@ -260,21 +260,21 @@ const HTML = () => `<!DOCTYPE html>
   </div>
 
   <div class="status-wrap">
-    <div class="status open" id="status">● реєстрація відкрита</div>
+    <div class="status open" id="status">● регистрация открыта</div>
   </div>
 
   <div class="buttons">
-    <button class="btn-csv"   onclick="downloadCSV()">⬇ Скачати CSV</button>
-    <button class="btn-reset" onclick="resetList()">🗑 Скинути список</button>
-    <button class="btn-upd"   onclick="loadPlayers()">↻ Оновити</button>
-    <button class="btn-out"   onclick="logout()">вийти</button>
+    <button class="btn-csv"   onclick="downloadCSV()">⬇ Скачать CSV</button>
+    <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
+    <button class="btn-upd"   onclick="loadPlayers()">↻ Обновить</button>
+    <button class="btn-out"   onclick="logout()">выйти</button>
   </div>
 
   <div class="list">
-    <div class="list-head">СПИСОК ГРАВЦІВ</div>
-    <div id="plist"><div class="empty">ніхто ще не зареєструвався</div></div>
+    <div class="list-head">СПИСОК ИГРОКОВ</div>
+    <div id="plist"><div class="empty">никто ещё не зарегистрировался</div></div>
   </div>
-  <div class="footer">автооновлення кожні 5 секунд</div>
+  <div class="footer">автообновление каждые 5 секунд</div>
 </div>
 
 <script>
@@ -292,12 +292,12 @@ async function loadPlayers() {
   document.getElementById('bar-label').textContent = d.players.length + ' / 1000';
 
   const st = document.getElementById('status');
-  st.textContent = d.accepting ? '● реєстрація відкрита' : '● реєстрація закрита';
+  st.textContent = d.accepting ? '● регистрация открыта' : '● регистрация закрыта';
   st.className = 'status ' + (d.accepting ? 'open' : 'closed');
 
   const list = document.getElementById('plist');
   if (!d.players.length) {
-    list.innerHTML = '<div class="empty">ніхто ще не зареєструвався</div>';
+    list.innerHTML = '<div class="empty">никто ещё не зарегистрировался</div>';
     return;
   }
   list.innerHTML = '<div class="grid">' + d.players.map((n, i) =>
@@ -308,7 +308,7 @@ async function loadPlayers() {
 function downloadCSV() { window.location.href = '/api/csv'; }
 
 async function resetList() {
-  if (!confirm('Скинути список всіх гравців?')) return;
+  if (!confirm('Сбросить список всех игроков?')) return;
   await fetch('/api/reset', { method: 'POST' });
   loadPlayers();
 }
@@ -395,7 +395,7 @@ const server = http.createServer((req, res) => {
     accepting = true;
     saveState();
     try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
-    console.log('[BOT] Список скинуто через веб-інтерфейс');
+    console.log('[BOT] Список сброшен через веб-интерфейс');
     res.writeHead(200); res.end();
     return;
   }
@@ -405,7 +405,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log(`[WEB] Сервер запущено на порту ${process.env.PORT || 3000}`);
+  console.log(`[WEB] Сервер запущен на порту ${process.env.PORT || 3000}`);
 });
 
 // ── Kick WebSocket ──────────────────────────────────────────
@@ -414,7 +414,7 @@ function connect() {
   let pingInterval = null;
 
   ws.on('open', () => {
-    console.log('[WS] Підключено до Kick Pusher');
+    console.log('[WS] Подключено к Kick Pusher');
     ws.send(JSON.stringify({
       event: 'pusher:subscribe',
       data: { auth: '', channel: `chatrooms.${CHATROOM_ID}.v2` }
@@ -435,8 +435,8 @@ function connect() {
     }
 
     if (msg.event === 'pusher_internal:subscription_succeeded') {
-      console.log(`[WS] Підписка на chatroom ${CHATROOM_ID} активна`);
-      console.log('[BOT] Бот працює! Жду команди в чаті...\n');
+      console.log(`[WS] Подписка на chatroom ${CHATROOM_ID} активна`);
+      console.log('[BOT] Бот работает! Жду команды в чате...\n');
       return;
     }
 
@@ -452,17 +452,17 @@ function connect() {
 
       if (lower === `${PREFIX}play`) {
         if (!accepting) {
-          console.log(`[SKIP] ${username}: реєстрація закрита`);
+          console.log(`[SKIP] ${username}: регистрация закрыта`);
           return;
         }
         if (players.length >= MAX_PLAYERS) {
           accepting = false;
           saveState();
-          console.log(`[BOT] Ліміт ${MAX_PLAYERS} досягнуто — реєстрацію закрито`);
+          console.log(`[BOT] Лимит ${MAX_PLAYERS} достигнут — регистрация закрыта`);
           return;
         }
         if (players.includes(username)) {
-          console.log(`[DUP]  ${username} вже в списку`);
+          console.log(`[DUP]  ${username} уже в списке`);
           return;
         }
         players.push(username);
@@ -472,7 +472,7 @@ function connect() {
         if (players.length >= MAX_PLAYERS) {
           accepting = false;
           saveState();
-          console.log(`[BOT] Ліміт ${MAX_PLAYERS} досягнуто — реєстрацію закрито`);
+          console.log(`[BOT] Лимит ${MAX_PLAYERS} достигнут — регистрация закрыта`);
         }
         return;
       }
@@ -480,7 +480,7 @@ function connect() {
       if (lower === `${PREFIX}stop` && username.toLowerCase() === STREAMER) {
         accepting = false;
         saveState();
-        console.log('[BOT] Реєстрацію ЗУПИНЕНО (!stop)');
+        console.log('[BOT] Регистрация ОСТАНОВЛЕНА (!stop)');
         return;
       }
 
@@ -489,17 +489,17 @@ function connect() {
         accepting = true;
         saveState();
         try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
-        console.log('[BOT] Список ОЧИЩЕНО (!reset)');
+        console.log('[BOT] Список ОЧИЩЕН (!reset)');
         return;
       }
     }
   });
 
-  ws.on('error', (err) => console.error('[WS] Помилка:', err.message));
+  ws.on('error', (err) => console.error('[WS] Ошибка:', err.message));
 
   ws.on('close', () => {
     if (pingInterval) clearInterval(pingInterval);
-    console.log('[WS] З\'єднання закрито, перепідключення через 5с...');
+    console.log('[WS] Соединение закрыто, переподключение через 5с...');
     setTimeout(connect, 5000);
   });
 }
@@ -510,9 +510,9 @@ console.log('║   Kick → Marbles on Stream  BOT      ║');
 console.log('╠══════════════════════════════════════╣');
 console.log(`║  Channel:  ${CHANNEL_ID}                  ║`);
 console.log(`║  Chatroom: ${CHATROOM_ID}                  ║`);
-console.log('║  Команди: !play / !stop / !reset     ║');
-console.log(`║  Ліміт: ${MAX_PLAYERS} гравців                ║`);
-console.log('║  Захист: пароль через env variable   ║');
+console.log('║  Команды: !play / !stop / !reset     ║');
+console.log(`║  Лимит: ${MAX_PLAYERS} игроков                ║`);
+console.log('║  Защита: пароль через env variable   ║');
 console.log('╚══════════════════════════════════════╝\n');
 
 loadState();
