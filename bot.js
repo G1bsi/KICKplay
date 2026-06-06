@@ -35,56 +35,63 @@ const HTML = () => `<!DOCTYPE html>
 <title>Kick Marbles — Список игроков</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0f0f0f; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 24px; }
-  h1 { font-size: 22px; color: #53fc18; margin-bottom: 6px; }
-  .sub { color: #888; font-size: 14px; margin-bottom: 20px; }
-  .stats { display: flex; gap: 16px; margin-bottom: 20px; }
-  .stat { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 14px 22px; }
+  body { background: #0f0f0f; color: #fff; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .wrapper { width: 100%; max-width: 900px; padding: 24px; }
+  h1 { font-size: 22px; color: #53fc18; margin-bottom: 6px; text-align: center; }
+  .sub { color: #888; font-size: 14px; margin-bottom: 20px; text-align: center; }
+  .stats { display: flex; justify-content: center; gap: 16px; margin-bottom: 16px; }
+  .stat { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 14px 28px; text-align: center; }
   .stat-num { font-size: 32px; font-weight: bold; color: #53fc18; }
   .stat-label { font-size: 12px; color: #888; margin-top: 2px; }
-  .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 20px; }
+  .status-wrap { text-align: center; margin-bottom: 16px; }
+  .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }
   .status.open { background: #1a3a1a; color: #53fc18; border: 1px solid #53fc18; }
   .status.closed { background: #3a1a1a; color: #ff4444; border: 1px solid #ff4444; }
-  .buttons { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .buttons { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
   button { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; transition: opacity 0.2s; }
   button:hover { opacity: 0.8; }
   .btn-csv { background: #53fc18; color: #000; }
   .btn-reset { background: #ff4444; color: #fff; }
   .btn-refresh { background: #333; color: #fff; }
   .list { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; overflow: hidden; }
-  .list-header { padding: 12px 16px; background: #222; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-  .player { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #222; font-size: 14px; }
-  .player:last-child { border-bottom: none; }
-  .player-num { color: #555; width: 36px; font-size: 12px; }
-  .player-name { color: #fff; }
+  .list-header { padding: 12px 16px; background: #222; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+  .player { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #222; border-right: 1px solid #222; font-size: 13px; }
+  .player:nth-child(4n) { border-right: none; }
+  .player-num { color: #555; width: 28px; font-size: 11px; flex-shrink: 0; }
+  .player-name { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { padding: 40px; text-align: center; color: #555; }
-  .auto { font-size: 12px; color: #555; margin-top: 12px; }
+  .auto { font-size: 12px; color: #555; margin-top: 12px; text-align: center; }
 </style>
 </head>
 <body>
-<h1>🎮 Kick Marbles Bot</h1>
-<div class="sub">Канал: kosteze231 · Обновляется автоматически каждые 5 секунд</div>
+<div class="wrapper">
+  <h1>🎮 Kick Marbles Bot</h1>
+  <div class="sub">Канал: kosteze231 · Обновляется автоматически каждые 5 секунд</div>
 
-<div class="stats">
-  <div class="stat">
-    <div class="stat-num" id="count">0</div>
-    <div class="stat-label">Игроков зарегистрировано</div>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num" id="count">0</div>
+      <div class="stat-label">Игроков зарегистрировано</div>
+    </div>
   </div>
-</div>
 
-<div class="status open" id="status">● Регистрация открыта</div>
+  <div class="status-wrap">
+    <div class="status open" id="status">● Регистрация открыта</div>
+  </div>
 
-<div class="buttons">
-  <button class="btn-csv" onclick="downloadCSV()">⬇ Скачать CSV</button>
-  <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
-  <button class="btn-refresh" onclick="loadPlayers()">↻ Обновить</button>
-</div>
+  <div class="buttons">
+    <button class="btn-csv" onclick="downloadCSV()">⬇ Скачать CSV</button>
+    <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
+    <button class="btn-refresh" onclick="loadPlayers()">↻ Обновить</button>
+  </div>
 
-<div class="list">
-  <div class="list-header">Список игроков</div>
-  <div id="players-list"><div class="empty">Никто ещё не зарегистрировался</div></div>
+  <div class="list">
+    <div class="list-header">Список игроков</div>
+    <div id="players-list"><div class="empty">Никто ещё не зарегистрировался</div></div>
+  </div>
+  <div class="auto">Автообновление каждые 5 секунд</div>
 </div>
-<div class="auto">Автообновление каждые 5 секунд</div>
 
 <script>
 async function loadPlayers() {
@@ -104,9 +111,9 @@ async function loadPlayers() {
     list.innerHTML = '<div class="empty">Никто ещё не зарегистрировался</div>';
     return;
   }
-  list.innerHTML = data.players.map((name, i) =>
+  list.innerHTML = '<div class="grid">' + data.players.map((name, i) =>
     '<div class="player"><span class="player-num">' + (i+1) + '</span><span class="player-name">' + name + '</span></div>'
-  ).join('');
+  ).join('') + '</div>';
 }
 
 function downloadCSV() {
