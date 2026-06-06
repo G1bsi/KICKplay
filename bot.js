@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import http from 'http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -123,3 +124,4 @@ console.log('║  Команди: !play / !stop / !reset     ║');
 console.log('╚══════════════════════════════════════╝\n');
 
 connect();
+http.createServer((req, res) => res.end('OK')).listen(process.env.PORT || 3000);
