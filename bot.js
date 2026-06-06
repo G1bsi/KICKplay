@@ -216,7 +216,7 @@ const HTML = () => `<!DOCTYPE html>
   .bar { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.4s; }
   .bar-label { font-size: 10px; color: #333; text-align: center; margin-top: 4px; font-family: 'Share Tech Mono', monospace; }
 
-  .status-wrap { text-align: center; margin-bottom: 14px; }
+  .status-wrap { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; }
   .status { display: inline-block; padding: 3px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; font-family: 'Share Tech Mono', monospace; }
   .status.open   { background: #0d200d; color: #53fc18; border: 1px solid #2a5a2a; }
   .status.closed { background: #200d0d; color: #ff4444; border: 1px solid #5a2a2a; }
@@ -227,6 +227,7 @@ const HTML = () => `<!DOCTYPE html>
   button:active { transform: scale(0.97); }
   .btn-csv    { background: #53fc18; color: #000; }
   .btn-reset  { background: #c0392b; color: #fff; }
+  .btn-stop   { background: #e67e22; color: #fff; padding: 3px 12px; font-size: 12px; }
   .btn-upd    { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
   .btn-out    { background: #111; color: #333; border: 1px solid #1a1a1a; font-size: 12px; }
 
@@ -261,6 +262,7 @@ const HTML = () => `<!DOCTYPE html>
 
   <div class="status-wrap">
     <div class="status open" id="status">● регистрация открыта</div>
+    <button class="btn-stop" id="btn-stop" onclick="toggleStop()">⏹ Стоп</button>
   </div>
 
   <div class="buttons">
@@ -294,6 +296,8 @@ async function loadPlayers() {
   const st = document.getElementById('status');
   st.textContent = d.accepting ? '● регистрация открыта' : '● регистрация закрыта';
   st.className = 'status ' + (d.accepting ? 'open' : 'closed');
+  const stopBtn = document.getElementById('btn-stop');
+  if (stopBtn) stopBtn.textContent = d.accepting ? '⏹ Остановить регистрацию' : '▶ Открыть регистрацию';
 
   const list = document.getElementById('plist');
   if (!d.players.length) {
@@ -303,6 +307,11 @@ async function loadPlayers() {
   list.innerHTML = '<div class="grid">' + d.players.map((n, i) =>
     '<div class="player"><span class="pnum">' + (i+1) + '</span><span class="pname">' + n + '</span></div>'
   ).join('') + '</div>';
+}
+
+async function toggleStop() {
+  await fetch('/api/stop', { method: 'POST' });
+  loadPlayers();
 }
 
 function downloadCSV() { window.location.href = '/api/csv'; }
@@ -387,6 +396,14 @@ const server = http.createServer((req, res) => {
       'Content-Disposition': 'attachment; filename="marble.csv"'
     });
     res.end(players.join('\n'));
+    return;
+  }
+
+  if (req.url === '/api/stop' && req.method === 'POST') {
+    accepting = !accepting;
+    saveState();
+    console.log('[BOT] Регистрация ' + (accepting ? 'ОТКРЫТА' : 'ОСТАНОВЛЕНА') + ' через веб-интерфейс');
+    res.writeHead(200); res.end();
     return;
   }
 
