@@ -7,10 +7,10 @@ import http from 'http';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Настройки ──────────────────────────────────────────────
-const CHANNEL_ID  = 389295;
-const CHATROOM_ID = 389201;
+const CHANNEL_ID  = 235226;
+const CHATROOM_ID = 235222;
 const PREFIX      = '!';
-const STREAMER    = 'g1bsi';
+const STREAMER    = 'kosteze231';
 const CSV_FILE    = path.join(__dirname, 'marble.csv');
 // ───────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ const HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 <h1>🎮 Kick Marbles Bot</h1>
-<div class="sub">Канал: g1bsi · Обновляется автоматически каждые 5 секунд</div>
+<div class="sub">Канал: kosteze231 · Обновляется автоматически каждые 5 секунд</div>
 
 <div class="stats">
   <div class="stat">
