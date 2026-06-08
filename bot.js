@@ -245,7 +245,7 @@ const HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 <div class="wrapper">
-  <h1>🎮 KICK MARBLES BOT</h1>
+  <h1>🎮 ХУЯРИКИ</h1>
   <div class="sub">kosteze231 · автообновление 5с</div>
 
   <div class="stats">
