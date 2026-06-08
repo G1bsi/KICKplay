@@ -246,7 +246,7 @@ const HTML = () => `<!DOCTYPE html>
 <body>
 <div class="wrapper">
   <h1>🎮 ХУЯРИКИ</h1>
-  <div class="sub">kosteze231 · автообновление 5с</div>
+  <div class="sub">kosteze231</div>
 
   <div class="stats">
     <div class="stat">
