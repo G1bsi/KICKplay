@@ -249,12 +249,6 @@ const HTML = () => `<!DOCTYPE html>
   .btn-cmd { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; border-radius: 7px; padding: 7px 14px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
   .btn-cmd:hover { opacity: 0.8; }
   #cmd-saved { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
-  .test-panel { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
-  .test-panel input { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px; padding: 7px 12px; color: #fff; font-family: 'Share Tech Mono', monospace; font-size: 12px; outline: none; width: 180px; transition: border-color 0.2s; }
-  .test-panel input:focus { border-color: #444; }
-  .btn-test { background: #1e3a1e; color: #53fc18; border: 1px solid #2a5a2a; border-radius: 7px; padding: 7px 14px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
-  .btn-test:hover { opacity: 0.8; }
-  #test-result { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
 </style>
 </head>
 <body>
@@ -291,12 +285,6 @@ const HTML = () => `<!DOCTYPE html>
     <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
     <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
     <span id="cmd-saved"></span>
-  </div>
-
-  <div class="test-panel">
-    <input type="text" id="test-name" placeholder="Ник для теста..." onkeydown="if(event.key==='Enter')testPlay()">
-    <button class="btn-test" onclick="testPlay()" id="btn-test">▶ Тест</button>
-    <span id="test-result"></span>
   </div>
 
   <div class="list">
@@ -357,28 +345,6 @@ async function saveCmd() {
     el.textContent = '✗ помилка';
   }
   setTimeout(() => el.textContent = '', 2000);
-}
-
-async function testPlay() {
-  const name = document.getElementById('test-name').value.trim();
-  if (!name) return;
-  const res = await fetch('/api/testplay', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: name })
-  });
-  const data = await res.json();
-  const el = document.getElementById('test-result');
-  if (data.ok) {
-    el.style.color = '#53fc18';
-    el.textContent = '✓ добавлен (' + data.total + ')';
-    document.getElementById('test-name').value = '';
-  } else {
-    el.style.color = '#ff4444';
-    el.textContent = '✗ ' + data.error;
-  }
-  setTimeout(() => el.textContent = '', 3000);
-  loadPlayers();
 }
 
 async function toggleStop() {
@@ -479,15 +445,6 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ players, accepting, joinCmd }));
     return;
   }
-
-  if (req.url.startsWith('/api/testplay') && req.method === 'POST') {
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { username } = JSON.parse(body);
-        const name = (username || '').trim();
-        if (!name) { res.writeHead(400); res.end(JSON.stringify({ error: 'Нет имени' })); return; }
         if (!accepting) { res.writeHead(200); res.end(JSON.stringify({ error: 'Регистрация закрыта' })); return; }
         if (players.length >= MAX_PLAYERS) { res.writeHead(200); res.end(JSON.stringify({ error: 'Лимит достигнут' })); return; }
         if (players.includes(name)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
