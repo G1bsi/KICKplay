@@ -36,6 +36,7 @@ const PUSHER_WS =
 
 let players   = [];
 let accepting = true;
+let joinCmd   = '!play'; // змінюється через сайт
 
 // Активні сесії (token → expiry)
 const sessions = new Map();
@@ -57,7 +58,7 @@ function isValidSession(token) {
 
 // ── Збереження стану ────────────────────────────────────────
 function saveState() {
-  const state = { players, accepting, savedAt: new Date().toISOString() };
+  const state = { players, accepting, joinCmd, savedAt: new Date().toISOString() };
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (e) {
@@ -72,6 +73,7 @@ function loadState() {
     const state = JSON.parse(raw);
     players   = Array.isArray(state.players) ? state.players : [];
     accepting = typeof state.accepting === 'boolean' ? state.accepting : true;
+    joinCmd   = state.joinCmd || '!play';
     console.log(`[STATE] Восстановлено: ${players.length} игроков, регистрация: ${accepting ? 'открыта' : 'закрыта'}`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
@@ -241,12 +243,24 @@ const HTML = () => `<!DOCTYPE html>
   .pname { color: #ddd; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { padding: 32px; text-align: center; color: #2a2a2a; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
   .footer { font-size: 10px; color: #1e1e1e; margin-top: 8px; text-align: center; font-family: 'Share Tech Mono', monospace; }
+  .cmd-panel { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; }
+  .cmd-panel input { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px; padding: 7px 12px; color: #53fc18; font-family: 'Share Tech Mono', monospace; font-size: 14px; outline: none; width: 140px; text-align: center; transition: border-color 0.2s; }
+  .cmd-panel input:focus { border-color: #53fc18; }
+  .btn-cmd { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; border-radius: 7px; padding: 7px 14px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+  .btn-cmd:hover { opacity: 0.8; }
+  #cmd-saved { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
+  .test-panel { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
+  .test-panel input { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px; padding: 7px 12px; color: #fff; font-family: 'Share Tech Mono', monospace; font-size: 12px; outline: none; width: 180px; transition: border-color 0.2s; }
+  .test-panel input:focus { border-color: #444; }
+  .btn-test { background: #1e3a1e; color: #53fc18; border: 1px solid #2a5a2a; border-radius: 7px; padding: 7px 14px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+  .btn-test:hover { opacity: 0.8; }
+  #test-result { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
 </style>
 </head>
 <body>
 <div class="wrapper">
-  <h1>🎮 ХУЯРИКИ</h1>
-  <div class="sub">kosteze231</div>
+  <h1>🎮 KICK MARBLES BOT</h1>
+  <div class="sub">kosteze231 · автообновление 5с</div>
 
   <div class="stats">
     <div class="stat">
@@ -272,6 +286,19 @@ const HTML = () => `<!DOCTYPE html>
     <button class="btn-out"   onclick="logout()">выйти</button>
   </div>
 
+  <div class="cmd-panel">
+    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово реєстрації:</span>
+    <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
+    <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
+    <span id="cmd-saved"></span>
+  </div>
+
+  <div class="test-panel">
+    <input type="text" id="test-name" placeholder="Ник для теста..." onkeydown="if(event.key==='Enter')testPlay()">
+    <button class="btn-test" onclick="testPlay()" id="btn-test">▶ Тест</button>
+    <span id="test-result"></span>
+  </div>
+
   <div class="list">
     <div class="list-head">СПИСОК ИГРОКОВ</div>
     <div id="plist"><div class="empty">никто ещё не зарегистрировался</div></div>
@@ -293,6 +320,10 @@ async function loadPlayers() {
   bar.style.background = d.players.length >= 1000 ? '#ff4444' : d.players.length >= 800 ? '#ffaa00' : '#53fc18';
   document.getElementById('bar-label').textContent = d.players.length + ' / 1000';
 
+  const cmdInput = document.getElementById('cmd-input');
+  if (cmdInput && d.joinCmd && document.activeElement !== cmdInput) {
+    cmdInput.value = d.joinCmd;
+  }
   const st = document.getElementById('status');
   st.textContent = d.accepting ? '● регистрация открыта' : '● регистрация закрыта';
   st.className = 'status ' + (d.accepting ? 'open' : 'closed');
@@ -307,6 +338,47 @@ async function loadPlayers() {
   list.innerHTML = '<div class="grid">' + d.players.map((n, i) =>
     '<div class="player"><span class="pnum">' + (i+1) + '</span><span class="pname">' + n + '</span></div>'
   ).join('') + '</div>';
+}
+
+async function saveCmd() {
+  const cmd = document.getElementById('cmd-input').value.trim();
+  if (!cmd) return;
+  const res = await fetch('/api/setcmd', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cmd })
+  });
+  const el = document.getElementById('cmd-saved');
+  if (res.ok) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ збережено';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ помилка';
+  }
+  setTimeout(() => el.textContent = '', 2000);
+}
+
+async function testPlay() {
+  const name = document.getElementById('test-name').value.trim();
+  if (!name) return;
+  const res = await fetch('/api/testplay', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: name })
+  });
+  const data = await res.json();
+  const el = document.getElementById('test-result');
+  if (data.ok) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ добавлен (' + data.total + ')';
+    document.getElementById('test-name').value = '';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ ' + data.error;
+  }
+  setTimeout(() => el.textContent = '', 3000);
+  loadPlayers();
 }
 
 async function toggleStop() {
@@ -384,9 +456,47 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url === '/api/setcmd' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { cmd } = JSON.parse(body);
+        const trimmed = cmd.trim().toLowerCase();
+        if (!trimmed || trimmed.length > 30) { res.writeHead(400); res.end(); return; }
+        joinCmd = trimmed;
+        saveState();
+        console.log('[BOT] Команда реєстрації змінена на: ' + joinCmd);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, cmd: joinCmd }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
   if (req.url === '/api/players') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ players, accepting }));
+    res.end(JSON.stringify({ players, accepting, joinCmd }));
+    return;
+  }
+
+  if (req.url.startsWith('/api/testplay') && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { username } = JSON.parse(body);
+        const name = (username || '').trim();
+        if (!name) { res.writeHead(400); res.end(JSON.stringify({ error: 'Нет имени' })); return; }
+        if (!accepting) { res.writeHead(200); res.end(JSON.stringify({ error: 'Регистрация закрыта' })); return; }
+        if (players.length >= MAX_PLAYERS) { res.writeHead(200); res.end(JSON.stringify({ error: 'Лимит достигнут' })); return; }
+        if (players.includes(name)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
+        players.push(name);
+        saveState(); saveCSV();
+        console.log('[TEST] Добавлен тестовый игрок: ' + name);
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, total: players.length }));
+      } catch { res.writeHead(400); res.end(); }
+    });
     return;
   }
 
@@ -467,7 +577,7 @@ function connect() {
 
       const lower = content.toLowerCase();
 
-      if (lower === `${PREFIX}play`) {
+      if (lower === joinCmd) {
         if (!accepting) {
           console.log(`[SKIP] ${username}: регистрация закрыта`);
           return;
