@@ -281,7 +281,7 @@ const HTML = () => `<!DOCTYPE html>
   </div>
 
   <div class="cmd-panel">
-    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово:</span>
+    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово реєстрації:</span>
     <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
     <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
     <span id="cmd-saved"></span>
@@ -443,17 +443,6 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/players') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ players, accepting, joinCmd }));
-    return;
-  }
-        if (!accepting) { res.writeHead(200); res.end(JSON.stringify({ error: 'Регистрация закрыта' })); return; }
-        if (players.length >= MAX_PLAYERS) { res.writeHead(200); res.end(JSON.stringify({ error: 'Лимит достигнут' })); return; }
-        if (players.includes(name)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
-        players.push(name);
-        saveState(); saveCSV();
-        console.log('[TEST] Добавлен тестовый игрок: ' + name);
-        res.writeHead(200); res.end(JSON.stringify({ ok: true, total: players.length }));
-      } catch { res.writeHead(400); res.end(); }
-    });
     return;
   }
 
