@@ -283,7 +283,7 @@ const HTML = () => `<!DOCTYPE html>
   <div class="cmd-panel">
     <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово:</span>
     <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
-    <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
+    <button class="btn-cmd" onclick="saveCmd()">✓ Сохранить</button>
     <span id="cmd-saved"></span>
   </div>
 
@@ -339,7 +339,7 @@ async function saveCmd() {
   const el = document.getElementById('cmd-saved');
   if (res.ok) {
     el.style.color = '#53fc18';
-    el.textContent = '✓ збережено';
+    el.textContent = '✓ есть';
   } else {
     el.style.color = '#ff4444';
     el.textContent = '✗ помилка';
