@@ -402,7 +402,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
   .selecting .cell { cursor: none; }
   .selecting .cell.selected { cursor: none; }
-  .cursor-crosshair-active { cursor: none !important; }
+  .selecting * { cursor: none !important; }
 
 
   .revealing .cell, .done .cell { cursor: default; }
@@ -447,7 +447,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   #winner-announce .wa-label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 16px; color: #888; letter-spacing: 4px; text-transform: uppercase;
+    font-size: 26px; color: #888; letter-spacing: 6px; text-transform: uppercase;
   }
   #winner-announce .wa-name {
     font-family: 'Rajdhani', sans-serif;
@@ -491,7 +491,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { transform: translateY(0);    opacity: 1; }
   }
   #winner-announce .wa-sub {
-    font-size: 14px; color: #555; font-family: 'Share Tech Mono', monospace;
+    font-size: 22px; color: #888; font-family: 'Share Tech Mono', monospace; letter-spacing: 3px;
   }
   #winner-announce .wa-close {
     margin-top: 8px;
@@ -916,7 +916,7 @@ function showAnnounce(name, seconds, confirmOn) {
     timerEl.textContent = seconds + 'с';
     timerEl.className = 'wa-timer';
     subEl.style.display = '';
-    subEl.textContent = 'Напишите любое сообщение в чате';
+    subEl.textContent = 'ВРЕМЯ НА ОТВЕТ';
     document.getElementById('winner-announce').classList.add('visible');
 
     announceTimer = setInterval(() => {
@@ -1204,26 +1204,15 @@ function toggleConfirmField() {
     mouseY = e.clientY;
     canvas.style.left = (mouseX - 24) + 'px';
     canvas.style.top  = (mouseY - 24) + 'px';
+    // Показуємо/ховаємо залежно від фази
+    if (phase === 'selecting') { if (!visible) show(); }
+    else { if (visible) hide(); }
   });
 
-  // Показуємо лише коли hover на клітинку під час фази selecting
+  // MutationObserver — ховаємо одразу як фаза змінилась
   const boxEl = document.getElementById('main-box');
-  boxEl.addEventListener('mouseover', e => {
-    if (phase !== 'selecting') return;
-    if (e.target.closest('.cell')) { show(); }
-  });
-  boxEl.addEventListener('mouseout', e => {
-    if (!e.relatedTarget || !e.relatedTarget.closest('.cell')) hide();
-  });
-
-  // Ховаємо при кліку / завершенні фази
-  boxEl.addEventListener('click', () => {
-    if (phase !== 'selecting') hide();
-  });
-
-  // MutationObserver для зміни фази
   const boxObs = new MutationObserver(() => {
-    if (!boxEl.classList.contains('selecting')) hide();
+    if (phase !== 'selecting') hide();
   });
   boxObs.observe(boxEl, { attributes: true, attributeFilter: ['class'] });
 })();
