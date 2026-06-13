@@ -43,6 +43,7 @@ let rafflePlayers   = [];
 let raffleAccepting = false;
 let raffleJoinCmd   = '!призи';
 let raffleGame      = null; // активна гра (не зберігається на диск)
+let raffleChecks    = {};   // { username: { seconds, startedAt, active, message, messageAt } }
 
 // Активні сесії (token → expiry)
 const sessions = new Map();
@@ -574,6 +575,24 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
 
   .game-controls { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+  /* ── Перевірка переможців ────────────────── */
+  .check-item {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: #161616; border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 8px;
+  }
+  .check-item.responded { border-color: #2a5a2a; background: #0d180d; }
+  .check-item.expired   { border-color: #5a2a2a; background: #1a0d0d; }
+  .check-name { font-weight: 700; color: #ffd700; min-width: 140px; font-size: 15px; }
+  .check-timer { font-family: 'Share Tech Mono', monospace; font-size: 20px; color: #aaa; min-width: 50px; }
+  .check-timer.running { color: #53fc18; }
+  .check-timer.expired { color: #ff4444; }
+  .check-msg { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #ccc; background: #1a1a1a; border-radius: 6px; padding: 4px 10px; flex: 1; min-width: 120px; }
+  .check-msg.empty { color: #444; font-style: italic; }
+  .btn-check-start { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; padding: 6px 14px; font-size: 13px; }
+  .btn-check-retry { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; padding: 6px 14px; font-size: 12px; }
+
 </style>
 </head>
 <body>
@@ -635,10 +654,27 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <h3>🏆 ПОБЕДИТЕЛИ</h3>
     <div id="winners-chips"></div>
   </div>
+
+  <div id="check-panel" class="panel" style="display:none;">
+    <div class="panel-title">Проверка победителей</div>
+    <div id="check-items"></div>
+    <div class="game-controls">
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол (новая игра)</button>
+      <button class="btn-red" onclick="finishRaffle()">🏁 Финиш</button>
+    </div>
+  </div>
 </div>
 
 <script>
 let state = { joinCmd: '!призи', accepting: false, participants: [], count: 0, game: null };
+
+const STICKERS = [
+  '🍎','🍊','🍋','🍌','🍉','🍇','🍓','🍒','🍑','🥝','🍍','🥥','🍐','🍈',
+  '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸',
+  '🐵','🐔','🐧','🐦','🦄','🐝','🦋','🐢','🐙','🦀','🐳','🐬','🦓','🦒'
+];
+
+let checkTimerInterval = null;
 let currentGame = null;     // { winnersNeeded, gridSize, cells }
 let selected = new Set();   // індекси обраних клітинок
 let phase = 'idle';         // idle | selecting | revealing | done
@@ -741,6 +777,8 @@ function resetGameUI() {
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
   document.getElementById('winners-list').classList.remove('visible');
+  document.getElementById('check-panel').style.display = 'none';
+  if (checkTimerInterval) { clearInterval(checkTimerInterval); checkTimerInterval = null; }
 }
 
 async function startGame() {
@@ -783,6 +821,9 @@ function renderGame(game) {
   selected = new Set();
   phase = 'selecting';
 
+  document.getElementById('check-panel').style.display = 'none';
+  if (checkTimerInterval) { clearInterval(checkTimerInterval); checkTimerInterval = null; }
+
   const gridWrap = document.getElementById('grid-wrap');
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
@@ -805,9 +846,10 @@ function renderGame(game) {
     const cell = document.createElement('div');
     cell.className = 'cell';
     cell.dataset.idx = i;
+    const sticker = STICKERS[Math.floor(Math.random() * STICKERS.length)];
     cell.innerHTML =
       '<div class="cell-inner">' +
-        '<div class="cell-face cell-front">🎁</div>' +
+        '<div class="cell-face cell-front">' + sticker + '</div>' +
         '<div class="cell-face cell-back">' + escapeHtml(name) + '</div>' +
       '</div>';
     cell.addEventListener('click', () => onCellClick(i, cell));
@@ -879,6 +921,7 @@ async function startReveal() {
   document.getElementById('grid-wrap').className = 'visible done';
   document.getElementById('hint').innerHTML = '🏁 Готово!';
   document.getElementById('winners-list').classList.add('visible');
+  showCheckPanel(winners);
 }
 
 function addWinnerChip(name) {
@@ -896,6 +939,134 @@ function showWinners(winners) {
   const chips = document.getElementById('winners-chips');
   chips.innerHTML = winners.map(w => '<span class="winner-chip">🏆 ' + escapeHtml(w) + '</span>').join('');
   box.classList.add('visible');
+  showCheckPanel(winners);
+}
+
+// ── Перевірка відповіді переможців ───────────────────────────
+function showCheckPanel(winners) {
+  const panel = document.getElementById('check-panel');
+  const items = document.getElementById('check-items');
+  panel.style.display = 'block';
+  items.innerHTML = '';
+
+  winners.forEach(name => {
+    const item = document.createElement('div');
+    item.className = 'check-item';
+    item.dataset.name = name;
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'check-name';
+    nameEl.textContent = name;
+
+    const timerEl = document.createElement('span');
+    timerEl.className = 'check-timer';
+    timerEl.textContent = '\u2014';
+
+    const msgEl = document.createElement('span');
+    msgEl.className = 'check-msg empty';
+    msgEl.textContent = 'ожидание...';
+
+    const secInput = document.createElement('input');
+    secInput.type = 'number';
+    secInput.value = '60';
+    secInput.min = '5';
+    secInput.max = '600';
+    secInput.style.width = '60px';
+    secInput.style.textAlign = 'center';
+
+    const startBtn = document.createElement('button');
+    startBtn.className = 'btn-check-start';
+    startBtn.textContent = '\u25B6 Старт';
+    startBtn.onclick = () => startCheckTimer(name, parseInt(secInput.value) || 60);
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn-check-retry';
+    retryBtn.textContent = '\u21BB Заново';
+    retryBtn.onclick = () => retryCheck(name);
+
+    item.append(nameEl, timerEl, msgEl, secInput, startBtn, retryBtn);
+    items.appendChild(item);
+  });
+
+  if (checkTimerInterval) clearInterval(checkTimerInterval);
+  checkTimerInterval = setInterval(pollCheckState, 1000);
+  pollCheckState();
+}
+
+async function startCheckTimer(name, sec) {
+  await fetch('/api/raffle/check/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner: name, seconds: sec })
+  });
+  pollCheckState();
+}
+
+async function retryCheck(name) {
+  await fetch('/api/raffle/check/reset', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner: name })
+  });
+  const item = document.querySelector('.check-item[data-name="' + cssAttrEsc(name) + '"]');
+  if (!item) return;
+  item.className = 'check-item';
+  const timerEl = item.querySelector('.check-timer');
+  const msgEl = item.querySelector('.check-msg');
+  timerEl.textContent = '\u2014';
+  timerEl.className = 'check-timer';
+  msgEl.textContent = 'ожидание...';
+  msgEl.className = 'check-msg empty';
+}
+
+function cssAttrEsc(s) {
+  return s.replace(/["\\]/g, '\\$&');
+}
+
+async function pollCheckState() {
+  const res = await fetch('/api/raffle/check/state');
+  if (res.status === 401) return;
+  const data = await res.json();
+
+  document.querySelectorAll('.check-item').forEach(item => {
+    const name = item.querySelector('.check-name').textContent;
+    const c = data.checks[name];
+    if (!c) return;
+
+    const timerEl = item.querySelector('.check-timer');
+    const msgEl = item.querySelector('.check-msg');
+
+    if (c.message !== null) {
+      // Отримано відповідь
+      item.className = 'check-item responded';
+      timerEl.textContent = '✓';
+      timerEl.className = 'check-timer';
+      msgEl.textContent = c.message;
+      msgEl.className = 'check-msg';
+    } else if (c.active) {
+      const elapsed = (Date.now() - c.startedAt) / 1000;
+      const remaining = Math.max(0, Math.ceil(c.seconds - elapsed));
+      timerEl.textContent = remaining + 'с';
+      if (remaining > 0) {
+        timerEl.className = 'check-timer running';
+        msgEl.textContent = 'ожидание ответа...';
+        msgEl.className = 'check-msg empty';
+      } else {
+        item.className = 'check-item expired';
+        timerEl.textContent = '⏰';
+        timerEl.className = 'check-timer expired';
+        msgEl.textContent = 'время вышло, ответа нет';
+        msgEl.className = 'check-msg empty';
+      }
+    }
+  });
+}
+
+async function finishRaffle() {
+  if (!confirm('Завершить розыгрыш? Регистрация будет закрыта.')) return;
+  if (checkTimerInterval) clearInterval(checkTimerInterval);
+  await fetch('/api/raffle/finish', { method: 'POST' });
+  resetGameUI();
+  document.getElementById('check-panel').style.display = 'none';
+  loadState();
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -1106,6 +1277,55 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── Перевірка відповіді переможця ───────────────────────────
+  if (req.url === '/api/raffle/check/start' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winner, seconds } = JSON.parse(body);
+        const w = (winner || '').trim();
+        const sec = Math.min(Math.max(parseInt(seconds) || 60, 5), 600);
+        if (!w) { res.writeHead(400); res.end(); return; }
+        raffleChecks[w] = { seconds: sec, startedAt: Date.now(), active: true, message: null, messageAt: null };
+        console.log(`[РОЗІГРАШ] Таймер запущен для ${w} (${sec}с)`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/check/state') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ checks: raffleChecks }));
+    return;
+  }
+
+  if (req.url === '/api/raffle/check/reset' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winner } = JSON.parse(body);
+        const w = (winner || '').trim();
+        if (w) delete raffleChecks[w];
+        res.writeHead(200); res.end();
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/finish' && req.method === 'POST') {
+    raffleGame = null;
+    raffleChecks = {};
+    raffleAccepting = false;
+    saveState();
+    console.log('[РОЗІГРАШ] Завершено');
+    res.writeHead(200); res.end();
+    return;
+  }
+
   if (req.url === '/api/raffle/start' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
@@ -1230,6 +1450,15 @@ function connect() {
       if (!username || !content) return;
 
       const lower = content.toLowerCase();
+
+      // Перевірка відповіді переможця розіграшу (працює завжди, незалежно від інших команд)
+      const check = raffleChecks[username];
+      if (check && check.active) {
+        check.active = false;
+        check.message = content;
+        check.messageAt = Date.now();
+        console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
+      }
 
       if (lower === joinCmd) {
         if (!accepting) {
