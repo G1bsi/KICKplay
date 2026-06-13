@@ -194,14 +194,18 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background: #0e0e10;
     color: #e8e8e8;
     font-family: 'Rajdhani', sans-serif;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     padding: 16px;
+    display: flex;
+    flex-direction: column;
   }
   .topbar {
     max-width: 1400px; margin: 0 auto 16px;
     background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
     padding: 14px 20px;
     display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
   }
   .topbar .title { font-size: 17px; color: #aaa; }
   .topbar .title b { color: #ffd700; font-size: 19px; letter-spacing: 1px; }
@@ -214,6 +218,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     display: grid;
     grid-template-columns: 340px 1fr 340px;
     gap: 16px;
+    flex: 1;
+    min-height: 0;
   }
   @media (max-width: 1100px) {
     .layout { grid-template-columns: 1fr; }
@@ -224,6 +230,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     padding: 18px 20px;
     display: flex; flex-direction: column;
     min-height: 0;
+    height: 100%;
+    overflow: hidden;
   }
   .col-title {
     font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 14px;
@@ -301,7 +309,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* ── Середня колонка / box ───────────────── */
   .box {
     background: #0e0e10; border: 1px solid #2a2a2e; border-radius: 10px;
-    flex: 1; min-height: 360px; max-height: 540px; overflow-y: auto;
+    flex: 1; min-height: 0; overflow-y: auto;
     padding: 8px;
   }
   .box::-webkit-scrollbar { width: 8px; }
@@ -436,6 +444,85 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .w-msg.empty { color: #444; font-style: italic; }
   .w-retry { margin-top: 6px; }
+
+  /* ── Оголошення переможця (оверлей) ──────── */
+  #winner-announce {
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+    backdrop-filter: blur(6px);
+  }
+  #winner-announce.visible { opacity: 1; pointer-events: auto; }
+
+  #winner-announce .wa-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px; color: #888; letter-spacing: 4px; text-transform: uppercase;
+  }
+  #winner-announce .wa-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: clamp(48px, 6vw, 90px);
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow: 0 0 40px rgba(255,215,0,0.7), 0 0 80px rgba(255,215,0,0.3);
+    letter-spacing: 3px;
+    text-align: center;
+    max-width: 90vw;
+    word-break: break-word;
+    animation: waNameIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes waNameIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  #winner-announce .wa-timer {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 48px;
+    color: #fff;
+    letter-spacing: 2px;
+    min-width: 100px;
+    text-align: center;
+  }
+  #winner-announce .wa-timer.expiring { color: #ff4444; animation: timerBlink 0.5s infinite alternate; }
+  @keyframes timerBlink {
+    from { opacity: 1; }
+    to   { opacity: 0.3; }
+  }
+  #winner-announce .wa-msg {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px; color: #ccc;
+    background: rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 10px 24px;
+    max-width: 80vw; text-align: center;
+    animation: waMsgIn 0.3s ease;
+  }
+  @keyframes waMsgIn {
+    from { transform: translateY(10px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  #winner-announce .wa-sub {
+    font-size: 14px; color: #555; font-family: 'Share Tech Mono', monospace;
+  }
+  #winner-announce .wa-close {
+    margin-top: 8px;
+    background: #1a1a1d; border: 1px solid #333; color: #888;
+    padding: 10px 28px; border-radius: 8px;
+    font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s;
+  }
+  #winner-announce .wa-close:hover { border-color: #ffd700; color: #ffd700; }
+
+  /* Частинки */
+  .wa-particle {
+    position: fixed; pointer-events: none; border-radius: 50%; z-index: 9997;
+    animation: waPart 1.8s ease forwards;
+  }
+  @keyframes waPart {
+    from { transform: translate(0,0) scale(1); opacity: 1; }
+    to   { transform: translate(var(--tx),var(--ty)) scale(0); opacity: 0; }
+  }
 </style>
 </head>
 <body>
@@ -540,6 +627,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
 </div>
 
+<!-- Оголошення переможця -->
+<div id="winner-announce">
+  <div class="wa-label">🏆 Победитель</div>
+  <div class="wa-name" id="wa-name">—</div>
+  <div class="wa-timer" id="wa-timer"></div>
+  <div class="wa-msg" id="wa-msg" style="display:none;"></div>
+  <div class="wa-sub" id="wa-sub">Напишите любое сообщение в чате</div>
+  <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+</div>
+
 <script>
 let state = { joinCmd: '!призи', accepting: false, participants: [], count: 0, game: null };
 
@@ -619,6 +716,7 @@ async function resetRaffle() {
   await fetch('/api/raffle/reset', { method: 'POST' });
   winnersHistory = [];
   renderWinners();
+  closeAnnounce();
   resetGameUI();
   loadState();
 }
@@ -808,6 +906,94 @@ async function startReveal() {
 }
 
 // ── Список переможців ──────────────────────────────────────────
+// ── Оголошення переможця ─────────────────────────────────────
+let announceTimer = null;
+let announceSeconds = 0;
+
+function showAnnounce(name, seconds, confirmOn) {
+  document.getElementById('wa-name').textContent = name;
+  const timerEl = document.getElementById('wa-timer');
+  const msgEl   = document.getElementById('wa-msg');
+  const subEl   = document.getElementById('wa-sub');
+
+  // Скидаємо попередній таймер
+  if (announceTimer) clearInterval(announceTimer);
+  msgEl.style.display = 'none';
+  msgEl.textContent = '';
+
+  spawnParticles();
+
+  if (confirmOn) {
+    announceSeconds = seconds;
+    timerEl.textContent = seconds + 'с';
+    timerEl.className = 'wa-timer';
+    subEl.style.display = '';
+    subEl.textContent = 'Напишите любое сообщение в чате';
+    document.getElementById('winner-announce').classList.add('visible');
+
+    announceTimer = setInterval(() => {
+      announceSeconds--;
+      timerEl.textContent = Math.max(0, announceSeconds) + 'с';
+      timerEl.className = 'wa-timer' + (announceSeconds <= 10 ? ' expiring' : '');
+      if (announceSeconds <= 0) {
+        clearInterval(announceTimer);
+        announceTimer = null;
+        subEl.textContent = 'Время вышло';
+      }
+    }, 1000);
+  } else {
+    timerEl.textContent = '';
+    subEl.style.display = 'none';
+    document.getElementById('winner-announce').classList.add('visible');
+  }
+}
+
+function updateAnnounceMsg(name, message) {
+  const ann = document.getElementById('winner-announce');
+  if (!ann.classList.contains('visible')) return;
+  if (document.getElementById('wa-name').textContent !== name) return;
+
+  if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+  const timerEl = document.getElementById('wa-timer');
+  const msgEl   = document.getElementById('wa-msg');
+  const subEl   = document.getElementById('wa-sub');
+
+  timerEl.textContent = '✓';
+  timerEl.className = 'wa-timer';
+  timerEl.style.color = '#53fc18';
+  subEl.style.display = 'none';
+  msgEl.textContent = '💬 ' + message;
+  msgEl.style.display = '';
+}
+
+function closeAnnounce() {
+  document.getElementById('winner-announce').classList.remove('visible');
+  if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+  document.getElementById('wa-timer').style.color = '';
+}
+
+function spawnParticles() {
+  const colors = ['#ffd700','#ff9900','#53fc18','#fff','#ff44aa','#44aaff'];
+  for (let i = 0; i < 24; i++) {
+    const p = document.createElement('div');
+    p.className = 'wa-particle';
+    const size = 5 + Math.random() * 10;
+    const angle = (Math.random() * 360) * Math.PI / 180;
+    const dist  = 120 + Math.random() * 220;
+    const tx = Math.cos(angle) * dist;
+    const ty = Math.sin(angle) * dist - 100;
+    p.style.cssText =
+      'width:' + size + 'px;height:' + size + 'px;' +
+      'background:' + colors[Math.floor(Math.random()*colors.length)] + ';' +
+      'left:' + (window.innerWidth/2 - size/2) + 'px;' +
+      'top:' + (window.innerHeight/2 - size/2) + 'px;' +
+      '--tx:' + tx + 'px;--ty:' + ty + 'px;' +
+      'animation-duration:' + (1.2 + Math.random()*0.8) + 's;';
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 2100);
+  }
+}
+
 function addWinner(name) {
   const confirmOn = document.getElementById('toggle-confirm').checked;
   const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
@@ -816,6 +1002,8 @@ function addWinner(name) {
   const entry = { name, time, status: confirmOn ? 'pending' : 'ok', message: null };
   winnersHistory.unshift(entry);
   renderWinners();
+
+  showAnnounce(name, seconds, confirmOn);
 
   if (confirmOn) {
     fetch('/api/raffle/check/start', {
@@ -887,6 +1075,7 @@ async function pollCheckState() {
     if (c.message !== null) {
       w.status = 'ok';
       w.message = c.message;
+      updateAnnounceMsg(w.name, c.message);
       changed = true;
     } else if (c.active) {
       const elapsed = (Date.now() - c.startedAt) / 1000;
@@ -933,6 +1122,7 @@ async function finishRaffle() {
   await fetch('/api/raffle/finish', { method: 'POST' });
   winnersHistory = [];
   renderWinners();
+  closeAnnounce();
   resetGameUI();
   loadState();
 }
