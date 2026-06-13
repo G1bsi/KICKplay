@@ -234,6 +234,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* ── Поля вводу ──────────────────────────── */
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   .field-row { display: flex; gap: 10px; }
+
+  /* ── Перемикач режиму гри ─────────────────── */
+  .mode-switch { display: flex; gap: 8px; }
+  .mode-btn {
+    flex: 1; padding: 9px 10px; border-radius: 8px; border: 1px solid #333;
+    background: #0e0e10; color: #888; font-size: 13px; font-weight: 700;
+    font-family: 'Rajdhani', sans-serif; cursor: pointer; transition: all 0.2s;
+  }
+  .mode-btn:hover { border-color: #555; color: #ccc; }
+  .mode-btn.active { background: #1a2a1a; border-color: #53fc18; color: #53fc18; }
   .field.small { flex: 0 0 100px; }
   label.field-label { font-size: 12px; color: #999; }
 
@@ -408,6 +418,50 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .revealing .cell, .done .cell { cursor: default; }
 
+  /* ── Гонка ────────────────────────────────── */
+  #race-wrap { width: 100%; height: 100%; position: relative; }
+  #race-svg { width: 100%; height: 100%; display: block; }
+  .race-car {
+    position: absolute;
+    display: flex; flex-direction: column; align-items: center;
+    transform: translate(-50%, -50%);
+    transition: left 0.05s linear, top 0.05s linear;
+    z-index: 2;
+  }
+  .race-car .car-emoji {
+    font-size: 26px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  .race-car.winner .car-emoji {
+    animation: carWin 0.4s ease infinite alternate;
+  }
+  @keyframes carWin {
+    from { transform: scale(1); }
+    to   { transform: scale(1.3); }
+  }
+  .race-car .car-label {
+    font-size: 10px; color: #fff; background: rgba(0,0,0,0.6);
+    border-radius: 4px; padding: 1px 5px; margin-top: 2px;
+    white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .race-car.winner .car-label {
+    background: #ffd700; color: #000; font-weight: 700;
+  }
+  #race-countdown {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 80px; font-weight: 900; color: #ffd700;
+    font-family: 'Rajdhani', sans-serif;
+    text-shadow: 0 0 30px rgba(255,215,0,0.6);
+    z-index: 3;
+    animation: countdownPulse 1s ease;
+  }
+  @keyframes countdownPulse {
+    from { transform: scale(1.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
   /* ── Список переможців ──────────────────── */
   .winner-row {
     background: #161618; border: 1px solid #2a2a2e; border-radius: 8px;
@@ -539,6 +593,21 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
     <span id="saved-msg"></span>
+
+    <div class="field" style="margin-top:6px;">
+      <label class="field-label">Режим игры</label>
+      <div class="mode-switch">
+        <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
+      </div>
+    </div>
+
+    <div id="race-count-field" style="display:none;">
+      <div class="field" style="margin-top:6px;">
+        <label class="field-label">Участников гонки (10–15)</label>
+        <input type="number" id="race-count" value="12" min="2" max="15">
+      </div>
+    </div>
 
     <div class="toggle-row">
       <span class="toggle-label">Подтверждение победителя</span>
@@ -676,13 +745,7 @@ function downloadCSV() {
 }
 
 function onCmdInput() {
-  const cmd = document.getElementById('raffle-cmd').value.trim();
-  const toggle = document.getElementById('toggle-reg');
-  toggle.disabled = !cmd;
-  if (!cmd && toggle.checked) {
-    toggle.checked = false;
-    fetch('/api/raffle/toggle', { method: 'POST' });
-  }
+  // реєстрація автоматично активується/деактивується через saveRaffleCmd
 }
 
 let raffleOpen = false;
@@ -755,17 +818,36 @@ async function addBulkTest() {
 }
 
 // ── Гра Cash Hunt ─────────────────────────────────────────────
+// ── Режим гри (Cash Hunt / Гонка) ────────────────────────────
+let gameMode = 'cashhunt';
+let raceQualifiers = [];
+let raceAnimId = null;
+
+function setGameMode(mode) {
+  if (phase !== 'idle') return; // не можна перемкнути під час гри
+  gameMode = mode;
+  document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
+  document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
+  document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
+  document.querySelector('#winners-count').closest('.field').style.display = mode === 'race' ? 'none' : '';
+}
+
 function resetGameUI() {
   currentGame = null;
   selected = new Set();
   phase = 'idle';
+  raceQualifiers = [];
+  if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
+  document.getElementById('main-box').className = 'box';
   renderParticipants(state.participants || []);
 }
 
 async function startGame() {
+  if (gameMode === 'race') return startRaceGame();
+
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
   const res = await fetch('/api/raffle/start', {
@@ -778,6 +860,8 @@ async function startGame() {
 }
 
 async function reroll() {
+  if (gameMode === 'race') return runRace(raceQualifiers, true);
+
   const res = await fetch('/api/raffle/reroll', { method: 'POST' });
   const data = await res.json();
   if (!res.ok) return alert(data.error || 'Ошибка');
@@ -785,6 +869,19 @@ async function reroll() {
 }
 
 async function fastReroll() {
+  if (gameMode === 'race') {
+    let qualifiers = raceQualifiers;
+    if (!qualifiers.length) {
+      const n = Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
+      if (n < 2) return alert('Нужно минимум 2 участника');
+      qualifiers = pickRandom(state.participants, n);
+    }
+    resetGameUIKeepMode();
+    const winner = qualifiers[Math.floor(Math.random() * qualifiers.length)];
+    addWinner(winner);
+    return;
+  }
+
   const n = currentGame ? currentGame.winnersNeeded : parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
   const res = await fetch('/api/raffle/fastreroll', {
@@ -796,6 +893,201 @@ async function fastReroll() {
 
   resetGameUI();
   data.winners.forEach(name => addWinner(name));
+}
+
+function resetGameUIKeepMode() {
+  // як resetGameUI, але без зміни кнопок режиму
+  selected = new Set();
+  phase = 'idle';
+  raceQualifiers = [];
+  if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
+  document.getElementById('game-controls').style.display = 'none';
+  document.getElementById('hint').textContent = '';
+  document.getElementById('progress').textContent = '';
+  document.getElementById('main-box').className = 'box';
+  renderParticipants(state.participants || []);
+}
+
+function pickRandom(arr, n) {
+  const copy = [...arr];
+  const result = [];
+  for (let i = 0; i < n && copy.length; i++) {
+    const idx = Math.floor(Math.random() * copy.length);
+    result.push(copy.splice(idx, 1)[0]);
+  }
+  return result;
+}
+
+// ── Режим "Гонка" ──────────────────────────────────────────────
+const CAR_EMOJIS = ['🚗','🚕','🚙','🚓','🚐','🏎️','🚜','🚛','🚒','🛻','🚔','🚖','🛺','🚚','🚌'];
+
+async function startRaceGame() {
+  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 15);
+  if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
+  const count = Math.min(n, state.participants.length);
+  raceQualifiers = pickRandom(state.participants, count);
+  await runRace(raceQualifiers, false);
+}
+
+function roundedRectPath(x, y, w, h, r) {
+  return 'M ' + (x+r) + ' ' + y +
+    ' H ' + (x+w-r) +
+    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+w) + ' ' + (y+r) +
+    ' V ' + (y+h-r) +
+    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+w-r) + ' ' + (y+h) +
+    ' H ' + (x+r) +
+    ' A ' + r + ' ' + r + ' 0 0 1 ' + x + ' ' + (y+h-r) +
+    ' V ' + (y+r) +
+    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+r) + ' ' + y +
+    ' Z';
+}
+
+async function runRace(qualifiers, isReroll) {
+  if (!qualifiers.length) return;
+  phase = 'racing';
+  document.getElementById('game-controls').style.display = 'none';
+  document.getElementById('progress').textContent = '';
+
+  const box = document.getElementById('main-box');
+  box.className = 'box';
+
+  const n = qualifiers.length;
+  const VB_W = 1000, VB_H = 600;
+  const baseX = 30, baseY = 30, baseW = VB_W - 60, baseH = VB_H - 60, baseR = 60;
+
+  let svgPaths = '';
+  const lanes = [];
+  for (let i = 0; i < n; i++) {
+    const inset = i * Math.min(9, (Math.min(baseW, baseH) / 2 - 20) / Math.max(n,1));
+    const x = baseX + inset, y = baseY + inset;
+    const w = baseW - 2*inset, h = baseH - 2*inset;
+    const r = Math.max(14, baseR - inset * 0.7);
+    const d = roundedRectPath(x, y, w, h, r);
+    lanes.push(d);
+    svgPaths += '<path d="' + d + '" fill="none" stroke="rgba(255,215,0,' + (0.08 + (n-i)/n*0.10) + ')" stroke-width="2"/>';
+  }
+
+  box.innerHTML =
+    '<div id="race-wrap">' +
+      '<div id="race-track-inner">' +
+        '<svg id="race-svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="none">' +
+          svgPaths +
+          '<rect x="' + (baseX + baseR - 4) + '" y="' + (baseY - 6) + '" width="8" height="20" fill="#ffd700" opacity="0.8"/>' +
+        '</svg>' +
+        '<div id="race-cars"></div>' +
+        '<div id="race-countdown"></div>' +
+      '</div>' +
+    '</div>';
+
+  // Будуємо реальні SVG path елементи для getPointAtLength (приховані, ті ж самі d)
+  const svgEl = document.getElementById('race-svg');
+  const hiddenPaths = lanes.map(d => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', 'none');
+    svgEl.appendChild(p);
+    return p;
+  });
+
+  const carsBox = document.getElementById('race-cars');
+  const emojis = pickRandom(CAR_EMOJIS, Math.min(n, CAR_EMOJIS.length));
+  while (emojis.length < n) emojis.push(CAR_EMOJIS[emojis.length % CAR_EMOJIS.length]);
+
+  const carEls = qualifiers.map((name, i) => {
+    const el = document.createElement('div');
+    el.className = 'race-car';
+    el.innerHTML = '<div class="car-emoji">' + emojis[i] + '</div><div class="car-label">' + escapeHtml(name) + '</div>';
+    carsBox.appendChild(el);
+    return el;
+  });
+
+  const lengths = hiddenPaths.map(p => p.getTotalLength());
+
+  // Стартові позиції
+  function position(progressArr) {
+    for (let i = 0; i < n; i++) {
+      const len = lengths[i] * (progressArr[i] % 1);
+      const pt = hiddenPaths[i].getPointAtLength(len);
+      carEls[i].style.left = (pt.x / VB_W * 100) + '%';
+      carEls[i].style.top  = (pt.y / VB_H * 100) + '%';
+    }
+  }
+
+  const progress = new Array(n).fill(0);
+  position(progress);
+
+  // Countdown
+  const cd = document.getElementById('race-countdown');
+  for (const txt of ['3','2','1','🏁 СТАРТ!']) {
+    cd.textContent = txt;
+    cd.style.animation = 'none';
+    void cd.offsetWidth;
+    cd.style.animation = 'countdownPulse 0.9s ease';
+    await sleep(700);
+  }
+  cd.textContent = '';
+
+  document.getElementById('hint').innerHTML = 'Гонка идёт...';
+
+  // Симуляція
+  const skill = qualifiers.map(() => 0.85 + Math.random() * 0.3);
+  let jitter = qualifiers.map(() => 1);
+  let lastJitterUpdate = 0;
+  const baseSpeed = 1 / 9.0; // повний круг за ~9 секунд при skill=1, jitter=1
+
+  let winnerIdx = -1;
+  let lastTime = performance.now();
+  let elapsed = 0;
+
+  await new Promise(resolve => {
+    function frame(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      elapsed += dt;
+
+      if (now - lastJitterUpdate > 180) {
+        jitter = jitter.map(() => 0.55 + Math.random() * 0.9);
+        lastJitterUpdate = now;
+      }
+
+      for (let i = 0; i < n; i++) {
+        if (winnerIdx === -1 || i === winnerIdx) {
+          progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
+        } else {
+          // інші продовжують рухатись, але не "фінішують" повторно
+          progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
+        }
+        if (progress[i] >= 1 && winnerIdx === -1) {
+          winnerIdx = i;
+        }
+      }
+
+      position(progress);
+
+      if (winnerIdx !== -1 || elapsed > 16) {
+        if (winnerIdx === -1) {
+          // ніхто не дійшов за 16с — переможець той хто далі
+          winnerIdx = progress.indexOf(Math.max(...progress));
+        }
+        carEls[winnerIdx].classList.add('winner');
+        raceAnimId = null;
+        resolve();
+        return;
+      }
+
+      raceAnimId = requestAnimationFrame(frame);
+    }
+    raceAnimId = requestAnimationFrame(frame);
+  });
+
+  const winnerName = qualifiers[winnerIdx];
+  document.getElementById('hint').innerHTML = '🏁 Победитель: <b>' + escapeHtml(winnerName) + '</b>';
+  document.getElementById('game-controls').style.display = 'flex';
+  document.getElementById('btn-go').style.display = 'none';
+  phase = 'done';
+
+  addWinner(winnerName);
 }
 
 function renderGame(game) {
@@ -815,6 +1107,7 @@ function renderGame(game) {
     : 'repeat(' + cols + ', 1fr)';
 
   document.getElementById('game-controls').style.display = 'flex';
+  document.getElementById('btn-go').style.display = '';
   document.getElementById('btn-go').disabled = true;
   updateHint();
   document.getElementById('progress').textContent = '';
