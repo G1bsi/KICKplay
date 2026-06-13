@@ -307,13 +307,19 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .box::-webkit-scrollbar { width: 8px; }
   .box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 
+  .participants-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
   .participant-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 7px 10px; border-radius: 6px; font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 6px; font-size: 13px;
     color: #ddd;
   }
-  .participant-row:nth-child(even) { background: #161618; }
-  .participant-row .p-num { color: #444; font-family: 'Share Tech Mono', monospace; font-size: 11px; width: 30px; }
+  .participant-row:nth-child(4n+1),
+  .participant-row:nth-child(4n+2) { background: #161618; }
+  .participant-row .p-num { color: #444; font-family: 'Share Tech Mono', monospace; font-size: 10px; width: 24px; flex-shrink: 0; }
 
   .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
 
@@ -393,7 +399,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .cell.revealed { cursor: default; }
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
-  .selecting .cell { cursor: pointer; }
+  .selecting .cell { cursor: none; }
+  .selecting .cell.selected { cursor: none; }
+
+  /* ── Кастомний прицільний курсор ────────── */
+  #crosshair {
+    position: fixed; pointer-events: none; z-index: 9999;
+    width: 40px; height: 40px;
+    transform: translate(-50%, -50%);
+    display: none;
+  }
   .revealing .cell, .done .cell { cursor: default; }
 
   /* ── Список переможців ──────────────────── */
@@ -459,13 +474,15 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="toggle-row">
       <span class="toggle-label">Подтверждение победителя</span>
       <label class="switch">
-        <input type="checkbox" id="toggle-confirm" checked>
+        <input type="checkbox" id="toggle-confirm" checked onchange="toggleConfirmField()">
         <span class="slider"></span>
       </label>
     </div>
-    <div class="field" id="confirm-time-field">
-      <label class="field-label">Время на ответ (сек)</label>
-      <input type="number" id="confirm-seconds" value="60" min="5" max="600">
+    <div id="confirm-time-field" style="overflow:hidden;transition:max-height 0.3s ease,opacity 0.3s ease;max-height:80px;opacity:1;">
+      <div class="field" style="margin-top:6px;">
+        <label class="field-label">Время на ответ (сек)</label>
+        <input type="number" id="confirm-seconds" value="60" min="5" max="600">
+      </div>
     </div>
 
     <div style="flex:1;"></div>
@@ -569,9 +586,10 @@ function renderParticipants(list) {
     box.innerHTML = '<div class="empty-box">Пока никто не зарегистрировался</div>';
     return;
   }
-  box.innerHTML = list.map((name, i) =>
-    '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
-  ).join('');
+  box.innerHTML = '<div class="participants-grid">' +
+    list.map((name, i) =>
+      '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
+    ).join('') + '</div>';
 }
 
 function downloadCSV() {
@@ -928,7 +946,45 @@ function escapeHtml(s) {
 renderWinners();
 loadState();
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
+
+// ── Перемикач "Время на ответ" ─────────────────────────────────
+function toggleConfirmField() {
+  const on = document.getElementById('toggle-confirm').checked;
+  const f = document.getElementById('confirm-time-field');
+  f.style.maxHeight = on ? '80px' : '0px';
+  f.style.opacity   = on ? '1' : '0';
+}
+
+// ── Кастомний прицільний курсор ────────────────────────────────
+const crosshair = document.getElementById('crosshair');
+
+document.addEventListener('mousemove', e => {
+  if (!crosshair) return;
+  crosshair.style.left = e.clientX + 'px';
+  crosshair.style.top  = e.clientY + 'px';
+});
+
+// Показуємо курсор тільки коли фаза 'selecting'
+const _origRenderGame = renderGame;
+// Патчимо через MutationObserver на className box
+const boxEl = document.getElementById('main-box');
+const crossObs = new MutationObserver(() => {
+  const isSelecting = boxEl.classList.contains('selecting');
+  crosshair.style.display = isSelecting ? 'block' : 'none';
+});
+crossObs.observe(boxEl, { attributes: true, attributeFilter: ['class'] });
 </script>
+
+<!-- Прицільний курсор -->
+<svg id="crosshair" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="20" cy="20" r="14" fill="none" stroke="#ffd700" stroke-width="2" opacity="0.9"/>
+  <circle cx="20" cy="20" r="2.5" fill="#ffd700" opacity="0.95"/>
+  <line x1="20" y1="2" x2="20" y2="10" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+  <line x1="20" y1="30" x2="20" y2="38" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+  <line x1="2" y1="20" x2="10" y2="20" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+  <line x1="30" y1="20" x2="38" y2="20" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+</svg>
+
 </body>
 </html>`;
 
