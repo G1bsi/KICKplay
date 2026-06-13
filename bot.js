@@ -1018,7 +1018,7 @@ async function retryCheck(name) {
 }
 
 function cssAttrEsc(s) {
-  return s.replace(/["\\]/g, '\\$&');
+  return s.replace(/["\\\\]/g, '\\\\$&');
 }
 
 async function pollCheckState() {
