@@ -479,12 +479,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { opacity: 0.3; }
   }
   #winner-announce .wa-msg {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 18px; color: #ccc;
-    background: rgba(255,255,255,0.07);
-    border-radius: 10px; padding: 10px 24px;
-    max-width: 80vw; text-align: center;
-    animation: waMsgIn 0.3s ease;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: clamp(28px, 3.5vw, 52px); font-weight: 700; color: #fff;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 14px 32px;
+    max-width: 85vw; text-align: center;
+    letter-spacing: 1px;
+    animation: waMsgIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
   }
   @keyframes waMsgIn {
     from { transform: translateY(10px); opacity: 0; }
@@ -946,11 +947,9 @@ function updateAnnounceMsg(name, message) {
   const msgEl   = document.getElementById('wa-msg');
   const subEl   = document.getElementById('wa-sub');
 
-  timerEl.textContent = '✓';
-  timerEl.className = 'wa-timer';
-  timerEl.style.color = '#53fc18';
+  timerEl.style.display = 'none';
   subEl.style.display = 'none';
-  msgEl.textContent = '💬 ' + message;
+  msgEl.textContent = message;
   msgEl.style.display = '';
 }
 
