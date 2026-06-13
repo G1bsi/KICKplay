@@ -655,6 +655,7 @@ async function loadState() {
   const toggle = document.getElementById('toggle-reg');
   const hasCmd = !!(state.joinCmd && state.joinCmd.trim());
   toggle.disabled = !hasCmd;
+  raffleOpen = state.accepting;
 
   document.getElementById('participant-count').textContent = state.count;
   document.getElementById('participants-count-title').textContent = state.count;
@@ -698,6 +699,8 @@ function onCmdInput() {
   }
 }
 
+let raffleOpen = false;
+
 async function saveRaffleCmd() {
   const cmd = document.getElementById('raffle-cmd').value.trim();
   if (!cmd) return;
@@ -709,6 +712,10 @@ async function saveRaffleCmd() {
   el.style.color = res.ok ? '#53fc18' : '#ff4444';
   el.textContent = res.ok ? '✓ сохранено' : '✗ ошибка';
   setTimeout(() => el.textContent = '', 2000);
+  if (res.ok && !raffleOpen) {
+    await fetch('/api/raffle/toggle', { method: 'POST' });
+    loadState();
+  }
 }
 
 async function toggleRaffleAccepting() {
