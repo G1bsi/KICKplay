@@ -917,7 +917,12 @@ async function startGame() {
 }
 
 async function reroll() {
-  if (gameMode === 'race') return runRace(raceQualifiers, true);
+  if (gameMode === 'race') {
+    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
+    const count = Math.min(n, state.participants.length);
+    raceQualifiers = pickRandom(state.participants, count);
+    return runRace(raceQualifiers, true);
+  }
 
   const res = await fetch('/api/raffle/reroll', { method: 'POST' });
   const data = await res.json();
@@ -1023,9 +1028,15 @@ function smoothClosedPath(points) {
   return d;
 }
 
+function trackCentroid(points) {
+  return [
+    points.reduce((s,p)=>s+p[0],0) / points.length,
+    points.reduce((s,p)=>s+p[1],0) / points.length,
+  ];
+}
+
 function scalePoints(points, factor) {
-  const cx = points.reduce((s,p)=>s+p[0],0) / points.length;
-  const cy = points.reduce((s,p)=>s+p[1],0) / points.length;
+  const [cx, cy] = trackCentroid(points);
   return points.map(([x,y]) => [cx + (x-cx)*factor, cy + (y-cy)*factor]);
 }
 
@@ -1056,18 +1067,40 @@ async function runRace(qualifiers, isReroll) {
     svgPaths += '<path d="' + d + '" fill="none" stroke="rgba(255,215,0,' + (0.06 + (n-i)/n*0.12) + ')" stroke-width="2.5"/>';
   }
 
-  // Позначка фінішу — біля точки старту (M0, середина останньої та першої точки траси)
+  // ── Фінішна лінія: чорно-білий "шахматка" на всю ширину трасу ──
   const lastP = TRACK_POINTS[TRACK_POINTS.length-1];
   const firstP = TRACK_POINTS[0];
-  const finishX = (lastP[0]+firstP[0])/2;
-  const finishY = (lastP[1]+firstP[1])/2;
+  const m0 = [(lastP[0]+firstP[0])/2, (lastP[1]+firstP[1])/2];
+  const [tcx, tcy] = trackCentroid(TRACK_POINTS);
+
+  const outerFactor = 1;
+  const innerFactor = 1 - Math.max(0, n - 1) * shrink;
+  const m0Outer = [tcx + (m0[0]-tcx)*outerFactor, tcy + (m0[1]-tcy)*outerFactor];
+  const m0Inner = [tcx + (m0[0]-tcx)*innerFactor, tcy + (m0[1]-tcy)*innerFactor];
+
+  const fCenterX = (m0Outer[0] + m0Inner[0]) / 2;
+  const fCenterY = (m0Outer[1] + m0Inner[1]) / 2;
+  const fLength = Math.max(24, Math.hypot(m0Outer[0]-m0Inner[0], m0Outer[1]-m0Inner[1]) + 24);
+  const fAngle = Math.atan2(m0Outer[1]-m0Inner[1], m0Outer[0]-m0Inner[0]) * 180 / Math.PI;
+  const fThickness = 16;
+
+  const finishLineSvg =
+    '<defs><pattern id="finish-checker" width="16" height="16" patternUnits="userSpaceOnUse">' +
+      '<rect width="16" height="16" fill="#fff"/>' +
+      '<rect width="8" height="8" fill="#111"/>' +
+      '<rect x="8" y="8" width="8" height="8" fill="#111"/>' +
+    '</pattern></defs>' +
+    '<rect x="' + (fCenterX - fLength/2) + '" y="' + (fCenterY - fThickness/2) + '" ' +
+      'width="' + fLength + '" height="' + fThickness + '" ' +
+      'fill="url(#finish-checker)" stroke="#000" stroke-width="1.5" opacity="0.95" ' +
+      'transform="rotate(' + fAngle + ' ' + fCenterX + ' ' + fCenterY + ')"/>';
 
   area.innerHTML =
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
     '<div id="race-wrap">' +
       '<svg id="race-svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="none">' +
         svgPaths +
-        '<rect x="' + (finishX - 4) + '" y="' + (finishY - 16) + '" width="8" height="32" fill="#ffd700" opacity="0.9" transform="rotate(35 ' + finishX + ' ' + finishY + ')"/>' +
+        finishLineSvg +
       '</svg>' +
       '<div id="race-cars"></div>' +
       '<div id="race-countdown"></div>' +
