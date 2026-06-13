@@ -598,6 +598,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="row">
       <span class="count-display">Участников: <b id="participant-count">0</b></span>
     </div>
+    <div class="row">
+      <span style="font-size:13px;color:#888;">🧪 тест:</span>
+      <input type="text" id="test-name" placeholder="имя тестового игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+      <button class="btn-green" onclick="addTestPlayer()">+ Добавить</button>
+      <button class="btn-dark" onclick="addBulkTest()">+10 случайных</button>
+      <span id="test-msg"></span>
+    </div>
   </div>
 
   <div class="panel">
@@ -681,6 +688,46 @@ async function resetRaffle() {
   if (!confirm('Сбросить список участников розыгрыша?')) return;
   await fetch('/api/raffle/reset', { method: 'POST' });
   resetGameUI();
+  loadState();
+}
+
+async function addTestPlayer() {
+  const input = document.getElementById('test-name');
+  const name = input.value.trim();
+  if (!name) return;
+  const res = await fetch('/api/raffle/addtest', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json();
+  const el = document.getElementById('test-msg');
+  if (res.ok && !data.error) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ добавлен (' + data.count + ')';
+    input.value = '';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ ' + (data.error || 'ошибка');
+  }
+  setTimeout(() => el.textContent = '', 2000);
+  loadState();
+}
+
+async function addBulkTest() {
+  const res = await fetch('/api/raffle/addbulk', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count: 10 })
+  });
+  const data = await res.json();
+  const el = document.getElementById('test-msg');
+  if (res.ok) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ добавлено ' + data.added + ' (всего: ' + data.count + ')';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ ошибка';
+  }
+  setTimeout(() => el.textContent = '', 2500);
   loadState();
 }
 
@@ -1012,6 +1059,50 @@ const server = http.createServer((req, res) => {
     saveState();
     console.log('[РОЗІГРАШ] Список учасників очищено');
     res.writeHead(200); res.end();
+    return;
+  }
+
+  if (req.url === '/api/raffle/addtest' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { name } = JSON.parse(body);
+        const trimmed = (name || '').trim();
+        if (!trimmed) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введите имя' })); return; }
+        if (rafflePlayers.includes(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
+        rafflePlayers.push(trimmed);
+        saveState();
+        console.log(`[РОЗІГРАШ +тест] ${trimmed} (${rafflePlayers.length})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, count: rafflePlayers.length }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/addbulk' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { count } = JSON.parse(body);
+        const n = Math.min(Math.max(parseInt(count) || 0, 1), 200);
+        let added = 0;
+        for (let i = 0; i < n; i++) {
+          let name;
+          do {
+            name = 'Тестер' + Math.floor(Math.random() * 100000);
+          } while (rafflePlayers.includes(name));
+          rafflePlayers.push(name);
+          added++;
+        }
+        saveState();
+        console.log(`[РОЗІГРАШ +тест] добавлено ${added} тестовых участников (всего: ${rafflePlayers.length})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, added, count: rafflePlayers.length }));
+      } catch { res.writeHead(400); res.end(); }
+    });
     return;
   }
 
