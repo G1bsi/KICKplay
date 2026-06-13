@@ -8,13 +8,9 @@ import crypto from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Настройки ──────────────────────────────────────────────
-const CHANNEL_ID  = 235226;
 const CHATROOM_ID = 235222;
-const PREFIX      = '!';
-const STREAMER    = 'kosteze231';
-const CSV_FILE    = path.join(__dirname, 'marble.csv');
 const STATE_FILE  = path.join(__dirname, 'marble_state.json');
-const MAX_PLAYERS = 1000;
+const MAX_PARTICIPANTS = 1000;
 
 // Пароль береться з Environment Variables на Render:
 //   Render Dashboard → твій сервіс → Environment → Add variable
@@ -33,10 +29,6 @@ if (!WEB_PASSWORD) {
 const PUSHER_WS =
   'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679' +
   '?protocol=7&client=js&version=8.4.0-rc2&flash=false';
-
-let players   = [];
-let accepting = true;
-let joinCmd   = '!play'; // змінюється через сайт
 
 // ── Розіграш (Cash Hunt) ─────────────────────────────────────
 let rafflePlayers   = [];
@@ -66,7 +58,6 @@ function isValidSession(token) {
 // ── Збереження стану ────────────────────────────────────────
 function saveState() {
   const state = {
-    players, accepting, joinCmd,
     rafflePlayers, raffleAccepting, raffleJoinCmd,
     savedAt: new Date().toISOString()
   };
@@ -82,29 +73,17 @@ function loadState() {
   try {
     const raw   = fs.readFileSync(STATE_FILE, 'utf8');
     const state = JSON.parse(raw);
-    players   = Array.isArray(state.players) ? state.players : [];
-    accepting = typeof state.accepting === 'boolean' ? state.accepting : true;
-    joinCmd   = state.joinCmd || '!play';
     rafflePlayers   = Array.isArray(state.rafflePlayers) ? state.rafflePlayers : [];
     raffleAccepting = typeof state.raffleAccepting === 'boolean' ? state.raffleAccepting : false;
     raffleJoinCmd   = state.raffleJoinCmd || '!призи';
-    console.log(`[STATE] Восстановлено: ${players.length} игроков, регистрация: ${accepting ? 'открыта' : 'закрыта'}`);
+    console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, регистрация: ${raffleAccepting ? 'открыта' : 'закрыта'}`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
   }
 }
 
-function saveCSV() {
-  try {
-    fs.writeFileSync(CSV_FILE, players.join('\n'), 'utf8');
-    console.log(`[CSV] Сохранено ${players.length} игроков`);
-  } catch (e) {
-    console.error('[CSV] Ошибка сохранения:', e.message);
-  }
-}
-
 // Автозбереження кожні 30 секунд
-setInterval(() => { if (players.length > 0) saveState(); }, 30000);
+setInterval(() => { if (rafflePlayers.length > 0) saveState(); }, 30000);
 
 // ── Сторінка входу ──────────────────────────────────────────
 const LOGIN_HTML = () => `<!DOCTYPE html>
@@ -201,192 +180,6 @@ document.getElementById('pw').focus();
 </body>
 </html>`;
 
-// ── Головна сторінка ────────────────────────────────────────
-const HTML = () => `<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Игроки</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0a0a0a;
-    color: #fff;
-    font-family: 'Rajdhani', sans-serif;
-    min-height: 100vh;
-    padding: 20px;
-  }
-  .wrapper { width: 100%; max-width: 960px; margin: 0 auto; }
-  h1 { font-size: 24px; color: #53fc18; text-align: center; letter-spacing: 1px; margin-bottom: 4px; }
-  .sub { color: #444; font-size: 11px; margin-bottom: 18px; text-align: center; font-family: 'Share Tech Mono', monospace; }
-
-  .stats { display: flex; justify-content: center; margin-bottom: 12px; }
-  .stat { background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 12px 40px; text-align: center; }
-  .stat-num { font-size: 38px; font-weight: 700; color: #53fc18; line-height: 1; }
-  .stat-label { font-size: 10px; color: #444; margin-top: 3px; font-family: 'Share Tech Mono', monospace; }
-
-  .bar-wrap { max-width: 320px; margin: 0 auto 12px; }
-  .bar-bg { background: #1a1a1a; border-radius: 4px; height: 5px; overflow: hidden; }
-  .bar { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.4s; }
-  .bar-label { font-size: 10px; color: #333; text-align: center; margin-top: 4px; font-family: 'Share Tech Mono', monospace; }
-
-  .status-wrap { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; }
-  .status { display: inline-block; padding: 3px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; font-family: 'Share Tech Mono', monospace; }
-  .status.open   { background: #0d200d; color: #53fc18; border: 1px solid #2a5a2a; }
-  .status.closed { background: #200d0d; color: #ff4444; border: 1px solid #5a2a2a; }
-
-  .buttons { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
-  button { padding: 8px 18px; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.3px; transition: opacity 0.2s, transform 0.1s; }
-  button:hover  { opacity: 0.82; }
-  button:active { transform: scale(0.97); }
-  .btn-csv    { background: #53fc18; color: #000; }
-  .btn-reset  { background: #c0392b; color: #fff; }
-  .btn-stop   { background: #e67e22; color: #fff; padding: 3px 12px; font-size: 12px; }
-  .btn-upd    { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
-  .btn-out    { background: #111; color: #333; border: 1px solid #1a1a1a; font-size: 12px; }
-  .btn-raffle { background: #2a1e00; color: #ffd700; border: 1px solid #5a4a00; }
-
-  .list { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; overflow: hidden; }
-  .list-head { padding: 9px 16px; background: #141414; color: #333; font-size: 10px; letter-spacing: 2px; text-align: center; font-family: 'Share Tech Mono', monospace; border-bottom: 1px solid #1a1a1a; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); }
-  .player { display: flex; align-items: center; padding: 6px 10px; border-bottom: 1px solid #141414; border-right: 1px solid #141414; gap: 7px; transition: background 0.1s; }
-  .player:hover { background: #141414; }
-  .player:nth-child(4n) { border-right: none; }
-  .pnum { color: #2a2a2a; width: 24px; font-size: 10px; flex-shrink: 0; font-family: 'Share Tech Mono', monospace; }
-  .pname { color: #ddd; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty { padding: 32px; text-align: center; color: #2a2a2a; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
-  .footer { font-size: 10px; color: #1e1e1e; margin-top: 8px; text-align: center; font-family: 'Share Tech Mono', monospace; }
-  .cmd-panel { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; }
-  .cmd-panel input { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px; padding: 7px 12px; color: #53fc18; font-family: 'Share Tech Mono', monospace; font-size: 14px; outline: none; width: 140px; text-align: center; transition: border-color 0.2s; }
-  .cmd-panel input:focus { border-color: #53fc18; }
-  .btn-cmd { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; border-radius: 7px; padding: 7px 14px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
-  .btn-cmd:hover { opacity: 0.8; }
-  #cmd-saved { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
-</style>
-</head>
-<body>
-<div class="wrapper">
-  <h1>🎮 KICK MARBLES BOT</h1>
-  <div class="sub">kosteze231 · автообновление 5с</div>
-
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-num" id="count">0</div>
-      <div class="stat-label">игроков зарегистрировано</div>
-    </div>
-  </div>
-
-  <div class="bar-wrap">
-    <div class="bar-bg"><div class="bar" id="bar" style="width:0%"></div></div>
-    <div class="bar-label" id="bar-label">0 / 1000</div>
-  </div>
-
-  <div class="status-wrap">
-    <div class="status open" id="status">● регистрация открыта</div>
-    <button class="btn-stop" id="btn-stop" onclick="toggleStop()">⏹ Стоп</button>
-  </div>
-
-  <div class="buttons">
-    <button class="btn-csv"   onclick="downloadCSV()">⬇ Скачать CSV</button>
-    <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
-    <button class="btn-upd"   onclick="loadPlayers()">↻ Обновить</button>
-    <button class="btn-raffle" onclick="location.href='/raffle'">🎁 Розіграш</button>
-    <button class="btn-out"   onclick="logout()">выйти</button>
-  </div>
-
-  <div class="cmd-panel">
-    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово реєстрації:</span>
-    <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
-    <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
-    <span id="cmd-saved"></span>
-  </div>
-
-  <div class="list">
-    <div class="list-head">СПИСОК ИГРОКОВ</div>
-    <div id="plist"><div class="empty">никто ещё не зарегистрировался</div></div>
-  </div>
-  <div class="footer">автообновление каждые 5 секунд</div>
-</div>
-
-<script>
-async function loadPlayers() {
-  const res = await fetch('/api/players');
-  if (res.status === 401) { location.reload(); return; }
-  const d = await res.json();
-
-  document.getElementById('count').textContent = d.players.length;
-
-  const pct = Math.min(d.players.length / 1000 * 100, 100);
-  const bar = document.getElementById('bar');
-  bar.style.width = pct + '%';
-  bar.style.background = d.players.length >= 1000 ? '#ff4444' : d.players.length >= 800 ? '#ffaa00' : '#53fc18';
-  document.getElementById('bar-label').textContent = d.players.length + ' / 1000';
-
-  const cmdInput = document.getElementById('cmd-input');
-  if (cmdInput && d.joinCmd && document.activeElement !== cmdInput) {
-    cmdInput.value = d.joinCmd;
-  }
-  const st = document.getElementById('status');
-  st.textContent = d.accepting ? '● регистрация открыта' : '● регистрация закрыта';
-  st.className = 'status ' + (d.accepting ? 'open' : 'closed');
-  const stopBtn = document.getElementById('btn-stop');
-  if (stopBtn) stopBtn.textContent = d.accepting ? '⏹ Остановить регистрацию' : '▶ Открыть регистрацию';
-
-  const list = document.getElementById('plist');
-  if (!d.players.length) {
-    list.innerHTML = '<div class="empty">никто ещё не зарегистрировался</div>';
-    return;
-  }
-  list.innerHTML = '<div class="grid">' + d.players.map((n, i) =>
-    '<div class="player"><span class="pnum">' + (i+1) + '</span><span class="pname">' + n + '</span></div>'
-  ).join('') + '</div>';
-}
-
-async function saveCmd() {
-  const cmd = document.getElementById('cmd-input').value.trim();
-  if (!cmd) return;
-  const res = await fetch('/api/setcmd', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cmd })
-  });
-  const el = document.getElementById('cmd-saved');
-  if (res.ok) {
-    el.style.color = '#53fc18';
-    el.textContent = '✓ збережено';
-  } else {
-    el.style.color = '#ff4444';
-    el.textContent = '✗ помилка';
-  }
-  setTimeout(() => el.textContent = '', 2000);
-}
-
-async function toggleStop() {
-  await fetch('/api/stop', { method: 'POST' });
-  loadPlayers();
-}
-
-function downloadCSV() { window.location.href = '/api/csv'; }
-
-async function resetList() {
-  if (!confirm('Сбросить список всех игроков?')) return;
-  await fetch('/api/reset', { method: 'POST' });
-  loadPlayers();
-}
-
-async function logout() {
-  await fetch('/api/logout', { method: 'POST' });
-  location.reload();
-}
-
-loadPlayers();
-setInterval(loadPlayers, 5000);
-</script>
-</body>
-</html>`;
-
 // ── Сторінка розіграшу (Cash Hunt) ───────────────────────────
 const RAFFLE_HTML = () => `<!DOCTYPE html>
 <html lang="ru">
@@ -457,6 +250,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .count-display { font-size: 13px; color: #aaa; font-family: 'Share Tech Mono', monospace; }
   .count-display b { color: #ffd700; font-size: 18px; }
+
+  .limit-bar-wrap { max-width: 400px; margin: 8px 0 0; }
+  .limit-bar-bg { background: #1a1a1a; border-radius: 6px; height: 6px; overflow: hidden; }
+  .limit-bar { height: 100%; background: #53fc18; border-radius: 6px; transition: width 0.4s ease, background 0.4s ease; }
 
   #saved-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
 
@@ -599,7 +396,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div class="wrapper">
   <h1>🎁 РОЗЫГРЫШ — CASH HUNT</h1>
   <div class="sub">kosteze231</div>
-  <div class="back"><a href="/">← вернуться к списку игроков</a></div>
 
   <div class="panel">
     <div class="panel-title">Регистрация участников</div>
@@ -613,9 +409,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span class="status-badge closed" id="raffle-status">● регистрация закрыта</span>
       <button class="btn-orange" id="btn-raffle-toggle" onclick="toggleRaffleAccepting()">▶ Открыть регистрацию</button>
       <button class="btn-red" onclick="resetRaffle()">🗑 Сбросить участников</button>
+      <button class="btn-gold" onclick="downloadCSV()">⬇ Скачать CSV</button>
     </div>
     <div class="row">
-      <span class="count-display">Участников: <b id="participant-count">0</b></span>
+      <span class="count-display">Участников: <b id="participant-count">0</b> / <span id="max-count">1000</span></span>
+    </div>
+    <div class="limit-bar-wrap">
+      <div class="limit-bar-bg"><div class="limit-bar" id="limit-bar" style="width:0%"></div></div>
     </div>
     <div class="row">
       <span style="font-size:13px;color:#888;">🧪 тест:</span>
@@ -688,6 +488,11 @@ async function loadState() {
   if (document.activeElement !== cmdInput) cmdInput.value = state.joinCmd;
 
   document.getElementById('participant-count').textContent = state.count;
+  document.getElementById('max-count').textContent = state.max || 1000;
+  const pct = Math.min(100, (state.count / (state.max || 1000)) * 100);
+  const bar = document.getElementById('limit-bar');
+  bar.style.width = pct + '%';
+  bar.style.background = state.count >= (state.max || 1000) ? '#ff4444' : state.count >= (state.max || 1000) * 0.8 ? '#ffaa00' : '#53fc18';
 
   const badge = document.getElementById('raffle-status');
   const toggleBtn = document.getElementById('btn-raffle-toggle');
@@ -700,6 +505,10 @@ async function loadState() {
     badge.className = 'status-badge closed';
     toggleBtn.textContent = '▶ Открыть регистрацию';
   }
+}
+
+function downloadCSV() {
+  window.location.href = '/api/raffle/csv';
 }
 
 async function saveRaffleCmd() {
@@ -1132,57 +941,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url === '/api/setcmd' && req.method === 'POST') {
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { cmd } = JSON.parse(body);
-        const trimmed = cmd.trim().toLowerCase();
-        if (!trimmed || trimmed.length > 30) { res.writeHead(400); res.end(); return; }
-        joinCmd = trimmed;
-        saveState();
-        console.log('[BOT] Команда реєстрації змінена на: ' + joinCmd);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, cmd: joinCmd }));
-      } catch { res.writeHead(400); res.end(); }
-    });
-    return;
-  }
-
-  if (req.url === '/api/players') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ players, accepting, joinCmd }));
-    return;
-  }
-
-  if (req.url === '/api/csv') {
-    res.writeHead(200, {
-      'Content-Type': 'text/csv',
-      'Content-Disposition': 'attachment; filename="marble.csv"'
-    });
-    res.end(players.join('\n'));
-    return;
-  }
-
-  if (req.url === '/api/stop' && req.method === 'POST') {
-    accepting = !accepting;
-    saveState();
-    console.log('[BOT] Регистрация ' + (accepting ? 'ОТКРЫТА' : 'ОСТАНОВЛЕНА') + ' через веб-интерфейс');
-    res.writeHead(200); res.end();
-    return;
-  }
-
-  if (req.url === '/api/reset' && req.method === 'POST') {
-    players   = [];
-    accepting = true;
-    saveState();
-    try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
-    console.log('[BOT] Список сброшен через веб-интерфейс');
-    res.writeHead(200); res.end();
-    return;
-  }
-
   // ── Розіграш (Cash Hunt) API ────────────────────────────────
   if (req.url === '/api/raffle/state') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1191,10 +949,21 @@ const server = http.createServer((req, res) => {
       accepting: raffleAccepting,
       participants: rafflePlayers,
       count: rafflePlayers.length,
+      max: MAX_PARTICIPANTS,
       game: raffleGame,
     }));
     return;
   }
+
+  if (req.url === '/api/raffle/csv') {
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="participants.csv"'
+    });
+    res.end(rafflePlayers.join('\n'));
+    return;
+  }
+
 
   if (req.url === '/api/raffle/setcmd' && req.method === 'POST') {
     let body = '';
@@ -1381,14 +1150,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url === '/raffle') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(RAFFLE_HTML());
-    return;
-  }
-
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(HTML());
+  res.end(RAFFLE_HTML());
 });
 
 // Генерує сітку: до 108 клітинок із учасниками (рандом, якщо їх більше 108)
@@ -1460,55 +1223,23 @@ function connect() {
         console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
       }
 
-      if (lower === joinCmd) {
-        if (!accepting) {
-          console.log(`[SKIP] ${username}: регистрация закрыта`);
-          return;
-        }
-        if (players.length >= MAX_PLAYERS) {
-          accepting = false;
-          saveState();
-          console.log(`[BOT] Лимит ${MAX_PLAYERS} достигнут — регистрация закрыта`);
-          return;
-        }
-        if (players.includes(username)) {
-          console.log(`[DUP]  ${username} уже в списке`);
-          return;
-        }
-        players.push(username);
-        saveState();
-        saveCSV();
-        console.log(`[+] ${username} (${players.length}/${MAX_PLAYERS})`);
-        if (players.length >= MAX_PLAYERS) {
-          accepting = false;
-          saveState();
-          console.log(`[BOT] Лимит ${MAX_PLAYERS} достигнут — регистрация закрыта`);
-        }
-        return;
-      }
-
       if (raffleAccepting && lower === raffleJoinCmd) {
+        if (rafflePlayers.length >= MAX_PARTICIPANTS) {
+          raffleAccepting = false;
+          saveState();
+          console.log(`[РОЗІГРАШ] Лимит ${MAX_PARTICIPANTS} достигнут — регистрация закрыта`);
+          return;
+        }
         if (!rafflePlayers.includes(username)) {
           rafflePlayers.push(username);
           saveState();
-          console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
+          console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length}/${MAX_PARTICIPANTS})`);
+          if (rafflePlayers.length >= MAX_PARTICIPANTS) {
+            raffleAccepting = false;
+            saveState();
+            console.log(`[РОЗІГРАШ] Лимит ${MAX_PARTICIPANTS} достигнут — регистрация закрыта`);
+          }
         }
-        return;
-      }
-
-      if (lower === `${PREFIX}stop` && username.toLowerCase() === STREAMER) {
-        accepting = false;
-        saveState();
-        console.log('[BOT] Регистрация ОСТАНОВЛЕНА (!stop)');
-        return;
-      }
-
-      if (lower === `${PREFIX}reset` && username.toLowerCase() === STREAMER) {
-        players   = [];
-        accepting = true;
-        saveState();
-        try { if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE); } catch {}
-        console.log('[BOT] Список ОЧИЩЕН (!reset)');
         return;
       }
     }
@@ -1525,12 +1256,10 @@ function connect() {
 
 // ── Старт ───────────────────────────────────────────────────
 console.log('╔══════════════════════════════════════╗');
-console.log('║   Kick → Marbles on Stream  BOT      ║');
+console.log('║   Kick Cash Hunt — Розыгрыш BOT      ║');
 console.log('╠══════════════════════════════════════╣');
-console.log(`║  Channel:  ${CHANNEL_ID}                  ║`);
 console.log(`║  Chatroom: ${CHATROOM_ID}                  ║`);
-console.log('║  Команды: !play / !stop / !reset     ║');
-console.log(`║  Лимит: ${MAX_PLAYERS} игроков                ║`);
+console.log(`║  Лимит участников: ${MAX_PARTICIPANTS}            ║`);
 console.log('║  Защита: пароль через env variable   ║');
 console.log('╚══════════════════════════════════════╝\n');
 
