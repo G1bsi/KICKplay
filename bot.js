@@ -540,14 +540,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
     <span id="saved-msg"></span>
 
-    <div class="toggle-row" style="margin-top:10px;">
-      <span class="toggle-label">Регистрация открыта</span>
-      <label class="switch">
-        <input type="checkbox" id="toggle-reg" onchange="toggleRaffleAccepting()" disabled>
-        <span class="slider"></span>
-      </label>
-    </div>
-
     <div class="toggle-row">
       <span class="toggle-label">Подтверждение победителя</span>
       <label class="switch">
@@ -652,9 +644,6 @@ async function loadState() {
   if (document.activeElement !== cmdInput) {
     cmdInput.value = state.joinCmd || '';
   }
-  const toggle = document.getElementById('toggle-reg');
-  const hasCmd = !!(state.joinCmd && state.joinCmd.trim());
-  toggle.disabled = !hasCmd;
   raffleOpen = state.accepting;
 
   document.getElementById('participant-count').textContent = state.count;
@@ -665,10 +654,7 @@ async function loadState() {
   bar.style.width = pct + '%';
   bar.style.background = state.count >= (state.max || 1000) ? '#ff4444' : state.count >= (state.max || 1000) * 0.8 ? '#ffaa00' : '#53fc18';
 
-  const dot = document.getElementById('conn-dot');
-  const toggle = document.getElementById('toggle-reg');
-  toggle.checked = state.accepting;
-  dot.className = 'dot ' + (state.accepting ? 'open' : 'closed');
+  document.getElementById('conn-dot').className = 'dot ' + (state.accepting ? 'open' : 'closed');
 
   if (phase === 'idle') renderParticipants(state.participants);
 }
@@ -714,13 +700,8 @@ async function saveRaffleCmd() {
   setTimeout(() => el.textContent = '', 2000);
   if (res.ok && !raffleOpen) {
     await fetch('/api/raffle/toggle', { method: 'POST' });
-    loadState();
   }
-}
-
-async function toggleRaffleAccepting() {
-  await fetch('/api/raffle/toggle', { method: 'POST' });
-  loadState();
+  if (res.ok) loadState();
 }
 
 async function resetRaffle() {
