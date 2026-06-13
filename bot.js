@@ -38,6 +38,12 @@ let players   = [];
 let accepting = true;
 let joinCmd   = '!play'; // змінюється через сайт
 
+// ── Розіграш (Cash Hunt) ─────────────────────────────────────
+let rafflePlayers   = [];
+let raffleAccepting = false;
+let raffleJoinCmd   = '!призи';
+let raffleGame      = null; // активна гра (не зберігається на диск)
+
 // Активні сесії (token → expiry)
 const sessions = new Map();
 
@@ -58,7 +64,11 @@ function isValidSession(token) {
 
 // ── Збереження стану ────────────────────────────────────────
 function saveState() {
-  const state = { players, accepting, joinCmd, savedAt: new Date().toISOString() };
+  const state = {
+    players, accepting, joinCmd,
+    rafflePlayers, raffleAccepting, raffleJoinCmd,
+    savedAt: new Date().toISOString()
+  };
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (e) {
@@ -74,6 +84,9 @@ function loadState() {
     players   = Array.isArray(state.players) ? state.players : [];
     accepting = typeof state.accepting === 'boolean' ? state.accepting : true;
     joinCmd   = state.joinCmd || '!play';
+    rafflePlayers   = Array.isArray(state.rafflePlayers) ? state.rafflePlayers : [];
+    raffleAccepting = typeof state.raffleAccepting === 'boolean' ? state.raffleAccepting : false;
+    raffleJoinCmd   = state.raffleJoinCmd || '!призи';
     console.log(`[STATE] Восстановлено: ${players.length} игроков, регистрация: ${accepting ? 'открыта' : 'закрыта'}`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
@@ -232,6 +245,7 @@ const HTML = () => `<!DOCTYPE html>
   .btn-stop   { background: #e67e22; color: #fff; padding: 3px 12px; font-size: 12px; }
   .btn-upd    { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
   .btn-out    { background: #111; color: #333; border: 1px solid #1a1a1a; font-size: 12px; }
+  .btn-raffle { background: #2a1e00; color: #ffd700; border: 1px solid #5a4a00; }
 
   .list { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; overflow: hidden; }
   .list-head { padding: 9px 16px; background: #141414; color: #333; font-size: 10px; letter-spacing: 2px; text-align: center; font-family: 'Share Tech Mono', monospace; border-bottom: 1px solid #1a1a1a; }
@@ -277,13 +291,14 @@ const HTML = () => `<!DOCTYPE html>
     <button class="btn-csv"   onclick="downloadCSV()">⬇ Скачать CSV</button>
     <button class="btn-reset" onclick="resetList()">🗑 Сбросить список</button>
     <button class="btn-upd"   onclick="loadPlayers()">↻ Обновить</button>
+    <button class="btn-raffle" onclick="location.href='/raffle'">🎁 Розіграш</button>
     <button class="btn-out"   onclick="logout()">выйти</button>
   </div>
 
   <div class="cmd-panel">
-    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово:</span>
+    <span style="font-size:11px;color:#444;font-family:'Share Tech Mono',monospace;">слово реєстрації:</span>
     <input type="text" id="cmd-input" value="!play" placeholder="!play" onkeydown="if(event.key==='Enter')saveCmd()">
-    <button class="btn-cmd" onclick="saveCmd()">✓ Сохранить</button>
+    <button class="btn-cmd" onclick="saveCmd()">✓ Зберегти</button>
     <span id="cmd-saved"></span>
   </div>
 
@@ -339,7 +354,7 @@ async function saveCmd() {
   const el = document.getElementById('cmd-saved');
   if (res.ok) {
     el.style.color = '#53fc18';
-    el.textContent = '✓ есть';
+    el.textContent = '✓ збережено';
   } else {
     el.style.color = '#ff4444';
     el.textContent = '✗ помилка';
@@ -367,6 +382,483 @@ async function logout() {
 
 loadPlayers();
 setInterval(loadPlayers, 5000);
+</script>
+</body>
+</html>`;
+
+// ── Сторінка розіграшу (Cash Hunt) ───────────────────────────
+const RAFFLE_HTML = () => `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Розыгрыш — Cash Hunt</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;900&family=Share+Tech+Mono&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .wrapper { width: 100%; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 26px; color: #ffd700; text-align: center; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 20px rgba(255,215,0,0.3); }
+  .sub { color: #444; font-size: 11px; margin-bottom: 18px; text-align: center; font-family: 'Share Tech Mono', monospace; }
+  .back { display: block; text-align: center; margin-bottom: 16px; }
+  .back a { color: #666; font-size: 12px; text-decoration: none; font-family: 'Share Tech Mono', monospace; }
+  .back a:hover { color: #aaa; }
+
+  .panel {
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .panel-title { font-size: 11px; color: #444; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; }
+
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .row:last-child { margin-bottom: 0; }
+
+  input[type=text], input[type=number] {
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px;
+    padding: 8px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
+    font-size: 14px; outline: none; transition: border-color 0.2s;
+  }
+  input:focus { border-color: #ffd700; }
+  #raffle-cmd { color: #ffd700; width: 140px; text-align: center; }
+  #winners-count { width: 80px; text-align: center; }
+
+  button {
+    padding: 9px 18px; border: none; border-radius: 7px; font-size: 14px;
+    font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 0.5px; transition: opacity 0.2s, transform 0.1s;
+  }
+  button:hover  { opacity: 0.85; }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  .btn-gold  { background: #ffd700; color: #000; }
+  .btn-green { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; }
+  .btn-orange{ background: #e67e22; color: #fff; }
+  .btn-red   { background: #c0392b; color: #fff; }
+  .btn-dark  { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
+  .btn-big   { padding: 14px 36px; font-size: 18px; }
+
+  .status-badge {
+    display: inline-block; padding: 3px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; font-family: 'Share Tech Mono', monospace;
+  }
+  .status-badge.open   { background: #0d200d; color: #53fc18; border: 1px solid #2a5a2a; }
+  .status-badge.closed { background: #200d0d; color: #ff4444; border: 1px solid #5a2a2a; }
+
+  .count-display { font-size: 13px; color: #aaa; font-family: 'Share Tech Mono', monospace; }
+  .count-display b { color: #ffd700; font-size: 18px; }
+
+  #saved-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
+
+  /* ── Сітка ────────────────────────────────── */
+  #grid-wrap { display: none; }
+  #grid-wrap.visible { display: block; }
+
+  #hint { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; }
+  #hint b { color: #ffd700; }
+
+  .grid {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 16px;
+    justify-content: center;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    width: 100%;
+    position: relative;
+    cursor: pointer;
+    perspective: 400px;
+  }
+
+  .cell-inner {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.5s;
+  }
+
+  .cell.flipped .cell-inner { transform: rotateY(180deg); }
+
+  .cell-face {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    backface-visibility: hidden;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    text-align: center;
+    overflow: hidden;
+    padding: 2px;
+  }
+
+  .cell-front {
+    background: linear-gradient(145deg, #2a1e00, #1a1200);
+    border: 2px solid #4a3a00;
+    color: #ffd700;
+    font-size: 22px;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  }
+
+  .cell-back {
+    transform: rotateY(180deg);
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #ccc;
+    font-size: 10px;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+
+  /* Обрана клітинка (до розкриття) */
+  .cell.selected .cell-front {
+    border-color: #ffd700;
+    box-shadow: 0 0 14px rgba(255,215,0,0.7), inset 0 0 14px rgba(255,215,0,0.25);
+  }
+  .cell.selected .cell-front::after {
+    content: '★';
+    position: absolute;
+    top: 2px; right: 4px;
+    font-size: 12px;
+    color: #ffd700;
+  }
+
+  /* Переможна клітинка (після розкриття) */
+  .cell.winner .cell-back {
+    background: linear-gradient(145deg, #ffd700, #ff9900);
+    border: 1px solid #ffec80;
+    color: #000;
+    font-weight: 900;
+    animation: winnerGlow 0.6s ease infinite alternate;
+  }
+
+  @keyframes winnerGlow {
+    from { box-shadow: 0 0 6px rgba(255,215,0,0.4); }
+    to   { box-shadow: 0 0 16px rgba(255,215,0,0.9); }
+  }
+
+  .cell.revealed { cursor: default; }
+
+  .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
+  .selecting .cell { cursor: pointer; }
+  .revealing .cell, .done .cell { cursor: default; }
+
+  #progress { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 14px; font-family: 'Share Tech Mono', monospace; min-height: 20px; }
+  #progress b { color: #ffd700; }
+
+  #winners-list {
+    background: #111; border: 1px solid #1e1e1e; border-radius: 10px;
+    padding: 16px; margin-top: 16px; display: none;
+  }
+  #winners-list.visible { display: block; }
+  #winners-list h3 { color: #ffd700; font-size: 16px; margin-bottom: 10px; text-align: center; letter-spacing: 1px; }
+  .winner-chip {
+    display: inline-block; background: linear-gradient(145deg, #ffd700, #ff9900);
+    color: #000; font-weight: 700; padding: 6px 16px; border-radius: 20px;
+    margin: 4px; font-size: 14px;
+    animation: chipPop 0.4s ease;
+  }
+  @keyframes chipPop {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .game-controls { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>🎁 РОЗЫГРЫШ — CASH HUNT</h1>
+  <div class="sub">kosteze231</div>
+  <div class="back"><a href="/">← вернуться к списку игроков</a></div>
+
+  <div class="panel">
+    <div class="panel-title">Регистрация участников</div>
+    <div class="row">
+      <span style="font-size:13px;color:#888;">слово для регистрации:</span>
+      <input type="text" id="raffle-cmd" value="!призи" placeholder="!призи" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+      <button class="btn-green" onclick="saveRaffleCmd()">✓ Сохранить</button>
+      <span id="saved-msg"></span>
+    </div>
+    <div class="row">
+      <span class="status-badge closed" id="raffle-status">● регистрация закрыта</span>
+      <button class="btn-orange" id="btn-raffle-toggle" onclick="toggleRaffleAccepting()">▶ Открыть регистрацию</button>
+      <button class="btn-red" onclick="resetRaffle()">🗑 Сбросить участников</button>
+    </div>
+    <div class="row">
+      <span class="count-display">Участников: <b id="participant-count">0</b></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Игра</div>
+    <div class="row">
+      <span style="font-size:13px;color:#888;">количество победителей:</span>
+      <input type="number" id="winners-count" value="1" min="1" max="108">
+      <button class="btn-gold btn-big" onclick="startGame()">🎯 НАЧАТЬ ИГРУ</button>
+    </div>
+    <div class="row">
+      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол (без игры)</button>
+    </div>
+  </div>
+
+  <div id="hint"></div>
+  <div id="progress"></div>
+
+  <div id="grid-wrap">
+    <div class="grid" id="grid"></div>
+    <div class="game-controls">
+      <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол (новая игра)</button>
+      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
+    </div>
+  </div>
+
+  <div id="winners-list">
+    <h3>🏆 ПОБЕДИТЕЛИ</h3>
+    <div id="winners-chips"></div>
+  </div>
+</div>
+
+<script>
+let state = { joinCmd: '!призи', accepting: false, participants: [], count: 0, game: null };
+let currentGame = null;     // { winnersNeeded, gridSize, cells }
+let selected = new Set();   // індекси обраних клітинок
+let phase = 'idle';         // idle | selecting | revealing | done
+
+async function loadState() {
+  const res = await fetch('/api/raffle/state');
+  if (res.status === 401) { location.reload(); return; }
+  state = await res.json();
+
+  const cmdInput = document.getElementById('raffle-cmd');
+  if (document.activeElement !== cmdInput) cmdInput.value = state.joinCmd;
+
+  document.getElementById('participant-count').textContent = state.count;
+
+  const badge = document.getElementById('raffle-status');
+  const toggleBtn = document.getElementById('btn-raffle-toggle');
+  if (state.accepting) {
+    badge.textContent = '● регистрация открыта';
+    badge.className = 'status-badge open';
+    toggleBtn.textContent = '⏹ Закрыть регистрацию';
+  } else {
+    badge.textContent = '● регистрация закрыта';
+    badge.className = 'status-badge closed';
+    toggleBtn.textContent = '▶ Открыть регистрацию';
+  }
+}
+
+async function saveRaffleCmd() {
+  const cmd = document.getElementById('raffle-cmd').value.trim();
+  if (!cmd) return;
+  const res = await fetch('/api/raffle/setcmd', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cmd })
+  });
+  const el = document.getElementById('saved-msg');
+  el.style.color = res.ok ? '#53fc18' : '#ff4444';
+  el.textContent = res.ok ? '✓ сохранено' : '✗ ошибка';
+  setTimeout(() => el.textContent = '', 2000);
+}
+
+async function toggleRaffleAccepting() {
+  await fetch('/api/raffle/toggle', { method: 'POST' });
+  loadState();
+}
+
+async function resetRaffle() {
+  if (!confirm('Сбросить список участников розыгрыша?')) return;
+  await fetch('/api/raffle/reset', { method: 'POST' });
+  resetGameUI();
+  loadState();
+}
+
+function resetGameUI() {
+  currentGame = null;
+  selected = new Set();
+  phase = 'idle';
+  document.getElementById('grid-wrap').classList.remove('visible');
+  document.getElementById('grid-wrap').className = 'grid-wrap';
+  document.getElementById('grid-wrap').classList.remove('visible');
+  document.getElementById('hint').textContent = '';
+  document.getElementById('progress').textContent = '';
+  document.getElementById('winners-list').classList.remove('visible');
+}
+
+async function startGame() {
+  const n = parseInt(document.getElementById('winners-count').value);
+  if (!n || n < 1) return alert('Укажите количество победителей');
+  const res = await fetch('/api/raffle/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winners: n })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || 'Ошибка');
+  document.getElementById('winners-list').classList.remove('visible');
+  renderGame(data.game);
+}
+
+async function reroll() {
+  const res = await fetch('/api/raffle/reroll', { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || 'Ошибка');
+  document.getElementById('winners-list').classList.remove('visible');
+  renderGame(data.game);
+}
+
+async function fastReroll() {
+  const n = currentGame ? currentGame.winnersNeeded : parseInt(document.getElementById('winners-count').value);
+  if (!n || n < 1) return alert('Укажите количество победителей');
+  const res = await fetch('/api/raffle/fastreroll', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winners: n })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || 'Ошибка');
+
+  resetGameUI();
+  showWinners(data.winners);
+}
+
+function renderGame(game) {
+  currentGame = game;
+  selected = new Set();
+  phase = 'selecting';
+
+  const gridWrap = document.getElementById('grid-wrap');
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  gridWrap.classList.add('visible');
+  gridWrap.className = 'visible selecting';
+
+  // Розмір клітинки залежить від кількості — менше учасників = більші клітинки
+  const cols = game.gridSize <= 12 ? game.gridSize : 12;
+  const cellSize = game.gridSize <= 12 ? 'min(70px, calc((100vw - 80px) / ' + cols + '))' : '1fr';
+  grid.style.gridTemplateColumns = game.gridSize <= 12
+    ? 'repeat(' + cols + ', ' + cellSize + ')'
+    : 'repeat(' + cols + ', 1fr)';
+
+  document.getElementById('winners-list').classList.remove('visible');
+  document.getElementById('btn-go').disabled = true;
+  updateHint();
+  document.getElementById('progress').textContent = '';
+
+  game.cells.forEach((name, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.idx = i;
+    cell.innerHTML =
+      '<div class="cell-inner">' +
+        '<div class="cell-face cell-front">🎁</div>' +
+        '<div class="cell-face cell-back">' + escapeHtml(name) + '</div>' +
+      '</div>';
+    cell.addEventListener('click', () => onCellClick(i, cell));
+    grid.appendChild(cell);
+  });
+}
+
+function onCellClick(idx, cellEl) {
+  if (phase !== 'selecting') return;
+
+  if (selected.has(idx)) {
+    selected.delete(idx);
+    cellEl.classList.remove('selected');
+  } else {
+    if (selected.size >= currentGame.winnersNeeded) return;
+    selected.add(idx);
+    cellEl.classList.add('selected');
+  }
+
+  updateHint();
+  document.getElementById('btn-go').disabled = selected.size !== currentGame.winnersNeeded;
+}
+
+function updateHint() {
+  const n = currentGame.winnersNeeded;
+  const hint = document.getElementById('hint');
+  if (phase === 'selecting') {
+    hint.innerHTML = 'Выберите <b>' + n + '</b> ' + (n === 1 ? 'клетку' : 'клеток') +
+      ' — выбрано: <b>' + selected.size + ' / ' + n + '</b>';
+  }
+}
+
+async function startReveal() {
+  if (selected.size !== currentGame.winnersNeeded) return;
+  phase = 'revealing';
+  document.getElementById('grid-wrap').className = 'visible revealing';
+  document.getElementById('hint').textContent = 'Раскрытие...';
+  document.getElementById('btn-go').disabled = true;
+
+  const allIdx = currentGame.cells.map((_, i) => i);
+  const others = allIdx.filter(i => !selected.has(i)).sort(() => Math.random() - 0.5);
+  const winnersOrder = [...selected].sort(() => Math.random() - 0.5);
+
+  const cells = document.querySelectorAll('.cell');
+
+  // 1. Швидко відкриваємо всі звичайні клітинки
+  for (const idx of others) {
+    cells[idx].classList.add('flipped', 'revealed');
+    await sleep(35);
+  }
+
+  await sleep(600);
+
+  // 2. Урочисто відкриваємо обрані (переможні) клітинки одна за одною
+  const winners = [];
+  for (let k = 0; k < winnersOrder.length; k++) {
+    const idx = winnersOrder[k];
+    const cell = cells[idx];
+    cell.classList.add('flipped', 'revealed', 'winner');
+    const name = currentGame.cells[idx];
+    winners.push(name);
+    document.getElementById('progress').innerHTML =
+      'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
+    addWinnerChip(name);
+    await sleep(900);
+  }
+
+  phase = 'done';
+  document.getElementById('grid-wrap').className = 'visible done';
+  document.getElementById('hint').innerHTML = '🏁 Готово!';
+  document.getElementById('winners-list').classList.add('visible');
+}
+
+function addWinnerChip(name) {
+  const box = document.getElementById('winners-list');
+  const chips = document.getElementById('winners-chips');
+  box.classList.add('visible');
+  const chip = document.createElement('span');
+  chip.className = 'winner-chip';
+  chip.textContent = '🏆 ' + name;
+  chips.appendChild(chip);
+}
+
+function showWinners(winners) {
+  const box = document.getElementById('winners-list');
+  const chips = document.getElementById('winners-chips');
+  chips.innerHTML = winners.map(w => '<span class="winner-chip">🏆 ' + escapeHtml(w) + '</span>').join('');
+  box.classList.add('visible');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadState();
+setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 </script>
 </body>
 </html>`;
@@ -473,9 +965,134 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── Розіграш (Cash Hunt) API ────────────────────────────────
+  if (req.url === '/api/raffle/state') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      joinCmd: raffleJoinCmd,
+      accepting: raffleAccepting,
+      participants: rafflePlayers,
+      count: rafflePlayers.length,
+      game: raffleGame,
+    }));
+    return;
+  }
+
+  if (req.url === '/api/raffle/setcmd' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { cmd } = JSON.parse(body);
+        const trimmed = (cmd || '').trim().toLowerCase();
+        if (!trimmed || trimmed.length > 30) { res.writeHead(400); res.end(); return; }
+        raffleJoinCmd = trimmed;
+        saveState();
+        console.log('[РОЗІГРАШ] Слово реєстрації: ' + raffleJoinCmd);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, cmd: raffleJoinCmd }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/toggle' && req.method === 'POST') {
+    raffleAccepting = !raffleAccepting;
+    saveState();
+    console.log('[РОЗІГРАШ] Реєстрація ' + (raffleAccepting ? 'ВІДКРИТА' : 'ЗАКРИТА'));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, accepting: raffleAccepting }));
+    return;
+  }
+
+  if (req.url === '/api/raffle/reset' && req.method === 'POST') {
+    rafflePlayers = [];
+    raffleAccepting = false;
+    raffleGame = null;
+    saveState();
+    console.log('[РОЗІГРАШ] Список учасників очищено');
+    res.writeHead(200); res.end();
+    return;
+  }
+
+  if (req.url === '/api/raffle/start' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winners } = JSON.parse(body);
+        const n = parseInt(winners);
+        if (!rafflePlayers.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
+        const gridSize = Math.min(rafflePlayers.length, 108);
+        if (!n || n < 1 || n > gridSize) {
+          res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців (макс ' + gridSize + ')' })); return;
+        }
+        raffleGame = buildRaffleGame(n);
+        console.log(`[РОЗІГРАШ] Гра запущена: ${n} переможців з ${rafflePlayers.length} учасників`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, game: raffleGame }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/reroll' && req.method === 'POST') {
+    if (!raffleGame) { res.writeHead(400); res.end(JSON.stringify({ error: 'Гра не запущена' })); return; }
+    const n = raffleGame.winnersNeeded;
+    raffleGame = buildRaffleGame(n);
+    console.log(`[РОЗІГРАШ] Рерол: нова гра, ${n} переможців`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, game: raffleGame }));
+    return;
+  }
+
+  if (req.url === '/api/raffle/fastreroll' && req.method === 'POST') {
+    const n = raffleGame ? raffleGame.winnersNeeded :
+      (() => { return null; })();
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const count = parseInt(parsed.winners) || n;
+        if (!rafflePlayers.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
+        if (!count || count < 1 || count > rafflePlayers.length) {
+          res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців' })); return;
+        }
+        const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
+        const winnersList = shuffled.slice(0, count);
+        raffleGame = { winnersNeeded: count, cells: null, winners: winnersList, fast: true };
+        console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, winners: winnersList }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/raffle') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(RAFFLE_HTML());
+    return;
+  }
+
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(HTML());
 });
+
+// Генерує сітку: до 108 клітинок із учасниками (рандом, якщо їх більше 108)
+function buildRaffleGame(n) {
+  const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
+  const gridSize = Math.min(shuffled.length, 108);
+  const cells = shuffled.slice(0, gridSize); // масив ніків — по одному на клітинку
+
+  return {
+    winnersNeeded: n,
+    gridSize,
+    cells,
+  };
+}
+
 
 server.listen(process.env.PORT || 3000, () => {
   console.log(`[WEB] Сервер запущен на порту ${process.env.PORT || 3000}`);
@@ -546,6 +1163,15 @@ function connect() {
           accepting = false;
           saveState();
           console.log(`[BOT] Лимит ${MAX_PLAYERS} достигнут — регистрация закрыта`);
+        }
+        return;
+      }
+
+      if (raffleAccepting && lower === raffleJoinCmd) {
+        if (!rafflePlayers.includes(username)) {
+          rafflePlayers.push(username);
+          saveState();
+          console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
         }
         return;
       }
