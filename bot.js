@@ -903,6 +903,29 @@ async function startReveal() {
 let announceTimer = null;
 let announceSeconds = 0;
 
+// ── Звукове сповіщення при закінченні таймера ──────────────────
+let audioCtx = null;
+function playTimeoutSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    // Три короткі високі сигнали
+    [0, 0.25, 0.5].forEach(offset => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.25);
+    });
+  } catch (e) {}
+}
+
 function showAnnounce(name, seconds, confirmOn) {
   document.getElementById('wa-name').textContent = name;
   const timerEl = document.getElementById('wa-timer');
@@ -932,6 +955,7 @@ function showAnnounce(name, seconds, confirmOn) {
         clearInterval(announceTimer);
         announceTimer = null;
         subEl.textContent = 'Время вышло';
+        playTimeoutSound();
       }
     }, 1000);
   } else {
