@@ -194,18 +194,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background: #0e0e10;
     color: #e8e8e8;
     font-family: 'Rajdhani', sans-serif;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
     padding: 16px;
-    display: flex;
-    flex-direction: column;
   }
   .topbar {
     max-width: 1400px; margin: 0 auto 16px;
     background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
     padding: 14px 20px;
     display: flex; align-items: center; justify-content: space-between;
-    flex-shrink: 0;
   }
   .topbar .title { font-size: 17px; color: #aaa; }
   .topbar .title b { color: #ffd700; font-size: 19px; letter-spacing: 1px; }
@@ -218,8 +214,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     display: grid;
     grid-template-columns: 340px 1fr 340px;
     gap: 16px;
-    flex: 1;
-    min-height: 0;
   }
   @media (max-width: 1100px) {
     .layout { grid-template-columns: 1fr; }
@@ -229,9 +223,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
     padding: 18px 20px;
     display: flex; flex-direction: column;
-    min-height: 0;
-    height: 100%;
-    overflow: hidden;
+    height: calc(100vh - 90px);
   }
   .col-title {
     font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 14px;
@@ -240,7 +232,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .col-title .count { color: #ffd700; }
 
   /* ── Поля вводу ──────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; flex: 1; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   .field-row { display: flex; gap: 10px; }
   .field.small { flex: 0 0 100px; }
   label.field-label { font-size: 12px; color: #999; }
@@ -311,6 +303,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background: #0e0e10; border: 1px solid #2a2a2e; border-radius: 10px;
     flex: 1; min-height: 0; overflow-y: auto;
     padding: 8px;
+    min-height: 200px;
   }
   .box::-webkit-scrollbar { width: 8px; }
   .box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
@@ -409,14 +402,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
   .selecting .cell { cursor: none; }
   .selecting .cell.selected { cursor: none; }
+  .cursor-crosshair-active { cursor: none !important; }
 
-  /* ── Кастомний прицільний курсор ────────── */
-  #crosshair {
-    position: fixed; pointer-events: none; z-index: 9999;
-    width: 40px; height: 40px;
-    transform: translate(-50%, -50%);
-    display: none;
-  }
+
   .revealing .cell, .done .cell { cursor: default; }
 
   /* ── Список переможців ──────────────────── */
@@ -1145,35 +1133,102 @@ function toggleConfirmField() {
   f.style.opacity   = on ? '1' : '0';
 }
 
-// ── Кастомний прицільний курсор ────────────────────────────────
-const crosshair = document.getElementById('crosshair');
+// ── Прицільний курсор через Canvas ─────────────────────────────
+(function() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 48;
+  canvas.height = 48;
+  canvas.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;z-index:9999;display:none;';
+  document.body.appendChild(canvas);
 
-document.addEventListener('mousemove', e => {
-  if (!crosshair) return;
-  crosshair.style.left = e.clientX + 'px';
-  crosshair.style.top  = e.clientY + 'px';
-});
+  const ctx = canvas.getContext('2d');
+  let mouseX = 0, mouseY = 0;
+  let animId = null;
+  let visible = false;
+  let pulse = 0;
 
-// Показуємо курсор тільки коли фаза 'selecting'
-const _origRenderGame = renderGame;
-// Патчимо через MutationObserver на className box
-const boxEl = document.getElementById('main-box');
-const crossObs = new MutationObserver(() => {
-  const isSelecting = boxEl.classList.contains('selecting');
-  crosshair.style.display = isSelecting ? 'block' : 'none';
-});
-crossObs.observe(boxEl, { attributes: true, attributeFilter: ['class'] });
+  function draw() {
+    ctx.clearRect(0, 0, 48, 48);
+    pulse += 0.08;
+    const alpha = 0.75 + 0.25 * Math.sin(pulse);
+
+    const cx = 24, cy = 24;
+    const R = 14;
+
+    // Зовнішнє коло
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,215,0,' + alpha + ')';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // Внутрішнє коло маленьке
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,215,0,' + alpha + ')';
+    ctx.fill();
+
+    // Хрест — 4 відрізки з зазором
+    const gap = 5, len = 7;
+    ctx.strokeStyle = 'rgba(255,215,0,' + alpha + ')';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    [[cx, cy - gap, cx, cy - gap - len],
+     [cx, cy + gap, cx, cy + gap + len],
+     [cx - gap, cy, cx - gap - len, cy],
+     [cx + gap, cy, cx + gap + len, cy]].forEach(([x1,y1,x2,y2]) => {
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    });
+  }
+
+  function loop() {
+    if (!visible) return;
+    draw();
+    animId = requestAnimationFrame(loop);
+  }
+
+  function show() {
+    canvas.style.display = 'block';
+    visible = true;
+    if (!animId) loop();
+  }
+
+  function hide() {
+    canvas.style.display = 'none';
+    visible = false;
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
+  }
+
+  document.addEventListener('mousemove', e => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    canvas.style.left = (mouseX - 24) + 'px';
+    canvas.style.top  = (mouseY - 24) + 'px';
+  });
+
+  // Показуємо лише коли hover на клітинку під час фази selecting
+  const boxEl = document.getElementById('main-box');
+  boxEl.addEventListener('mouseover', e => {
+    if (phase !== 'selecting') return;
+    if (e.target.closest('.cell')) { show(); }
+  });
+  boxEl.addEventListener('mouseout', e => {
+    if (!e.relatedTarget || !e.relatedTarget.closest('.cell')) hide();
+  });
+
+  // Ховаємо при кліку / завершенні фази
+  boxEl.addEventListener('click', () => {
+    if (phase !== 'selecting') hide();
+  });
+
+  // MutationObserver для зміни фази
+  const boxObs = new MutationObserver(() => {
+    if (!boxEl.classList.contains('selecting')) hide();
+  });
+  boxObs.observe(boxEl, { attributes: true, attributeFilter: ['class'] });
+})();
 </script>
 
-<!-- Прицільний курсор -->
-<svg id="crosshair" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="20" cy="20" r="14" fill="none" stroke="#ffd700" stroke-width="2" opacity="0.9"/>
-  <circle cx="20" cy="20" r="2.5" fill="#ffd700" opacity="0.95"/>
-  <line x1="20" y1="2" x2="20" y2="10" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
-  <line x1="20" y1="30" x2="20" y2="38" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
-  <line x1="2" y1="20" x2="10" y2="20" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
-  <line x1="30" y1="20" x2="38" y2="20" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
-</svg>
 
 </body>
 </html>`;
