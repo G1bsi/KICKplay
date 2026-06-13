@@ -260,6 +260,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     left: 3px; bottom: 3px; background: #ccc; border-radius: 50%; transition: 0.2s;
   }
   .switch input:checked + .slider { background: #1a4a0a; }
+  .switch input:disabled + .slider { opacity: 0.35; cursor: not-allowed; }
   .switch input:checked + .slider:before { transform: translateX(18px); background: #53fc18; }
 
   /* ── Кнопки ──────────────────────────────── */
@@ -530,7 +531,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field-row">
       <div class="field">
         <label class="field-label">Слово для участия</label>
-        <input type="text" id="raffle-cmd" value="!призи" placeholder="!призи" onkeydown="if(event.key==='Enter')saveRaffleCmd()" onblur="saveRaffleCmd()">
+        <input type="text" id="raffle-cmd" value="" placeholder="введите слово..." onkeydown="if(event.key==='Enter')saveRaffleCmd()" oninput="onCmdInput()" onblur="saveRaffleCmd()">
       </div>
       <div class="field small">
         <label class="field-label">Победителей</label>
@@ -542,7 +543,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="toggle-row" style="margin-top:10px;">
       <span class="toggle-label">Регистрация открыта</span>
       <label class="switch">
-        <input type="checkbox" id="toggle-reg" onchange="toggleRaffleAccepting()">
+        <input type="checkbox" id="toggle-reg" onchange="toggleRaffleAccepting()" disabled>
         <span class="slider"></span>
       </label>
     </div>
@@ -648,7 +649,12 @@ async function loadState() {
   state = await res.json();
 
   const cmdInput = document.getElementById('raffle-cmd');
-  if (document.activeElement !== cmdInput) cmdInput.value = state.joinCmd;
+  if (document.activeElement !== cmdInput) {
+    cmdInput.value = state.joinCmd || '';
+  }
+  const toggle = document.getElementById('toggle-reg');
+  const hasCmd = !!(state.joinCmd && state.joinCmd.trim());
+  toggle.disabled = !hasCmd;
 
   document.getElementById('participant-count').textContent = state.count;
   document.getElementById('participants-count-title').textContent = state.count;
@@ -680,6 +686,16 @@ function renderParticipants(list) {
 
 function downloadCSV() {
   window.location.href = '/api/raffle/csv';
+}
+
+function onCmdInput() {
+  const cmd = document.getElementById('raffle-cmd').value.trim();
+  const toggle = document.getElementById('toggle-reg');
+  toggle.disabled = !cmd;
+  if (!cmd && toggle.checked) {
+    toggle.checked = false;
+    fetch('/api/raffle/toggle', { method: 'POST' });
+  }
 }
 
 async function saveRaffleCmd() {
