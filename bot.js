@@ -419,6 +419,40 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .revealing .cell, .done .cell { cursor: default; }
 
   /* ── Гонка ────────────────────────────────── */
+  #race-overlay {
+    position: fixed; inset: 0; z-index: 9990;
+    background: rgba(5,5,8,0.94);
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+    backdrop-filter: blur(4px);
+  }
+  #race-overlay.visible { display: flex; }
+  #race-overlay-hint {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 20px; color: #ffd700; letter-spacing: 2px;
+    min-height: 28px; text-align: center;
+  }
+  #race-track-area {
+    width: min(94vw, 1300px);
+    aspect-ratio: 12 / 7;
+    max-height: 78vh;
+    position: relative;
+    background: #0a0a0c;
+    border: 1px solid #2a2a2e;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  #race-overlay-controls { display: flex; gap: 10px; }
+  #race-overlay-controls button { min-width: 140px; }
+  .race-close-btn {
+    position: absolute; top: -50px; right: 0;
+    background: #1a1a1d; border: 1px solid #333; color: #888;
+    width: 38px; height: 38px; border-radius: 8px;
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .race-close-btn:hover { border-color: #ff4444; color: #ff4444; }
+
   #race-wrap { width: 100%; height: 100%; position: relative; }
   #race-svg { width: 100%; height: 100%; display: block; }
   .race-car {
@@ -429,7 +463,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     z-index: 2;
   }
   .race-car .car-emoji {
-    font-size: 26px;
+    font-size: 30px;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
   }
   .race-car.winner .car-emoji {
@@ -437,12 +471,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   @keyframes carWin {
     from { transform: scale(1); }
-    to   { transform: scale(1.3); }
+    to   { transform: scale(1.35); }
   }
   .race-car .car-label {
-    font-size: 10px; color: #fff; background: rgba(0,0,0,0.6);
-    border-radius: 4px; padding: 1px 5px; margin-top: 2px;
-    white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px; color: #fff; background: rgba(0,0,0,0.65);
+    border-radius: 4px; padding: 1px 6px; margin-top: 2px;
+    white-space: nowrap; max-width: 100px; overflow: hidden; text-overflow: ellipsis;
     font-family: 'Share Tech Mono', monospace;
   }
   .race-car.winner .car-label {
@@ -451,12 +485,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #race-countdown {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 80px; font-weight: 900; color: #ffd700;
+    font-size: 110px; font-weight: 900; color: #ffd700;
     font-family: 'Rajdhani', sans-serif;
-    text-shadow: 0 0 30px rgba(255,215,0,0.6);
+    text-shadow: 0 0 40px rgba(255,215,0,0.6);
     z-index: 3;
-    animation: countdownPulse 1s ease;
+    pointer-events: none;
   }
+  #race-countdown.pulse { animation: countdownPulse 0.9s ease; }
   @keyframes countdownPulse {
     from { transform: scale(1.6); opacity: 0; }
     to   { transform: scale(1);   opacity: 1; }
@@ -688,6 +723,19 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
 </div>
 
+<!-- Оверлей гонки -->
+<div id="race-overlay">
+  <div id="race-overlay-hint"></div>
+  <div id="race-track-area">
+    <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
+  </div>
+  <div id="race-overlay-controls" style="display:none;">
+    <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
+    <button class="btn-dark" onclick="closeRaceOverlay()">Закрыть</button>
+  </div>
+</div>
+
 <script>
 let state = { joinCmd: '!призи', accepting: false, participants: [], count: 0, game: null };
 
@@ -830,6 +878,15 @@ function setGameMode(mode) {
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'race' ? 'none' : '';
+  hideRaceOverlay();
+}
+
+function hideRaceOverlay() {
+  if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
+  document.getElementById('race-overlay').classList.remove('visible');
+  document.getElementById('race-overlay-controls').style.display = 'none';
+  document.getElementById('race-track-area').innerHTML =
+    '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>';
 }
 
 function resetGameUI() {
@@ -837,7 +894,7 @@ function resetGameUI() {
   selected = new Set();
   phase = 'idle';
   raceQualifiers = [];
-  if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
+  hideRaceOverlay();
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
@@ -876,6 +933,7 @@ async function fastReroll() {
       if (n < 2) return alert('Нужно минимум 2 участника');
       qualifiers = pickRandom(state.participants, n);
     }
+    hideRaceOverlay();
     resetGameUIKeepMode();
     const winner = qualifiers[Math.floor(Math.random() * qualifiers.length)];
     addWinner(winner);
@@ -900,7 +958,6 @@ function resetGameUIKeepMode() {
   selected = new Set();
   phase = 'idle';
   raceQualifiers = [];
-  if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
@@ -929,57 +986,94 @@ async function startRaceGame() {
   await runRace(raceQualifiers, false);
 }
 
-function roundedRectPath(x, y, w, h, r) {
-  return 'M ' + (x+r) + ' ' + y +
-    ' H ' + (x+w-r) +
-    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+w) + ' ' + (y+r) +
-    ' V ' + (y+h-r) +
-    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+w-r) + ' ' + (y+h) +
-    ' H ' + (x+r) +
-    ' A ' + r + ' ' + r + ' 0 0 1 ' + x + ' ' + (y+h-r) +
-    ' V ' + (y+r) +
-    ' A ' + r + ' ' + r + ' 0 0 1 ' + (x+r) + ' ' + y +
-    ' Z';
+// ── Побудова траси (схема "Гран-Прі" з есками і довгою прямою) ──
+// Базові точки центральної лінії траси (клас "Гран-Прі"), за годинниковою стрілкою.
+// viewBox 1200 x 700.
+const TRACK_POINTS = [
+  [1080, 620], // старт/фініш — права частина нижньої прямої
+  [220, 620],  // нижня пряма, ліворуч
+  [90, 540],   // поворот 1 (хвости зліва-низ)
+  [80, 430],
+  [180, 360],  // початок есок (сектор 1)
+  [70, 300],
+  [190, 230],
+  [330, 290],  // вихід з есок
+  [470, 150],  // початок довгої прямої (DRS)
+  [780, 70],
+  [1050, 150], // поворот у правій верхній частині
+  [1130, 290],
+  [1020, 380], // еска у секторі 2
+  [1140, 470],
+  [1040, 570], // підхід до фінішної прямої
+];
+
+// Будує гладкий замкнений шлях через точки (Quadratic Bezier через середини відрізків)
+function smoothClosedPath(points) {
+  const n = points.length;
+  const mid = (a, b) => [(a[0]+b[0])/2, (a[1]+b[1])/2];
+  const m0 = mid(points[n-1], points[0]);
+  let d = 'M ' + m0[0] + ' ' + m0[1] + ' ';
+  for (let i = 0; i < n; i++) {
+    const p = points[i];
+    const next = points[(i+1) % n];
+    const m = mid(p, next);
+    d += 'Q ' + p[0] + ' ' + p[1] + ' ' + m[0] + ' ' + m[1] + ' ';
+  }
+  d += 'Z';
+  return d;
+}
+
+function scalePoints(points, factor) {
+  const cx = points.reduce((s,p)=>s+p[0],0) / points.length;
+  const cy = points.reduce((s,p)=>s+p[1],0) / points.length;
+  return points.map(([x,y]) => [cx + (x-cx)*factor, cy + (y-cy)*factor]);
 }
 
 async function runRace(qualifiers, isReroll) {
   if (!qualifiers.length) return;
   phase = 'racing';
-  document.getElementById('game-controls').style.display = 'none';
-  document.getElementById('progress').textContent = '';
 
-  const box = document.getElementById('main-box');
-  box.className = 'box';
+  const overlay = document.getElementById('race-overlay');
+  const area = document.getElementById('race-track-area');
+  const overlayHint = document.getElementById('race-overlay-hint');
+  const controls = document.getElementById('race-overlay-controls');
+
+  overlay.classList.add('visible');
+  controls.style.display = 'none';
+  overlayHint.textContent = '';
 
   const n = qualifiers.length;
-  const VB_W = 1000, VB_H = 600;
-  const baseX = 30, baseY = 30, baseW = VB_W - 60, baseH = VB_H - 60, baseR = 60;
+  const VB_W = 1200, VB_H = 700;
 
   let svgPaths = '';
   const lanes = [];
+  const shrink = 0.018; // % розміру на одну дорожку
   for (let i = 0; i < n; i++) {
-    const inset = i * Math.min(9, (Math.min(baseW, baseH) / 2 - 20) / Math.max(n,1));
-    const x = baseX + inset, y = baseY + inset;
-    const w = baseW - 2*inset, h = baseH - 2*inset;
-    const r = Math.max(14, baseR - inset * 0.7);
-    const d = roundedRectPath(x, y, w, h, r);
+    const factor = 1 - i * shrink;
+    const pts = scalePoints(TRACK_POINTS, factor);
+    const d = smoothClosedPath(pts);
     lanes.push(d);
-    svgPaths += '<path d="' + d + '" fill="none" stroke="rgba(255,215,0,' + (0.08 + (n-i)/n*0.10) + ')" stroke-width="2"/>';
+    svgPaths += '<path d="' + d + '" fill="none" stroke="rgba(255,215,0,' + (0.06 + (n-i)/n*0.12) + ')" stroke-width="2.5"/>';
   }
 
-  box.innerHTML =
+  // Позначка фінішу — біля точки старту (M0, середина останньої та першої точки траси)
+  const lastP = TRACK_POINTS[TRACK_POINTS.length-1];
+  const firstP = TRACK_POINTS[0];
+  const finishX = (lastP[0]+firstP[0])/2;
+  const finishY = (lastP[1]+firstP[1])/2;
+
+  area.innerHTML =
+    '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
     '<div id="race-wrap">' +
-      '<div id="race-track-inner">' +
-        '<svg id="race-svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="none">' +
-          svgPaths +
-          '<rect x="' + (baseX + baseR - 4) + '" y="' + (baseY - 6) + '" width="8" height="20" fill="#ffd700" opacity="0.8"/>' +
-        '</svg>' +
-        '<div id="race-cars"></div>' +
-        '<div id="race-countdown"></div>' +
-      '</div>' +
+      '<svg id="race-svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="none">' +
+        svgPaths +
+        '<rect x="' + (finishX - 4) + '" y="' + (finishY - 16) + '" width="8" height="32" fill="#ffd700" opacity="0.9" transform="rotate(35 ' + finishX + ' ' + finishY + ')"/>' +
+      '</svg>' +
+      '<div id="race-cars"></div>' +
+      '<div id="race-countdown"></div>' +
     '</div>';
 
-  // Будуємо реальні SVG path елементи для getPointAtLength (приховані, ті ж самі d)
+  // Реальні (приховані) path-елементи для getPointAtLength
   const svgEl = document.getElementById('race-svg');
   const hiddenPaths = lanes.map(d => {
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1004,7 +1098,6 @@ async function runRace(qualifiers, isReroll) {
 
   const lengths = hiddenPaths.map(p => p.getTotalLength());
 
-  // Стартові позиції
   function position(progressArr) {
     for (let i = 0; i < n; i++) {
       const len = lengths[i] * (progressArr[i] % 1);
@@ -1017,24 +1110,24 @@ async function runRace(qualifiers, isReroll) {
   const progress = new Array(n).fill(0);
   position(progress);
 
-  // Countdown
+  // Зворотний відлік
   const cd = document.getElementById('race-countdown');
   for (const txt of ['3','2','1','🏁 СТАРТ!']) {
     cd.textContent = txt;
-    cd.style.animation = 'none';
+    cd.classList.remove('pulse');
     void cd.offsetWidth;
-    cd.style.animation = 'countdownPulse 0.9s ease';
+    cd.classList.add('pulse');
     await sleep(700);
   }
   cd.textContent = '';
 
-  document.getElementById('hint').innerHTML = 'Гонка идёт...';
+  overlayHint.textContent = 'Гонка идёт...';
 
-  // Симуляція
+  // Симуляція гонки
   const skill = qualifiers.map(() => 0.85 + Math.random() * 0.3);
   let jitter = qualifiers.map(() => 1);
   let lastJitterUpdate = 0;
-  const baseSpeed = 1 / 9.0; // повний круг за ~9 секунд при skill=1, jitter=1
+  const baseSpeed = 1 / 9.0; // повне коло за ~9с при skill=1, jitter=1
 
   let winnerIdx = -1;
   let lastTime = performance.now();
@@ -1052,12 +1145,7 @@ async function runRace(qualifiers, isReroll) {
       }
 
       for (let i = 0; i < n; i++) {
-        if (winnerIdx === -1 || i === winnerIdx) {
-          progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
-        } else {
-          // інші продовжують рухатись, але не "фінішують" повторно
-          progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
-        }
+        progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
         if (progress[i] >= 1 && winnerIdx === -1) {
           winnerIdx = i;
         }
@@ -1067,7 +1155,6 @@ async function runRace(qualifiers, isReroll) {
 
       if (winnerIdx !== -1 || elapsed > 16) {
         if (winnerIdx === -1) {
-          // ніхто не дійшов за 16с — переможець той хто далі
           winnerIdx = progress.indexOf(Math.max(...progress));
         }
         carEls[winnerIdx].classList.add('winner');
@@ -1082,12 +1169,15 @@ async function runRace(qualifiers, isReroll) {
   });
 
   const winnerName = qualifiers[winnerIdx];
-  document.getElementById('hint').innerHTML = '🏁 Победитель: <b>' + escapeHtml(winnerName) + '</b>';
-  document.getElementById('game-controls').style.display = 'flex';
-  document.getElementById('btn-go').style.display = 'none';
+  overlayHint.innerHTML = '🏁 Победитель: <b style="color:#ffd700;">' + escapeHtml(winnerName) + '</b>';
+  controls.style.display = 'flex';
   phase = 'done';
 
   addWinner(winnerName);
+}
+
+function closeRaceOverlay() {
+  resetGameUI();
 }
 
 function renderGame(game) {
