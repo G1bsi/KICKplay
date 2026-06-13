@@ -191,42 +191,80 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;900&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0a0a0a;
-    color: #fff;
+    background: #0e0e10;
+    color: #e8e8e8;
     font-family: 'Rajdhani', sans-serif;
     min-height: 100vh;
-    padding: 20px;
+    padding: 16px;
   }
-  .wrapper { width: 100%; max-width: 1200px; margin: 0 auto; }
-  h1 { font-size: 26px; color: #ffd700; text-align: center; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 20px rgba(255,215,0,0.3); }
-  .sub { color: #444; font-size: 11px; margin-bottom: 18px; text-align: center; font-family: 'Share Tech Mono', monospace; }
-  .back { display: block; text-align: center; margin-bottom: 16px; }
-  .back a { color: #666; font-size: 12px; text-decoration: none; font-family: 'Share Tech Mono', monospace; }
-  .back a:hover { color: #aaa; }
-
-  .panel {
-    background: #111;
-    border: 1px solid #1e1e1e;
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 16px;
+  .topbar {
+    max-width: 1400px; margin: 0 auto 16px;
+    background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
+    padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
   }
-  .panel-title { font-size: 11px; color: #444; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; }
+  .topbar .title { font-size: 17px; color: #aaa; }
+  .topbar .title b { color: #ffd700; font-size: 19px; letter-spacing: 1px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-left:8px; background:#444; }
+  .dot.open { background:#53fc18; box-shadow:0 0 8px #53fc18; }
+  .dot.closed { background:#ff4444; }
 
-  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .row:last-child { margin-bottom: 0; }
+  .layout {
+    max-width: 1400px; margin: 0 auto;
+    display: grid;
+    grid-template-columns: 340px 1fr 340px;
+    gap: 16px;
+  }
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .col {
+    background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
+    padding: 18px 20px;
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .col-title {
+    font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .col-title .count { color: #ffd700; }
+
+  /* ── Поля вводу ──────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; flex: 1; }
+  .field-row { display: flex; gap: 10px; }
+  .field.small { flex: 0 0 100px; }
+  label.field-label { font-size: 12px; color: #999; }
 
   input[type=text], input[type=number] {
-    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 7px;
-    padding: 8px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
-    font-size: 14px; outline: none; transition: border-color 0.2s;
+    background: #0e0e10; border: 1px solid #333; border-radius: 8px;
+    padding: 10px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
+    font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%;
   }
   input:focus { border-color: #ffd700; }
-  #raffle-cmd { color: #ffd700; width: 140px; text-align: center; }
-  #winners-count { width: 80px; text-align: center; }
+  #raffle-cmd { color: #ffd700; }
+  #winners-count, #confirm-seconds { text-align: center; }
 
+  /* ── Перемикачі (toggle) ─────────────────── */
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .toggle-row .toggle-label { font-size: 14px; color: #ddd; flex: 1; }
+  .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: #333; border-radius: 22px; transition: 0.2s;
+  }
+  .slider:before {
+    content: ''; position: absolute; height: 16px; width: 16px;
+    left: 3px; bottom: 3px; background: #ccc; border-radius: 50%; transition: 0.2s;
+  }
+  .switch input:checked + .slider { background: #1a4a0a; }
+  .switch input:checked + .slider:before { transform: translateX(18px); background: #53fc18; }
+
+  /* ── Кнопки ──────────────────────────────── */
   button {
-    padding: 9px 18px; border: none; border-radius: 7px; font-size: 14px;
+    padding: 10px 16px; border: none; border-radius: 8px; font-size: 14px;
     font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif;
     letter-spacing: 0.5px; transition: opacity 0.2s, transform 0.1s;
   }
@@ -234,41 +272,63 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   button:active { transform: scale(0.97); }
   button:disabled { opacity: 0.25; cursor: not-allowed; }
 
-  .btn-gold  { background: #ffd700; color: #000; }
-  .btn-green { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; }
-  .btn-orange{ background: #e67e22; color: #fff; }
-  .btn-red   { background: #c0392b; color: #fff; }
-  .btn-dark  { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; }
-  .btn-big   { padding: 14px 36px; font-size: 18px; }
+  .btn-primary { background: #53fc18; color: #000; width: 100%; padding: 14px; font-size: 17px; }
+  .btn-gold   { background: #ffd700; color: #000; }
+  .btn-green  { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; }
+  .btn-orange { background: #e67e22; color: #fff; }
+  .btn-red    { background: #c0392b; color: #fff; width: 100%; }
+  .btn-dark   { background: #232327; color: #ccc; border: 1px solid #333; }
+  .btn-small  { padding: 6px 12px; font-size: 12px; }
 
-  .status-badge {
-    display: inline-block; padding: 3px 14px; border-radius: 20px;
-    font-size: 12px; font-weight: 600; font-family: 'Share Tech Mono', monospace;
-  }
-  .status-badge.open   { background: #0d200d; color: #53fc18; border: 1px solid #2a5a2a; }
-  .status-badge.closed { background: #200d0d; color: #ff4444; border: 1px solid #5a2a2a; }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn-row button { flex: 1; }
 
-  .count-display { font-size: 13px; color: #aaa; font-family: 'Share Tech Mono', monospace; }
-  .count-display b { color: #ffd700; font-size: 18px; }
+  .divider { height: 1px; background: #2a2a2e; margin: 14px 0; }
 
-  .limit-bar-wrap { max-width: 400px; margin: 8px 0 0; }
-  .limit-bar-bg { background: #1a1a1a; border-radius: 6px; height: 6px; overflow: hidden; }
+  /* ── Прогрес-бар лімиту ──────────────────── */
+  .limit-info { font-size: 12px; color: #888; font-family: 'Share Tech Mono', monospace; margin-bottom: 6px; text-align: right; }
+  .limit-info b { color: #ffd700; }
+  .limit-bar-bg { background: #0e0e10; border-radius: 6px; height: 6px; overflow: hidden; margin-bottom: 14px; }
   .limit-bar { height: 100%; background: #53fc18; border-radius: 6px; transition: width 0.4s ease, background 0.4s ease; }
 
-  #saved-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; }
+  #saved-msg, #test-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; margin-top: 4px; display:block; }
 
-  /* ── Сітка ────────────────────────────────── */
-  #grid-wrap { display: none; }
-  #grid-wrap.visible { display: block; }
+  /* ── Тестова панель ──────────────────────── */
+  details.test-section { margin-top: 14px; }
+  details.test-section summary { font-size: 12px; color: #777; cursor: pointer; font-family: 'Share Tech Mono', monospace; }
+  details.test-section .field-row { margin-top: 10px; }
 
-  #hint { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; }
+  /* ── Середня колонка / box ───────────────── */
+  .box {
+    background: #0e0e10; border: 1px solid #2a2a2e; border-radius: 10px;
+    flex: 1; min-height: 360px; max-height: 540px; overflow-y: auto;
+    padding: 8px;
+  }
+  .box::-webkit-scrollbar { width: 8px; }
+  .box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+  .participant-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 6px; font-size: 14px;
+    color: #ddd;
+  }
+  .participant-row:nth-child(even) { background: #161618; }
+  .participant-row .p-num { color: #444; font-family: 'Share Tech Mono', monospace; font-size: 11px; width: 30px; }
+
+  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
+
+  /* ── Сітка Cash Hunt ─────────────────────── */
+  #hint { text-align: center; font-size: 14px; color: #aaa; margin: 12px 0 4px; font-family: 'Share Tech Mono', monospace; min-height: 18px; }
   #hint b { color: #ffd700; }
+  #progress { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 8px; font-family: 'Share Tech Mono', monospace; min-height: 18px; }
+  #progress b { color: #ffd700; }
 
   .grid {
     display: grid;
     gap: 4px;
-    margin-bottom: 16px;
     justify-content: center;
+    align-content: center;
+    height: 100%;
   }
 
   .cell {
@@ -278,16 +338,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     cursor: pointer;
     perspective: 400px;
   }
-
   .cell-inner {
     width: 100%; height: 100%;
     position: relative;
     transform-style: preserve-3d;
     transition: transform 0.5s;
   }
-
   .cell.flipped .cell-inner { transform: rotateY(180deg); }
-
   .cell-face {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -299,7 +356,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     overflow: hidden;
     padding: 2px;
   }
-
   .cell-front {
     background: linear-gradient(145deg, #2a1e00, #1a1200);
     border: 2px solid #4a3a00;
@@ -307,7 +363,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     font-size: 22px;
     transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
   }
-
   .cell-back {
     transform: rotateY(180deg);
     background: #1a1a1a;
@@ -317,21 +372,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     line-height: 1.2;
     word-break: break-word;
   }
-
-  /* Обрана клітинка (до розкриття) */
   .cell.selected .cell-front {
     border-color: #ffd700;
     box-shadow: 0 0 14px rgba(255,215,0,0.7), inset 0 0 14px rgba(255,215,0,0.25);
   }
   .cell.selected .cell-front::after {
-    content: '★';
-    position: absolute;
-    top: 2px; right: 4px;
-    font-size: 12px;
-    color: #ffd700;
+    content: '★'; position: absolute; top: 2px; right: 4px;
+    font-size: 12px; color: #ffd700;
   }
-
-  /* Переможна клітинка (після розкриття) */
   .cell.winner .cell-back {
     background: linear-gradient(145deg, #ffd700, #ff9900);
     border: 1px solid #ffec80;
@@ -339,130 +387,140 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     font-weight: 900;
     animation: winnerGlow 0.6s ease infinite alternate;
   }
-
   @keyframes winnerGlow {
     from { box-shadow: 0 0 6px rgba(255,215,0,0.4); }
     to   { box-shadow: 0 0 16px rgba(255,215,0,0.9); }
   }
-
   .cell.revealed { cursor: default; }
-
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
   .selecting .cell { cursor: pointer; }
   .revealing .cell, .done .cell { cursor: default; }
 
-  #progress { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 14px; font-family: 'Share Tech Mono', monospace; min-height: 20px; }
-  #progress b { color: #ffd700; }
-
-  #winners-list {
-    background: #111; border: 1px solid #1e1e1e; border-radius: 10px;
-    padding: 16px; margin-top: 16px; display: none;
+  /* ── Список переможців ──────────────────── */
+  .winner-row {
+    background: #161618; border: 1px solid #2a2a2e; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px;
+    animation: rowPop 0.3s ease;
   }
-  #winners-list.visible { display: block; }
-  #winners-list h3 { color: #ffd700; font-size: 16px; margin-bottom: 10px; text-align: center; letter-spacing: 1px; }
-  .winner-chip {
-    display: inline-block; background: linear-gradient(145deg, #ffd700, #ff9900);
-    color: #000; font-weight: 700; padding: 6px 16px; border-radius: 20px;
-    margin: 4px; font-size: 14px;
-    animation: chipPop 0.4s ease;
-  }
-  @keyframes chipPop {
-    from { transform: scale(0); opacity: 0; }
+  @keyframes rowPop {
+    from { transform: scale(0.95); opacity: 0; }
     to   { transform: scale(1); opacity: 1; }
   }
-
-  .game-controls { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
-
-  /* ── Перевірка переможців ────────────────── */
-  .check-item {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    background: #161616; border: 1px solid #2a2a2a; border-radius: 8px;
-    padding: 10px 14px; margin-bottom: 8px;
+  .winner-row.confirmed { border-color: #2a5a2a; }
+  .winner-row.expired   { border-color: #5a2a2a; }
+  .winner-top { display: flex; align-items: center; gap: 8px; }
+  .w-status { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+  .w-status.ok { color: #53fc18; }
+  .w-status.pending { color: #ffaa00; font-family: 'Share Tech Mono', monospace; font-size: 13px; width: auto; }
+  .w-status.bad { color: #ff4444; }
+  .w-name { font-weight: 700; color: #ffd700; flex: 1; font-size: 15px; }
+  .w-time { font-size: 11px; color: #666; font-family: 'Share Tech Mono', monospace; white-space: nowrap; }
+  .w-msg {
+    margin-top: 6px; font-size: 12px; color: #bbb; font-family: 'Share Tech Mono', monospace;
+    background: #0e0e10; border-radius: 6px; padding: 6px 10px;
   }
-  .check-item.responded { border-color: #2a5a2a; background: #0d180d; }
-  .check-item.expired   { border-color: #5a2a2a; background: #1a0d0d; }
-  .check-name { font-weight: 700; color: #ffd700; min-width: 140px; font-size: 15px; }
-  .check-timer { font-family: 'Share Tech Mono', monospace; font-size: 20px; color: #aaa; min-width: 50px; }
-  .check-timer.running { color: #53fc18; }
-  .check-timer.expired { color: #ff4444; }
-  .check-msg { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #ccc; background: #1a1a1a; border-radius: 6px; padding: 4px 10px; flex: 1; min-width: 120px; }
-  .check-msg.empty { color: #444; font-style: italic; }
-  .btn-check-start { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; padding: 6px 14px; font-size: 13px; }
-  .btn-check-retry { background: #1e1e1e; color: #888; border: 1px solid #2a2a2a; padding: 6px 14px; font-size: 12px; }
-
+  .w-msg.empty { color: #444; font-style: italic; }
+  .w-retry { margin-top: 6px; }
 </style>
 </head>
 <body>
-<div class="wrapper">
-  <h1>🎁 РОЗЫГРЫШ — CASH HUNT</h1>
-  <div class="sub">kosteze231</div>
 
-  <div class="panel">
-    <div class="panel-title">Регистрация участников</div>
-    <div class="row">
-      <span style="font-size:13px;color:#888;">слово для регистрации:</span>
-      <input type="text" id="raffle-cmd" value="!призи" placeholder="!призи" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
-      <button class="btn-green" onclick="saveRaffleCmd()">✓ Сохранить</button>
-      <span id="saved-msg"></span>
+<div class="topbar">
+  <div class="title">🎁 <b>РОЗЫГРЫШ — CASH HUNT</b></div>
+  <div class="title">kosteze231 <span class="dot closed" id="conn-dot"></span></div>
+</div>
+
+<div class="layout">
+
+  <!-- ── Налаштування ──────────────────────── -->
+  <div class="col">
+    <div class="col-title">Настройки</div>
+
+    <div class="field-row">
+      <div class="field">
+        <label class="field-label">Слово для участия</label>
+        <input type="text" id="raffle-cmd" value="!призи" placeholder="!призи" onkeydown="if(event.key==='Enter')saveRaffleCmd()" onblur="saveRaffleCmd()">
+      </div>
+      <div class="field small">
+        <label class="field-label">Победителей</label>
+        <input type="number" id="winners-count" value="1" min="1" max="108">
+      </div>
     </div>
-    <div class="row">
-      <span class="status-badge closed" id="raffle-status">● регистрация закрыта</span>
-      <button class="btn-orange" id="btn-raffle-toggle" onclick="toggleRaffleAccepting()">▶ Открыть регистрацию</button>
-      <button class="btn-red" onclick="resetRaffle()">🗑 Сбросить участников</button>
-      <button class="btn-gold" onclick="downloadCSV()">⬇ Скачать CSV</button>
+    <span id="saved-msg"></span>
+
+    <div class="toggle-row" style="margin-top:10px;">
+      <span class="toggle-label">Регистрация открыта</span>
+      <label class="switch">
+        <input type="checkbox" id="toggle-reg" onchange="toggleRaffleAccepting()">
+        <span class="slider"></span>
+      </label>
     </div>
-    <div class="row">
-      <span class="count-display">Участников: <b id="participant-count">0</b> / <span id="max-count">1000</span></span>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Подтверждение победителя</span>
+      <label class="switch">
+        <input type="checkbox" id="toggle-confirm" checked>
+        <span class="slider"></span>
+      </label>
     </div>
-    <div class="limit-bar-wrap">
-      <div class="limit-bar-bg"><div class="limit-bar" id="limit-bar" style="width:0%"></div></div>
+    <div class="field" id="confirm-time-field">
+      <label class="field-label">Время на ответ (сек)</label>
+      <input type="number" id="confirm-seconds" value="60" min="5" max="600">
     </div>
-    <div class="row">
-      <span style="font-size:13px;color:#888;">🧪 тест:</span>
-      <input type="text" id="test-name" placeholder="имя тестового игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
-      <button class="btn-green" onclick="addTestPlayer()">+ Добавить</button>
-      <button class="btn-dark" onclick="addBulkTest()">+10 случайных</button>
+
+    <div style="flex:1;"></div>
+
+    <div class="limit-info">Участников: <b id="participant-count">0</b> / <span id="max-count">1000</span></div>
+    <div class="limit-bar-bg"><div class="limit-bar" id="limit-bar" style="width:0%"></div></div>
+
+    <button class="btn-primary" onclick="startGame()">🎯 Начать розыгрыш</button>
+
+    <div class="btn-row">
+      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый</button>
+      <button class="btn-dark" onclick="downloadCSV()">⬇ CSV</button>
+      <button class="btn-dark" onclick="resetRaffle()">🗑 Сброс</button>
+    </div>
+
+    <details class="test-section">
+      <summary>🧪 Тестовые участники</summary>
+      <div class="field-row">
+        <input type="text" id="test-name" placeholder="имя тестового игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+        <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
+        <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
+      </div>
       <span id="test-msg"></span>
-    </div>
+    </details>
   </div>
 
-  <div class="panel">
-    <div class="panel-title">Игра</div>
-    <div class="row">
-      <span style="font-size:13px;color:#888;">количество победителей:</span>
-      <input type="number" id="winners-count" value="1" min="1" max="108">
-      <button class="btn-gold btn-big" onclick="startGame()">🎯 НАЧАТЬ ИГРУ</button>
+  <!-- ── Учасники / Гра ────────────────────── -->
+  <div class="col">
+    <div class="col-title">
+      <span>Участники</span>
+      <span class="count">(<span id="participants-count-title">0</span>)</span>
     </div>
-    <div class="row">
-      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол (без игры)</button>
+    <div id="hint"></div>
+    <div id="progress"></div>
+    <div class="box" id="main-box">
+      <div class="empty-box">Пока никто не зарегистрировался</div>
     </div>
-  </div>
-
-  <div id="hint"></div>
-  <div id="progress"></div>
-
-  <div id="grid-wrap">
-    <div class="grid" id="grid"></div>
-    <div class="game-controls">
+    <div class="btn-row" id="game-controls" style="display:none;">
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
-      <button class="btn-orange" onclick="reroll()">🔄 Рерол (новая игра)</button>
-      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
     </div>
   </div>
 
-  <div id="winners-list">
-    <h3>🏆 ПОБЕДИТЕЛИ</h3>
-    <div id="winners-chips"></div>
+  <!-- ── Переможці ─────────────────────────── -->
+  <div class="col">
+    <div class="col-title">
+      <span>Победители</span>
+      <span class="count">(<span id="winners-count-title">0</span>)</span>
+    </div>
+    <div class="box" id="winners-box">
+      <div class="empty-box">Победителей пока нет</div>
+    </div>
+    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Финиш</button>
   </div>
 
-  <div id="check-panel" class="panel" style="display:none;">
-    <div class="panel-title">Проверка победителей</div>
-    <div id="check-items"></div>
-    <div class="game-controls">
-      <button class="btn-orange" onclick="reroll()">🔄 Рерол (новая игра)</button>
-      <button class="btn-red" onclick="finishRaffle()">🏁 Финиш</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -478,7 +536,9 @@ let checkTimerInterval = null;
 let currentGame = null;     // { winnersNeeded, gridSize, cells }
 let selected = new Set();   // індекси обраних клітинок
 let phase = 'idle';         // idle | selecting | revealing | done
+let winnersHistory = [];    // [{ name, time, status: 'ok'|'pending'|'bad', message }]
 
+// ── Стан / реєстрація ─────────────────────────────────────────
 async function loadState() {
   const res = await fetch('/api/raffle/state');
   if (res.status === 401) { location.reload(); return; }
@@ -488,23 +548,30 @@ async function loadState() {
   if (document.activeElement !== cmdInput) cmdInput.value = state.joinCmd;
 
   document.getElementById('participant-count').textContent = state.count;
+  document.getElementById('participants-count-title').textContent = state.count;
   document.getElementById('max-count').textContent = state.max || 1000;
   const pct = Math.min(100, (state.count / (state.max || 1000)) * 100);
   const bar = document.getElementById('limit-bar');
   bar.style.width = pct + '%';
   bar.style.background = state.count >= (state.max || 1000) ? '#ff4444' : state.count >= (state.max || 1000) * 0.8 ? '#ffaa00' : '#53fc18';
 
-  const badge = document.getElementById('raffle-status');
-  const toggleBtn = document.getElementById('btn-raffle-toggle');
-  if (state.accepting) {
-    badge.textContent = '● регистрация открыта';
-    badge.className = 'status-badge open';
-    toggleBtn.textContent = '⏹ Закрыть регистрацию';
-  } else {
-    badge.textContent = '● регистрация закрыта';
-    badge.className = 'status-badge closed';
-    toggleBtn.textContent = '▶ Открыть регистрацию';
+  const dot = document.getElementById('conn-dot');
+  const toggle = document.getElementById('toggle-reg');
+  toggle.checked = state.accepting;
+  dot.className = 'dot ' + (state.accepting ? 'open' : 'closed');
+
+  if (phase === 'idle') renderParticipants(state.participants);
+}
+
+function renderParticipants(list) {
+  const box = document.getElementById('main-box');
+  if (!list.length) {
+    box.innerHTML = '<div class="empty-box">Пока никто не зарегистрировался</div>';
+    return;
   }
+  box.innerHTML = list.map((name, i) =>
+    '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
+  ).join('');
 }
 
 function downloadCSV() {
@@ -530,8 +597,10 @@ async function toggleRaffleAccepting() {
 }
 
 async function resetRaffle() {
-  if (!confirm('Сбросить список участников розыгрыша?')) return;
+  if (!confirm('Сбросить список участников и победителей?')) return;
   await fetch('/api/raffle/reset', { method: 'POST' });
+  winnersHistory = [];
+  renderWinners();
   resetGameUI();
   loadState();
 }
@@ -576,18 +645,15 @@ async function addBulkTest() {
   loadState();
 }
 
+// ── Гра Cash Hunt ─────────────────────────────────────────────
 function resetGameUI() {
   currentGame = null;
   selected = new Set();
   phase = 'idle';
-  document.getElementById('grid-wrap').classList.remove('visible');
-  document.getElementById('grid-wrap').className = 'grid-wrap';
-  document.getElementById('grid-wrap').classList.remove('visible');
+  document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
-  document.getElementById('winners-list').classList.remove('visible');
-  document.getElementById('check-panel').style.display = 'none';
-  if (checkTimerInterval) { clearInterval(checkTimerInterval); checkTimerInterval = null; }
+  renderParticipants(state.participants || []);
 }
 
 async function startGame() {
@@ -599,7 +665,6 @@ async function startGame() {
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error || 'Ошибка');
-  document.getElementById('winners-list').classList.remove('visible');
   renderGame(data.game);
 }
 
@@ -607,7 +672,6 @@ async function reroll() {
   const res = await fetch('/api/raffle/reroll', { method: 'POST' });
   const data = await res.json();
   if (!res.ok) return alert(data.error || 'Ошибка');
-  document.getElementById('winners-list').classList.remove('visible');
   renderGame(data.game);
 }
 
@@ -622,7 +686,7 @@ async function fastReroll() {
   if (!res.ok) return alert(data.error || 'Ошибка');
 
   resetGameUI();
-  showWinners(data.winners);
+  data.winners.forEach(name => addWinner(name));
 }
 
 function renderGame(game) {
@@ -630,23 +694,18 @@ function renderGame(game) {
   selected = new Set();
   phase = 'selecting';
 
-  document.getElementById('check-panel').style.display = 'none';
-  if (checkTimerInterval) { clearInterval(checkTimerInterval); checkTimerInterval = null; }
-
-  const gridWrap = document.getElementById('grid-wrap');
+  const box = document.getElementById('main-box');
+  box.innerHTML = '<div class="grid" id="grid"></div>';
+  box.className = 'box selecting';
   const grid = document.getElementById('grid');
-  grid.innerHTML = '';
-  gridWrap.classList.add('visible');
-  gridWrap.className = 'visible selecting';
 
-  // Розмір клітинки залежить від кількості — менше учасників = більші клітинки
   const cols = game.gridSize <= 12 ? game.gridSize : 12;
-  const cellSize = game.gridSize <= 12 ? 'min(70px, calc((100vw - 80px) / ' + cols + '))' : '1fr';
+  const cellSize = game.gridSize <= 12 ? 'min(70px, calc((100% - 40px) / ' + cols + '))' : '1fr';
   grid.style.gridTemplateColumns = game.gridSize <= 12
     ? 'repeat(' + cols + ', ' + cellSize + ')'
     : 'repeat(' + cols + ', 1fr)';
 
-  document.getElementById('winners-list').classList.remove('visible');
+  document.getElementById('game-controls').style.display = 'flex';
   document.getElementById('btn-go').disabled = true;
   updateHint();
   document.getElementById('progress').textContent = '';
@@ -694,7 +753,7 @@ function updateHint() {
 async function startReveal() {
   if (selected.size !== currentGame.winnersNeeded) return;
   phase = 'revealing';
-  document.getElementById('grid-wrap').className = 'visible revealing';
+  document.getElementById('main-box').className = 'box revealing';
   document.getElementById('hint').textContent = 'Раскрытие...';
   document.getElementById('btn-go').disabled = true;
 
@@ -704,7 +763,6 @@ async function startReveal() {
 
   const cells = document.querySelectorAll('.cell');
 
-  // 1. Швидко відкриваємо всі звичайні клітинки
   for (const idx of others) {
     cells[idx].classList.add('flipped', 'revealed');
     await sleep(35);
@@ -712,7 +770,6 @@ async function startReveal() {
 
   await sleep(600);
 
-  // 2. Урочисто відкриваємо обрані (переможні) клітинки одна за одною
   const winners = [];
   for (let k = 0; k < winnersOrder.length; k++) {
     const idx = winnersOrder[k];
@@ -722,112 +779,78 @@ async function startReveal() {
     winners.push(name);
     document.getElementById('progress').innerHTML =
       'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
-    addWinnerChip(name);
+    addWinner(name);
     await sleep(900);
   }
 
   phase = 'done';
-  document.getElementById('grid-wrap').className = 'visible done';
+  document.getElementById('main-box').className = 'box done';
   document.getElementById('hint').innerHTML = '🏁 Готово!';
-  document.getElementById('winners-list').classList.add('visible');
-  showCheckPanel(winners);
+  document.getElementById('btn-go').textContent = '🚀 Начать раскрытие';
 }
 
-function addWinnerChip(name) {
-  const box = document.getElementById('winners-list');
-  const chips = document.getElementById('winners-chips');
-  box.classList.add('visible');
-  const chip = document.createElement('span');
-  chip.className = 'winner-chip';
-  chip.textContent = '🏆 ' + name;
-  chips.appendChild(chip);
+// ── Список переможців ──────────────────────────────────────────
+function addWinner(name) {
+  const confirmOn = document.getElementById('toggle-confirm').checked;
+  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+
+  const entry = { name, time, status: confirmOn ? 'pending' : 'ok', message: null };
+  winnersHistory.unshift(entry);
+  renderWinners();
+
+  if (confirmOn) {
+    fetch('/api/raffle/check/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner: name, seconds })
+    });
+    if (checkTimerInterval) clearInterval(checkTimerInterval);
+    checkTimerInterval = setInterval(pollCheckState, 1000);
+    pollCheckState();
+  }
 }
 
-function showWinners(winners) {
-  const box = document.getElementById('winners-list');
-  const chips = document.getElementById('winners-chips');
-  chips.innerHTML = winners.map(w => '<span class="winner-chip">🏆 ' + escapeHtml(w) + '</span>').join('');
-  box.classList.add('visible');
-  showCheckPanel(winners);
+function renderWinners() {
+  document.getElementById('winners-count-title').textContent = winnersHistory.length;
+  const box = document.getElementById('winners-box');
+  if (!winnersHistory.length) {
+    box.innerHTML = '<div class="empty-box">Победителей пока нет</div>';
+    return;
+  }
+
+  box.innerHTML = winnersHistory.map(w => {
+    let statusHtml, rowClass = '';
+    if (w.status === 'ok') {
+      statusHtml = '<span class="w-status ok">✓</span>';
+      rowClass = 'confirmed';
+    } else if (w.status === 'bad') {
+      statusHtml = '<span class="w-status bad">⏰</span>';
+      rowClass = 'expired';
+    } else {
+      statusHtml = '<span class="w-status pending" data-name="' + escapeAttr(w.name) + '">…</span>';
+    }
+
+    let msgHtml = '';
+    if (w.status === 'ok' && w.message) {
+      msgHtml = '<div class="w-msg">' + escapeHtml(w.message) + '</div>';
+    } else if (w.status === 'pending') {
+      msgHtml = '<div class="w-msg empty">ожидание ответа...</div>';
+    } else if (w.status === 'bad') {
+      msgHtml = '<div class="w-msg empty">время вышло, ответа нет</div>' +
+        '<button class="btn-dark btn-small w-retry" onclick="retryWinner(\\'' + escapeAttr(w.name) + '\\')">↻ Заново</button>';
+    }
+
+    return '<div class="winner-row ' + rowClass + '">' +
+      '<div class="winner-top">' + statusHtml +
+      '<span class="w-name">' + escapeHtml(w.name) + '</span>' +
+      '<span class="w-time">' + w.time + '</span></div>' +
+      msgHtml +
+    '</div>';
+  }).join('');
 }
 
-// ── Перевірка відповіді переможців ───────────────────────────
-function showCheckPanel(winners) {
-  const panel = document.getElementById('check-panel');
-  const items = document.getElementById('check-items');
-  panel.style.display = 'block';
-  items.innerHTML = '';
-
-  winners.forEach(name => {
-    const item = document.createElement('div');
-    item.className = 'check-item';
-    item.dataset.name = name;
-
-    const nameEl = document.createElement('span');
-    nameEl.className = 'check-name';
-    nameEl.textContent = name;
-
-    const timerEl = document.createElement('span');
-    timerEl.className = 'check-timer';
-    timerEl.textContent = '\u2014';
-
-    const msgEl = document.createElement('span');
-    msgEl.className = 'check-msg empty';
-    msgEl.textContent = 'ожидание...';
-
-    const secInput = document.createElement('input');
-    secInput.type = 'number';
-    secInput.value = '60';
-    secInput.min = '5';
-    secInput.max = '600';
-    secInput.style.width = '60px';
-    secInput.style.textAlign = 'center';
-
-    const startBtn = document.createElement('button');
-    startBtn.className = 'btn-check-start';
-    startBtn.textContent = '\u25B6 Старт';
-    startBtn.onclick = () => startCheckTimer(name, parseInt(secInput.value) || 60);
-
-    const retryBtn = document.createElement('button');
-    retryBtn.className = 'btn-check-retry';
-    retryBtn.textContent = '\u21BB Заново';
-    retryBtn.onclick = () => retryCheck(name);
-
-    item.append(nameEl, timerEl, msgEl, secInput, startBtn, retryBtn);
-    items.appendChild(item);
-  });
-
-  if (checkTimerInterval) clearInterval(checkTimerInterval);
-  checkTimerInterval = setInterval(pollCheckState, 1000);
-  pollCheckState();
-}
-
-async function startCheckTimer(name, sec) {
-  await fetch('/api/raffle/check/start', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ winner: name, seconds: sec })
-  });
-  pollCheckState();
-}
-
-async function retryCheck(name) {
-  await fetch('/api/raffle/check/reset', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ winner: name })
-  });
-  const item = document.querySelector('.check-item[data-name="' + cssAttrEsc(name) + '"]');
-  if (!item) return;
-  item.className = 'check-item';
-  const timerEl = item.querySelector('.check-timer');
-  const msgEl = item.querySelector('.check-msg');
-  timerEl.textContent = '\u2014';
-  timerEl.className = 'check-timer';
-  msgEl.textContent = 'ожидание...';
-  msgEl.className = 'check-msg empty';
-}
-
-function cssAttrEsc(s) {
-  return s.replace(/["\\\\]/g, '\\\\$&');
+function escapeAttr(s) {
+  return String(s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'");
 }
 
 async function pollCheckState() {
@@ -835,46 +858,64 @@ async function pollCheckState() {
   if (res.status === 401) return;
   const data = await res.json();
 
-  document.querySelectorAll('.check-item').forEach(item => {
-    const name = item.querySelector('.check-name').textContent;
-    const c = data.checks[name];
+  let anyPending = false;
+  let changed = false;
+
+  winnersHistory.forEach(w => {
+    if (w.status !== 'pending') return;
+    const c = data.checks[w.name];
     if (!c) return;
 
-    const timerEl = item.querySelector('.check-timer');
-    const msgEl = item.querySelector('.check-msg');
-
     if (c.message !== null) {
-      // Отримано відповідь
-      item.className = 'check-item responded';
-      timerEl.textContent = '✓';
-      timerEl.className = 'check-timer';
-      msgEl.textContent = c.message;
-      msgEl.className = 'check-msg';
+      w.status = 'ok';
+      w.message = c.message;
+      changed = true;
     } else if (c.active) {
       const elapsed = (Date.now() - c.startedAt) / 1000;
       const remaining = Math.max(0, Math.ceil(c.seconds - elapsed));
-      timerEl.textContent = remaining + 'с';
-      if (remaining > 0) {
-        timerEl.className = 'check-timer running';
-        msgEl.textContent = 'ожидание ответа...';
-        msgEl.className = 'check-msg empty';
+      if (remaining <= 0) {
+        w.status = 'bad';
+        changed = true;
       } else {
-        item.className = 'check-item expired';
-        timerEl.textContent = '⏰';
-        timerEl.className = 'check-timer expired';
-        msgEl.textContent = 'время вышло, ответа нет';
-        msgEl.className = 'check-msg empty';
+        anyPending = true;
+        const el = document.querySelector('.w-status.pending[data-name="' + escapeAttr(w.name) + '"]');
+        if (el) el.textContent = remaining + 'с';
       }
     }
   });
+
+  if (changed) renderWinners();
+  if (!anyPending && checkTimerInterval) {
+    clearInterval(checkTimerInterval);
+    checkTimerInterval = null;
+  }
+}
+
+async function retryWinner(name) {
+  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  await fetch('/api/raffle/check/reset', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner: name })
+  });
+  await fetch('/api/raffle/check/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner: name, seconds })
+  });
+  const entry = winnersHistory.find(w => w.name === name);
+  if (entry) { entry.status = 'pending'; entry.message = null; }
+  renderWinners();
+  if (checkTimerInterval) clearInterval(checkTimerInterval);
+  checkTimerInterval = setInterval(pollCheckState, 1000);
+  pollCheckState();
 }
 
 async function finishRaffle() {
-  if (!confirm('Завершить розыгрыш? Регистрация будет закрыта.')) return;
+  if (!confirm('Завершить розыгрыш? Регистрация будет закрыта, список победителей очищен.')) return;
   if (checkTimerInterval) clearInterval(checkTimerInterval);
   await fetch('/api/raffle/finish', { method: 'POST' });
+  winnersHistory = [];
+  renderWinners();
   resetGameUI();
-  document.getElementById('check-panel').style.display = 'none';
   loadState();
 }
 
@@ -884,6 +925,7 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+renderWinners();
 loadState();
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 </script>
