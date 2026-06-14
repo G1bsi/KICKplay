@@ -211,7 +211,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1400px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 340px 1fr 340px;
+    grid-template-columns: 340px 1fr;
     gap: 16px;
   }
   @media (max-width: 1100px) {
@@ -318,7 +318,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .participants-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 2px;
   }
   .participant-row {
@@ -326,8 +326,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     padding: 6px 10px; border-radius: 6px; font-size: 13px;
     color: #ddd;
   }
-  .participant-row:nth-child(4n+1),
-  .participant-row:nth-child(4n+2) { background: #161618; }
+  .participant-row:nth-child(6n+1),
+  .participant-row:nth-child(6n+2),
+  .participant-row:nth-child(6n+3) { background: #161618; }
   .participant-row .p-num { color: #444; font-family: 'Share Tech Mono', monospace; font-size: 10px; width: 24px; flex-shrink: 0; }
 
   .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
@@ -431,9 +432,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     min-height: 28px; text-align: center;
   }
   #race-track-area {
-    width: min(94vw, 1300px);
+    width: min(98vw, 1560px);
     aspect-ratio: 12 / 7;
-    max-height: 78vh;
+    max-height: 90vh;
     position: relative;
     background: #0a0a0c;
     border: 1px solid #2a2a2e;
@@ -706,8 +707,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="title">🎁 <b>РОЗЫГРЫШ — CASH HUNT</b></div>
+<div class="topbar" style="justify-content:flex-end;">
   <div class="title">kosteze231 <span class="dot closed" id="conn-dot"></span></div>
 </div>
 
@@ -720,7 +720,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field-row">
       <div class="field">
         <label class="field-label">Слово для участия</label>
-        <input type="text" id="raffle-cmd" value="" placeholder="введите слово..." onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+        <input type="text" id="raffle-cmd" value="" placeholder="буц" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
         <button type="button" id="btn-reg-toggle" class="btn-green" style="margin-top:6px;" onclick="toggleRegistration()">▶ Начать регистрацию</button>
       </div>
       <div class="field small">
@@ -733,9 +733,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field" style="margin-top:6px;">
       <label class="field-label">Режим игры</label>
       <div class="mode-switch">
-        <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
-        <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Рулетка</button>
+        <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
       </div>
     </div>
 
@@ -766,14 +766,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div style="flex:1;"></div>
-
-    <div class="limit-info">Участников: <b id="participant-count">0</b></div>
+    <div class="limit-info" style="margin-top:6px;">Участников: <b id="participant-count">0</b></div>
 
     <button class="btn-primary" onclick="startGame()">🎯 Начать розыгрыш</button>
 
     <div class="btn-row">
-      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый</button>
       <button class="btn-dark" onclick="downloadCSV()">⬇ CSV</button>
       <button class="btn-dark" onclick="resetRaffle()">🗑 Сброс</button>
     </div>
@@ -787,6 +784,15 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
       <span id="test-msg"></span>
     </details>
+
+    <div class="col-title" style="margin-top:14px;">
+      <span>Победители</span>
+      <span class="count">(<span id="winners-count-title">0</span>)</span>
+    </div>
+    <div class="box" id="winners-box" style="flex:1;">
+      <div class="empty-box">Победителей пока нет</div>
+    </div>
+    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Финиш</button>
   </div>
 
   <!-- ── Учасники / Гра ────────────────────── -->
@@ -804,18 +810,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
       <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
     </div>
-  </div>
-
-  <!-- ── Переможці ─────────────────────────── -->
-  <div class="col">
-    <div class="col-title">
-      <span>Победители</span>
-      <span class="count">(<span id="winners-count-title">0</span>)</span>
-    </div>
-    <div class="box" id="winners-box">
-      <div class="empty-box">Победителей пока нет</div>
-    </div>
-    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Финиш</button>
   </div>
 
 </div>
@@ -1497,7 +1491,7 @@ async function runRace(qualifiers, totalLaps) {
   const margin = ROAD_RADIUS + 2.5;
   const boundRadius = Math.hypot(Math.max(Math.abs(minX), Math.abs(maxX)) + margin, Math.max(Math.abs(minZ), Math.abs(maxZ)) + margin);
   const elevation = 38 * Math.PI / 180;
-  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 0.425;
+  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 0.425 * 1.3;
   camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
   camera3D.lookAt(0, 0, 0);
   camera3D.updateProjectionMatrix();
@@ -1631,8 +1625,6 @@ async function runRace(qualifiers, totalLaps) {
   }
   cd.textContent = '';
 
-  overlayHint.textContent = 'Гонка идёт... (круг 1 / ' + totalLaps + ')';
-
   // ── Симуляція гонки: плавна фізика прискорення/гальмування ──
   const LAP_SECONDS = 9; // середній час кола
   const baseSpeed = 1 / (LAP_SECONDS * 60); // прогрес за кадр (60fps)
@@ -1644,7 +1636,6 @@ async function runRace(qualifiers, totalLaps) {
   let lastTime = performance.now();
   let elapsed = 0;
   let lastStandingsUpdate = 0;
-  let lastHintLap = 1;
   const maxElapsed = totalLaps * 16;
 
   await new Promise(resolve => {
@@ -1681,11 +1672,6 @@ async function runRace(qualifiers, totalLaps) {
       if (now - lastStandingsUpdate > 200 || winnerIdx !== -1) {
         renderStandings(progress, laps, winnerIdx);
         lastStandingsUpdate = now;
-        const leadLap = Math.min(Math.max(...laps) + 1, totalLaps);
-        if (leadLap !== lastHintLap && winnerIdx === -1) {
-          lastHintLap = leadLap;
-          overlayHint.textContent = 'Гонка идёт... (круг ' + leadLap + ' / ' + totalLaps + ')';
-        }
       }
 
       if (winnerIdx !== -1 || elapsed > maxElapsed) {
