@@ -1429,8 +1429,8 @@ function makeF1Car(teamColorHex) {
     susp2.position.set(p.isLeft ? p.pos[0] + 1.0 : p.pos[0] - 1.0, p.pos[1], p.pos[2]); carBody.add(susp2);
   });
 
-  // Розвертаємо болід на 180°, щоб ніс дивився за напрямком lookAt
-  carBody.rotation.y = Math.PI;
+  // Розвертаємо болід на 180° (виправлення напрямку/орієнтації моделі)
+  carBody.rotation.y = 0;
   group.add(carBody);
   group.scale.set(0.45, 0.45, 0.45);
   return group;
