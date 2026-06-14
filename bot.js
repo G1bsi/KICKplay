@@ -456,16 +456,18 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #race-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 
   #race-standings {
-    width: 220px; flex-shrink: 0;
-    background: rgba(15,15,15,0.92);
-    border-left: 6px solid #e10600;
+    position: absolute; top: 12px; left: 12px; z-index: 4;
+    width: 190px; max-height: calc(100% - 24px);
+    background: rgba(15,15,15,0.88);
+    border-left: 5px solid #e10600;
     border-radius: 8px;
-    padding: 15px;
+    padding: 10px 12px;
     font-family: 'Rajdhani', sans-serif;
     overflow-y: auto;
+    pointer-events: none;
   }
   .standings-title {
-    font-size: 18px; font-weight: 900; color: #fff;
+    font-size: 14px; font-weight: 900; color: #fff;
     text-transform: uppercase; letter-spacing: 1px;
     border-bottom: 2px solid #333;
     padding-bottom: 10px; margin-bottom: 8px;
@@ -831,11 +833,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <!-- Оверлей гонки -->
 <div id="race-overlay">
   <div id="race-overlay-hint"></div>
-  <div id="race-content">
+  <div id="race-track-area">
+    <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
     <div id="race-standings"></div>
-    <div id="race-track-area">
-      <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
-    </div>
   </div>
   <div id="race-overlay-controls" style="display:none;">
     <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
@@ -1028,8 +1028,8 @@ function hideRaceOverlay() {
   document.getElementById('race-overlay').classList.remove('visible');
   document.getElementById('race-overlay-controls').style.display = 'none';
   document.getElementById('race-track-area').innerHTML =
-    '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>';
-  document.getElementById('race-standings').innerHTML = '';
+    '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
+    '<div id="race-standings"></div>';
 }
 
 function hideRouletteOverlay() {
@@ -1220,12 +1220,15 @@ async function startRaceGame() {
 
 // ── Геометрія траси: точки центральної лінії (F1-стиль, з петлею) ──
 // Координати: [x, z]. Центруються навколо центроїда при побудові кривої.
+// Шикана (точки 24-29) розширена в 1.6 рази навколо власного центру —
+// у вихідному варіанті ця ділянка перетиналась сама із собою
+// (мін. відстань 12.94 < ширини дороги 15) і траса виглядала "склеєною".
 const TRACK_POINTS_2D = [
   [60, 70], [0, 70], [-80, 70], [-120, 70], [-145, 60], [-155, 45],
   [-165, 25], [-185, 0], [-170, -50], [-130, -45], [-80, -40], [-50, -40],
   [-40, -35], [-40, -15], [-55, -5], [-75, 0], [-85, 15], [-80, 30],
   [-60, 35], [-30, 35], [-10, 20], [10, -10], [30, -45], [45, -40],
-  [80, -5], [105, 15], [110, 10], [100, -5], [85, -20], [95, -30],
+  [70.5, -4.5], [110.5, 27.5], [118.5, 19.5], [102.5, -4.5], [78.5, -28.5], [94.5, -44.5],
   [120, -45], [135, -35], [145, -25], [135, 0], [150, 35], [145, 65],
   [140, 70], [110, 70],
 ];
@@ -1449,6 +1452,7 @@ async function runRace(qualifiers, totalLaps) {
   disposeRace3D();
   area.innerHTML =
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
+    '<div id="race-standings"></div>' +
     '<div id="race-labels"></div>' +
     '<div id="race-countdown"></div>';
 
@@ -1492,8 +1496,8 @@ async function runRace(qualifiers, totalLaps) {
   });
   const margin = ROAD_RADIUS + 2.5;
   const boundRadius = Math.hypot(Math.max(Math.abs(minX), Math.abs(maxX)) + margin, Math.max(Math.abs(minZ), Math.abs(maxZ)) + margin);
-  const elevation = 55 * Math.PI / 180;
-  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 1.05;
+  const elevation = 38 * Math.PI / 180;
+  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 0.85;
   camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
   camera3D.lookAt(0, 0, 0);
   camera3D.updateProjectionMatrix();
