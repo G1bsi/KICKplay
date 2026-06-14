@@ -1255,7 +1255,11 @@ function buildTrackCurve3() {
   shape.lineTo(-w, -h + r);
   shape.absarc(-w + r, -h + r, r, Math.PI, Math.PI * 1.5, false);
 
-  const pts2d = shape.getPoints(120);
+  // getSpacedPoints дає РІВНОМІРНИЙ розподіл точок по довжині всього контуру
+  // (на відміну від getPoints, де нерівномірна щільність сегментів/арок
+  // призводить до жахливо нерівномірної getPointAt-параметризації:
+  // машинки "телепортуються", асфальт зникає, фініш-лінія летить не туди)
+  const pts2d = shape.getSpacedPoints(60);
   const pts3 = pts2d.map(p => new THREE.Vector3(p.x, 0, p.y));
   return new THREE.CatmullRomCurve3(pts3, true, 'catmullrom', 0.3);
 }
