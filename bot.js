@@ -821,8 +821,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <!-- Оверлей гонки -->
 <div id="race-overlay">
   <div id="race-overlay-hint"></div>
-  <div id="race-track-area">
-    <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
+  <div id="race-content">
+    <div id="race-standings"></div>
+    <div id="race-track-area">
+      <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
+    </div>
   </div>
   <div id="race-overlay-controls" style="display:none;">
     <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
@@ -1016,6 +1019,7 @@ function hideRaceOverlay() {
   document.getElementById('race-overlay-controls').style.display = 'none';
   document.getElementById('race-track-area').innerHTML =
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>';
+  document.getElementById('race-standings').innerHTML = '';
 }
 
 function hideRouletteOverlay() {
@@ -1204,14 +1208,20 @@ async function startRaceGame() {
   await runRace(raceQualifiers, laps);
 }
 
-// ── Геометрія траси: овальний "стадіон" з заокругленими кутами ──
-// Безпечна, гарантовано неперетинна форма — кути достатньо великі для будь-якої
-// кількості доріжок і поребриків.
-const TRACK_W = 50;   // половина довжини (по X)
-const TRACK_H = 28;   // половина ширини (по Z)
-const TRACK_R = 16;   // радіус закруглення кутів
-const ROAD_HALF = 6;  // половина ширини дорожнього покриття
-const CURB_W = 1.1;   // ширина поребрика
+// ── Геометрія траси: точки центральної лінії (F1-стиль, з петлею) ──
+// Координати: [x, z]. Центруються навколо центроїда при побудові кривої.
+const TRACK_POINTS_2D = [
+  [60, 70], [0, 70], [-80, 70], [-120, 70], [-145, 60], [-155, 45],
+  [-165, 25], [-185, 0], [-170, -50], [-130, -45], [-80, -40], [-50, -40],
+  [-40, -35], [-40, -15], [-55, -5], [-75, 0], [-85, 15], [-80, 30],
+  [-60, 35], [-30, 35], [-10, 20], [10, -10], [30, -45], [45, -40],
+  [80, -5], [105, 15], [110, 10], [100, -5], [85, -20], [95, -30],
+  [120, -45], [135, -35], [145, -25], [135, 0], [150, 35], [145, 65],
+  [140, 70], [110, 70],
+];
+
+const ROAD_RADIUS = 7.5;  // радіус дорожнього покриття (TubeGeometry)
+const CURB_RADIUS = 8.6;  // радіус поребрика (трохи ширше за дорогу)
 
 let renderer3D = null, scene3D = null, camera3D = null;
 
@@ -1241,27 +1251,15 @@ function disposeRace3D() {
   camera3D = null;
 }
 
-// Будує замкнену 3D-криву по контуру заокругленого прямокутника (без самоперетинів)
+// Будує замкнену 3D-криву (центрипетальна параметризація — стабільна навіть
+// для нерівномірно розташованих точок)
 function buildTrackCurve3() {
-  const shape = new THREE.Shape();
-  const w = TRACK_W, h = TRACK_H, r = TRACK_R;
-  shape.moveTo(-w + r, -h);
-  shape.lineTo(w - r, -h);
-  shape.absarc(w - r, -h + r, r, -Math.PI / 2, 0, false);
-  shape.lineTo(w, h - r);
-  shape.absarc(w - r, h - r, r, 0, Math.PI / 2, false);
-  shape.lineTo(-w + r, h);
-  shape.absarc(-w + r, h - r, r, Math.PI / 2, Math.PI, false);
-  shape.lineTo(-w, -h + r);
-  shape.absarc(-w + r, -h + r, r, Math.PI, Math.PI * 1.5, false);
-
-  // getSpacedPoints дає РІВНОМІРНИЙ розподіл точок по довжині всього контуру
-  // (на відміну від getPoints, де нерівномірна щільність сегментів/арок
-  // призводить до жахливо нерівномірної getPointAt-параметризації:
-  // машинки "телепортуються", асфальт зникає, фініш-лінія летить не туди)
-  const pts2d = shape.getSpacedPoints(60);
-  const pts3 = pts2d.map(p => new THREE.Vector3(p.x, 0, p.y));
-  return new THREE.CatmullRomCurve3(pts3, true, 'catmullrom', 0.3);
+  let cx = 0, cz = 0;
+  TRACK_POINTS_2D.forEach(([x, z]) => { cx += x; cz += z; });
+  cx /= TRACK_POINTS_2D.length;
+  cz /= TRACK_POINTS_2D.length;
+  const points = TRACK_POINTS_2D.map(([x, z]) => new THREE.Vector3(x - cx, 0, z - cz));
+  return new THREE.CatmullRomCurve3(points, true); // 'centripetal' за замовчуванням
 }
 
 // Текстура з канвасу (процедурна — без зовнішніх файлів)
@@ -1275,11 +1273,10 @@ function makeCanvasTexture(draw, w, h) {
   return tex;
 }
 
-// Будує траву, асфальт, борди та фінішну лінію
+// Будує асфальт, поребрики, траву та фінішну лінію на базі TubeGeometry
+// (TubeGeometry сама рахує орієнтацію вздовж кривої — без ручних "right"-векторів
+// і проблем із самоперетинами/телепортацією)
 function buildTrack3D(scene, curve) {
-  const STEPS = 200;
-  const UP = new THREE.Vector3(0, 1, 0);
-
   const asphaltTex = makeCanvasTexture((ctx, w, h) => {
     ctx.fillStyle = '#3b3b40'; ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 70; i++) {
@@ -1289,13 +1286,22 @@ function buildTrack3D(scene, curve) {
       ctx.fill();
     }
   }, 128, 128);
-  asphaltTex.repeat.set(STEPS / 8, 4);
+  asphaltTex.repeat.set(60, 1);
+
+  const curbTex = makeCanvasTexture((ctx, w, h) => {
+    const cell = 16;
+    for (let x = 0; x < w; x += cell) {
+      ctx.fillStyle = (Math.floor(x / cell) % 2 === 0) ? '#d62828' : '#f4f4f4';
+      ctx.fillRect(x, 0, cell, h);
+    }
+  }, 256, 16);
+  curbTex.repeat.set(90, 1);
 
   const grassTex = makeCanvasTexture((ctx, w, h) => {
     ctx.fillStyle = '#2d5a1e'; ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#356c24'; ctx.fillRect(0, 0, w / 2, h);
   }, 32, 32);
-  grassTex.repeat.set(40, 40);
+  grassTex.repeat.set(60, 60);
 
   const finishTex = makeCanvasTexture((ctx, w, h) => {
     const cell = 8;
@@ -1306,63 +1312,25 @@ function buildTrack3D(scene, curve) {
       }
     }
   }, 32, 32);
-  finishTex.repeat.set((ROAD_HALF * 2 + CURB_W * 2) / 1.5, 1);
+  finishTex.repeat.set((ROAD_RADIUS * 2) / 1.5, 1);
 
-  // ── Дорожнє покриття ──
-  const positions = [], uvs = [], indices = [];
-  for (let i = 0; i <= STEPS; i++) {
-    const u = (i % STEPS) / STEPS;
-    const p = curve.getPointAt(u);
-    const t = curve.getTangentAt(u);
-    const right = new THREE.Vector3().crossVectors(t, UP).normalize();
-    const left = p.clone().addScaledVector(right, ROAD_HALF);
-    const rgt  = p.clone().addScaledVector(right, -ROAD_HALF);
-    positions.push(left.x, 0, left.z, rgt.x, 0, rgt.z);
-    const v = (i / STEPS) * (STEPS / 8);
-    uvs.push(0, v, 1, v);
-  }
-  for (let i = 0; i < STEPS; i++) {
-    const a = i * 2, b = i * 2 + 1, c = (i + 1) * 2, d = (i + 1) * 2 + 1;
-    indices.push(a, b, c, b, d, c);
-  }
-  const roadGeo = new THREE.BufferGeometry();
-  roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  roadGeo.setIndex(indices);
-  roadGeo.computeVertexNormals();
-  scene.add(new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ map: asphaltTex })));
+  // ── Поребрик (ширший, нижче) ──
+  const curbGeo = new THREE.TubeGeometry(curve, 400, CURB_RADIUS, 16, true);
+  curbGeo.scale(1, 0.03, 1);
+  const curbMesh = new THREE.Mesh(curbGeo, new THREE.MeshStandardMaterial({ map: curbTex }));
+  curbMesh.position.y = 0.05;
+  scene.add(curbMesh);
 
-  // ── Борди (червоно-білі поребрики) по обох краях ──
-  function buildCurb(side) {
-    const cpos = [], colors = [], cind = [];
-    for (let i = 0; i <= STEPS; i++) {
-      const u = (i % STEPS) / STEPS;
-      const p = curve.getPointAt(u);
-      const t = curve.getTangentAt(u);
-      const right = new THREE.Vector3().crossVectors(t, UP).normalize();
-      const inner = p.clone().addScaledVector(right, side * ROAD_HALF);
-      const outer = p.clone().addScaledVector(right, side * (ROAD_HALF + CURB_W));
-      cpos.push(inner.x, 0.02, inner.z, outer.x, 0.02, outer.z);
-      const stripe = (Math.floor(i / 4) % 2 === 0) ? [0.85, 0.1, 0.1] : [0.92, 0.92, 0.92];
-      colors.push(...stripe, ...stripe);
-    }
-    for (let i = 0; i < STEPS; i++) {
-      const a = i * 2, b = i * 2 + 1, c = (i + 1) * 2, d = (i + 1) * 2 + 1;
-      cind.push(a, b, c, b, d, c);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(cpos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    g.setIndex(cind);
-    g.computeVertexNormals();
-    scene.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true })));
-  }
-  buildCurb(1);
-  buildCurb(-1);
+  // ── Асфальт (вужчий, трохи вище) ──
+  const roadGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS, 16, true);
+  roadGeo.scale(1, 0.04, 1);
+  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ map: asphaltTex }));
+  roadMesh.position.y = 0.1;
+  scene.add(roadMesh);
 
   // ── Трава (фон) ──
   const grassMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 400),
+    new THREE.PlaneGeometry(800, 800),
     new THREE.MeshStandardMaterial({ map: grassTex })
   );
   grassMesh.rotation.x = -Math.PI / 2;
@@ -1370,45 +1338,121 @@ function buildTrack3D(scene, curve) {
   scene.add(grassMesh);
 
   // ── Фінішна лінія (шахматка) ──
+  const UP = new THREE.Vector3(0, 1, 0);
   const m0 = curve.getPointAt(0);
   const t0 = curve.getTangentAt(0);
   const right0 = new THREE.Vector3().crossVectors(t0, UP).normalize();
   const finishMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_HALF * 2 + CURB_W * 2, 1.4),
+    new THREE.PlaneGeometry(ROAD_RADIUS * 2, 2.2),
     new THREE.MeshStandardMaterial({ map: finishTex })
   );
   finishMesh.rotation.x = -Math.PI / 2;
   finishMesh.rotation.y = Math.atan2(right0.x, right0.z);
-  finishMesh.position.set(m0.x, 0.03, m0.z);
+  finishMesh.position.set(m0.x, 0.55, m0.z);
   scene.add(finishMesh);
 }
 
-// Проста процедурна машинка: кузов + кабіна + 4 колеса. Дивиться у напрямку +Z.
-function makeProceduralCar(colorHex) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.5, 0.32, 0.95),
-    new THREE.MeshStandardMaterial({ color: colorHex })
-  );
-  body.position.y = 0.28;
-  g.add(body);
+// Спільні геометрії для всіх машинок (економія пам'яті — 15 машинок x ~20 mesh)
+let CAR_GEO = null;
+function getCarGeometries() {
+  if (CAR_GEO) return CAR_GEO;
+  CAR_GEO = {
+    floor: new THREE.BoxGeometry(3.6, 0.1, 8.5),
+    chassis: new THREE.CylinderGeometry(0.8, 1.2, 5.0, 16),
+    nose: new THREE.CylinderGeometry(0.3, 0.8, 4.0, 16),
+    noseTip: new THREE.SphereGeometry(0.3, 10, 10),
+    sidepods: new THREE.CylinderGeometry(1.8, 1.4, 4.0, 16),
+    intake: new THREE.BoxGeometry(3.2, 0.8, 0.2),
+    airbox: new THREE.CylinderGeometry(0.2, 0.8, 3.0, 12),
+    airboxHole: new THREE.CylinderGeometry(0.15, 0.2, 0.2, 12),
+    halo: new THREE.TorusGeometry(0.65, 0.08, 8, 20, Math.PI),
+    haloStrut: new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+    fwMain: new THREE.BoxGeometry(5.0, 0.1, 1.2),
+    fwUpper: new THREE.BoxGeometry(4.8, 0.05, 0.8),
+    fwEnd: new THREE.BoxGeometry(0.1, 0.8, 1.5),
+    rwPillar: new THREE.BoxGeometry(0.2, 1.8, 0.6),
+    rwMain: new THREE.BoxGeometry(3.5, 0.1, 1.0),
+    rwUpper: new THREE.BoxGeometry(3.5, 0.1, 0.6),
+    rwEnd: new THREE.BoxGeometry(0.1, 1.6, 1.2),
+    wheel: new THREE.CylinderGeometry(1.1, 1.1, 1.2, 16),
+    rim: new THREE.CylinderGeometry(0.65, 0.65, 1.25, 16),
+    susp: new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6),
+  };
+  return CAR_GEO;
+}
 
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(0.42, 0.26, 0.46),
-    new THREE.MeshStandardMaterial({ color: 0x222233 })
-  );
-  cabin.position.set(0, 0.52, -0.05);
-  g.add(cabin);
+// Детальна процедурна машинка F1 (шасі, антикрила, halo, колеса з підвіскою)
+function makeF1Car(teamColorHex) {
+  const G = getCarGeometries();
+  const group = new THREE.Group();
+  const carBody = new THREE.Group();
 
-  const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.14, 14);
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-  [[0.25, 0.16, 0.32], [0.25, 0.16, -0.32], [-0.25, 0.16, 0.32], [-0.25, 0.16, -0.32]].forEach(([x, y, z]) => {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(x, y, z);
-    g.add(w);
+  const paintMat = new THREE.MeshStandardMaterial({ color: teamColorHex, metalness: 0.6, roughness: 0.2 });
+  const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.2, roughness: 0.8 });
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.2 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x0f0f0f, metalness: 0.1, roughness: 0.9 });
+
+  const floor = new THREE.Mesh(G.floor, carbonMat);
+  floor.position.set(0, 0.2, -0.5); carBody.add(floor);
+
+  const chassis = new THREE.Mesh(G.chassis, paintMat);
+  chassis.rotation.x = Math.PI / 2; chassis.position.set(0, 0.8, -1.0); carBody.add(chassis);
+
+  const nose = new THREE.Mesh(G.nose, paintMat);
+  nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.55, 3.5); carBody.add(nose);
+  const noseTip = new THREE.Mesh(G.noseTip, paintMat);
+  noseTip.position.set(0, 0.55, 5.5); carBody.add(noseTip);
+
+  const sidepods = new THREE.Mesh(G.sidepods, paintMat);
+  sidepods.rotation.x = Math.PI / 2; sidepods.position.set(0, 0.7, -1.0); sidepods.scale.set(1, 1, 0.6); carBody.add(sidepods);
+  const intake = new THREE.Mesh(G.intake, carbonMat);
+  intake.position.set(0, 0.8, 1.0); carBody.add(intake);
+
+  const airbox = new THREE.Mesh(G.airbox, paintMat);
+  airbox.position.set(0, 1.6, -2.0); airbox.rotation.x = Math.PI / 6; carBody.add(airbox);
+  const airboxHole = new THREE.Mesh(G.airboxHole, carbonMat);
+  airboxHole.rotation.x = Math.PI / 2; airboxHole.position.set(0, 2.0, -0.6); carBody.add(airboxHole);
+
+  const halo = new THREE.Mesh(G.halo, carbonMat);
+  halo.rotation.x = -Math.PI / 2; halo.rotation.z = Math.PI / 2; halo.position.set(0, 1.5, 0.2); carBody.add(halo);
+  const haloStrut = new THREE.Mesh(G.haloStrut, carbonMat);
+  haloStrut.position.set(0, 1.2, 0.8); haloStrut.rotation.x = Math.PI / 5; carBody.add(haloStrut);
+
+  const fwMain = new THREE.Mesh(G.fwMain, paintMat);
+  fwMain.position.set(0, 0.35, 5.0); carBody.add(fwMain);
+  const fwUpper = new THREE.Mesh(G.fwUpper, carbonMat);
+  fwUpper.position.set(0, 0.5, 4.8); fwUpper.rotation.x = Math.PI / 12; carBody.add(fwUpper);
+  const fwEndL = new THREE.Mesh(G.fwEnd, paintMat); fwEndL.position.set(-2.5, 0.5, 5.0); carBody.add(fwEndL);
+  const fwEndR = new THREE.Mesh(G.fwEnd, paintMat); fwEndR.position.set(2.5, 0.5, 5.0); carBody.add(fwEndR);
+
+  const rwPillar = new THREE.Mesh(G.rwPillar, carbonMat);
+  rwPillar.position.set(0, 1.0, -4.2); carBody.add(rwPillar);
+  const rwMain = new THREE.Mesh(G.rwMain, paintMat);
+  rwMain.position.set(0, 1.8, -4.4); rwMain.rotation.x = -Math.PI / 12; carBody.add(rwMain);
+  const rwUpper = new THREE.Mesh(G.rwUpper, paintMat);
+  rwUpper.position.set(0, 2.2, -4.6); rwUpper.rotation.x = -Math.PI / 6; carBody.add(rwUpper);
+  const rwEndL = new THREE.Mesh(G.rwEnd, carbonMat); rwEndL.position.set(-1.75, 1.6, -4.4); carBody.add(rwEndL);
+  const rwEndR = new THREE.Mesh(G.rwEnd, carbonMat); rwEndR.position.set(1.75, 1.6, -4.4); carBody.add(rwEndR);
+
+  const wheelPositions = [
+    { pos: [-2.4, 1.1, 3.5], isLeft: true }, { pos: [2.4, 1.1, 3.5], isLeft: false },
+    { pos: [-2.4, 1.1, -3.0], isLeft: true }, { pos: [2.4, 1.1, -3.0], isLeft: false },
+  ];
+  wheelPositions.forEach(p => {
+    const w = new THREE.Mesh(G.wheel, tireMat); w.rotation.z = Math.PI / 2; w.position.set(...p.pos); carBody.add(w);
+    const rim = new THREE.Mesh(G.rim, metalMat); rim.rotation.z = Math.PI / 2; rim.position.set(...p.pos); carBody.add(rim);
+    const susp1 = new THREE.Mesh(G.susp, carbonMat); susp1.rotation.z = Math.PI / 2;
+    susp1.position.set(p.isLeft ? p.pos[0] + 1.0 : p.pos[0] - 1.0, p.pos[1], p.pos[2]); carBody.add(susp1);
+    const susp2 = new THREE.Mesh(G.susp, carbonMat); susp2.rotation.z = Math.PI / 2;
+    susp2.rotation.y = Math.PI / 6 * (p.isLeft ? 1 : -1);
+    susp2.position.set(p.isLeft ? p.pos[0] + 1.0 : p.pos[0] - 1.0, p.pos[1], p.pos[2]); carBody.add(susp2);
   });
-  return g;
+
+  // Розвертаємо болід на 180°, щоб ніс дивився за напрямком lookAt
+  carBody.rotation.y = Math.PI;
+  group.add(carBody);
+  group.scale.set(0.45, 0.45, 0.45);
+  return group;
 }
 
 async function runRace(qualifiers, totalLaps) {
@@ -1427,7 +1471,6 @@ async function runRace(qualifiers, totalLaps) {
   disposeRace3D();
   area.innerHTML =
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
-    '<div id="race-standings"></div>' +
     '<div id="race-labels"></div>' +
     '<div id="race-countdown"></div>';
 
@@ -1438,6 +1481,9 @@ async function runRace(qualifiers, totalLaps) {
     return;
   }
 
+  // Чекаємо, поки layout оверлею встановиться (правильний розмір canvas — без піксельності)
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
   const n = qualifiers.length;
   const width = area.clientWidth || 800;
   const height = area.clientHeight || 467;
@@ -1445,7 +1491,7 @@ async function runRace(qualifiers, totalLaps) {
   scene3D = new THREE.Scene();
   scene3D.background = new THREE.Color(0x0a0a0c);
 
-  camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+  camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
 
   renderer3D = new THREE.WebGLRenderer({ antialias: true });
   renderer3D.setSize(width, height);
@@ -1453,15 +1499,21 @@ async function runRace(qualifiers, totalLaps) {
   area.insertBefore(renderer3D.domElement, area.firstChild);
 
   scene3D.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
-  sun.position.set(40, 60, 30);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(100, 200, 100);
   scene3D.add(sun);
 
   const curve = buildTrackCurve3();
   buildTrack3D(scene3D, curve);
 
   // ── Камера: фіксований ракурс, що охоплює всю карту ──
-  const boundRadius = Math.hypot(TRACK_W + CURB_W + 3, TRACK_H + CURB_W + 3);
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  curve.points.forEach(p => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+  });
+  const margin = CURB_RADIUS + 2;
+  const boundRadius = Math.hypot(Math.max(Math.abs(minX), Math.abs(maxX)) + margin, Math.max(Math.abs(minZ), Math.abs(maxZ)) + margin);
   const elevation = 55 * Math.PI / 180;
   const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 1.05;
   camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
@@ -1469,17 +1521,18 @@ async function runRace(qualifiers, totalLaps) {
   camera3D.updateProjectionMatrix();
   camera3D.updateMatrixWorld(true);
 
-  const laneSpacing = 0.85;
+  // ── Машинки ──
+  const laneSpacing = 0.9;
   const cars = [];
   for (let i = 0; i < n; i++) {
-    const color = new THREE.Color().setHSL(i / n, 0.65, 0.55);
-    const car = makeProceduralCar(color.getHex());
+    const color = new THREE.Color().setHSL(i / n, 0.65, 0.5);
+    const car = makeF1Car(color.getHex());
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.62, 24),
+      new THREE.RingGeometry(1.0, 1.3, 24),
       new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
+    ring.position.y = 0.05;
     car.add(ring);
     scene3D.add(car);
     cars.push(car);
@@ -1489,7 +1542,7 @@ async function runRace(qualifiers, totalLaps) {
   const labelEls = qualifiers.map((name, i) => {
     const el = document.createElement('div');
     el.className = 'car-label-3d';
-    const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.55).getHexString();
+    const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString();
     el.innerHTML = '<span class="swatch" style="background:' + colorHex + '"></span>' + escapeHtml(name);
     labelsBox.appendChild(el);
     return el;
@@ -1502,18 +1555,22 @@ async function runRace(qualifiers, totalLaps) {
       let u = progressArr[i] % 1;
       if (u < 0) u += 1;
       const p = curve.getPointAt(u);
-      const tangent = curve.getTangentAt(u);
+      const tangent = curve.getTangentAt(u).clone();
+      tangent.y = 0;
+      tangent.normalize();
       const right = new THREE.Vector3().crossVectors(tangent, UP).normalize();
       const offset = (i - (n - 1) / 2) * laneSpacing;
-      cars[i].position.copy(p).addScaledVector(right, offset);
-      cars[i].rotation.y = Math.atan2(tangent.x, tangent.z);
+      const pos = p.clone().addScaledVector(right, offset);
+      cars[i].position.copy(pos);
+      cars[i].position.y = 0.55;
+      cars[i].lookAt(pos.clone().add(tangent));
     }
   }
 
   function updateLabels() {
     for (let i = 0; i < n; i++) {
       const v = cars[i].position.clone();
-      v.y += 1.1;
+      v.y += 4.5;
       v.project(camera3D);
       if (v.z > 1 || v.z < -1) { labelEls[i].style.display = 'none'; continue; }
       labelEls[i].style.display = '';
@@ -1524,7 +1581,7 @@ async function runRace(qualifiers, totalLaps) {
 
   // ── Турнірна таблиця (позиції учасників) ──
   const standingsBox = document.getElementById('race-standings');
-  const carColors = qualifiers.map((_, i) => '#' + new THREE.Color().setHSL(i / n, 0.65, 0.55).getHexString());
+  const carColors = qualifiers.map((_, i) => '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString());
 
   function renderStandings(progressArr, lapsArr, winnerIdx) {
     const order = qualifiers.map((_, i) => i).sort((a, b) => {
@@ -1571,11 +1628,12 @@ async function runRace(qualifiers, totalLaps) {
 
   overlayHint.textContent = 'Гонка идёт... (круг 1 / ' + totalLaps + ')';
 
-  // Симуляція гонки
-  const skill = qualifiers.map(() => 0.85 + Math.random() * 0.3);
-  let jitter = qualifiers.map(() => 1);
-  let lastJitterUpdate = 0;
-  const baseSpeed = 1 / 9.0; // одне коло за ~9с при skill=1, jitter=1
+  // ── Симуляція гонки: плавна фізика прискорення/гальмування ──
+  const LAP_SECONDS = 9; // середній час кола
+  const baseSpeed = 1 / (LAP_SECONDS * 60); // прогрес за кадр (60fps)
+  const speed = qualifiers.map(() => baseSpeed * (0.85 + Math.random() * 0.3));
+  const targetSpeed = speed.slice();
+  const boostTimer = qualifiers.map(() => 30 + Math.random() * 120);
 
   let winnerIdx = -1;
   let lastTime = performance.now();
@@ -1589,15 +1647,19 @@ async function runRace(qualifiers, totalLaps) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       elapsed += dt;
-
-      if (now - lastJitterUpdate > 180) {
-        jitter = jitter.map(() => 0.55 + Math.random() * 0.9);
-        lastJitterUpdate = now;
-      }
+      const frames = dt * 60; // нормалізація до 60fps-кроків
 
       for (let i = 0; i < n; i++) {
         if (winnerIdx !== -1) continue;
-        progress[i] += baseSpeed * skill[i] * jitter[i] * dt;
+
+        boostTimer[i] -= frames;
+        if (boostTimer[i] <= 0) {
+          targetSpeed[i] = baseSpeed * (0.8 + Math.random() * 0.45);
+          boostTimer[i] = 30 + Math.random() * 120;
+        }
+        speed[i] += (targetSpeed[i] - speed[i]) * Math.min(0.02 * frames, 1);
+
+        progress[i] += speed[i] * frames;
         while (progress[i] >= 1) {
           progress[i] -= 1;
           laps[i]++;
@@ -1648,6 +1710,7 @@ async function runRace(qualifiers, totalLaps) {
 function closeRaceOverlay() {
   resetGameUI();
 }
+
 
 
 function renderGame(game) {
