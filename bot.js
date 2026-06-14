@@ -415,7 +415,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .revealing .cell, .done .cell { cursor: default; }
 
-  /* ── Гонка ────────────────────────────────── */
+  /* ── Гонка (3D) ───────────────────────────── */
   #race-overlay {
     position: fixed; inset: 0; z-index: 9990;
     background: rgba(5,5,8,0.94);
@@ -440,45 +440,35 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border-radius: 14px;
     overflow: hidden;
   }
+  #race-track-area canvas {
+    width: 100% !important; height: 100% !important; display: block;
+  }
   #race-overlay-controls { display: flex; gap: 10px; }
   #race-overlay-controls button { min-width: 140px; }
   .race-close-btn {
-    position: absolute; top: -50px; right: 0;
+    position: absolute; top: -50px; right: 0; z-index: 4;
     background: #1a1a1d; border: 1px solid #333; color: #888;
     width: 38px; height: 38px; border-radius: 8px;
     font-size: 18px; line-height: 1; cursor: pointer;
   }
   .race-close-btn:hover { border-color: #ff4444; color: #ff4444; }
 
-  #race-wrap { width: 100%; height: 100%; position: relative; }
-  #race-svg { width: 100%; height: 100%; display: block; }
-  .race-car {
-    position: absolute;
-    display: flex; flex-direction: column; align-items: center;
-    transform: translate(-50%, -50%);
-    transition: left 0.05s linear, top 0.05s linear;
-    z-index: 2;
-  }
-  .race-car .car-emoji {
-    font-size: 30px;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-  }
-  .race-car.winner .car-emoji {
-    animation: carWin 0.4s ease infinite alternate;
-  }
-  @keyframes carWin {
-    from { transform: scale(1); }
-    to   { transform: scale(1.35); }
-  }
-  .race-car .car-label {
+  #race-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .car-label-3d {
+    position: absolute; transform: translate(-50%, -100%);
+    display: flex; align-items: center; gap: 5px;
     font-size: 11px; color: #fff; background: rgba(0,0,0,0.65);
-    border-radius: 4px; padding: 1px 6px; margin-top: 2px;
-    white-space: nowrap; max-width: 100px; overflow: hidden; text-overflow: ellipsis;
+    border-radius: 4px; padding: 2px 7px;
+    white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
     font-family: 'Share Tech Mono', monospace;
+    transition: left 0.05s linear, top 0.05s linear;
   }
-  .race-car.winner .car-label {
+  .car-label-3d .swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .car-label-3d.winner {
     background: #ffd700; color: #000; font-weight: 700;
+    animation: winnerGlow 0.6s ease infinite alternate;
   }
+
   #race-countdown {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -669,6 +659,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { transform: translate(var(--tx),var(--ty)) scale(0); opacity: 0; }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
@@ -1165,8 +1157,7 @@ function pickRandom(arr, n) {
   return result;
 }
 
-// ── Режим "Гонка" ──────────────────────────────────────────────
-const CAR_EMOJIS = ['🚗','🚕','🚙','🚓','🚐','🏎️','🚜','🚛','🚒','🛻','🚔','🚖','🛺','🚚','🚌'];
+// ── Режим "Гонка" (3D, Three.js) ─────────────────────────────────
 
 async function startRaceGame() {
   const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 15);
@@ -1176,53 +1167,251 @@ async function startRaceGame() {
   await runRace(raceQualifiers, false);
 }
 
-// ── Побудова траси (схема "Гран-Прі" з есками і довгою прямою) ──
-// Базові точки центральної лінії траси (клас "Гран-Прі"), за годинниковою стрілкою.
-// viewBox 1200 x 700.
+// Базові точки центральної лінії траси (схема "Гран-Прі": есочки + довга пряма)
 const TRACK_POINTS = [
-  [1080, 620], // старт/фініш — права частина нижньої прямої
-  [220, 620],  // нижня пряма, ліворуч
-  [90, 540],   // поворот 1 (хвости зліва-низ)
+  [1080, 620], // старт/фініш
+  [220, 620],
+  [90, 540],
   [80, 430],
-  [180, 360],  // початок есок (сектор 1)
+  [180, 360],
   [70, 300],
   [190, 230],
-  [330, 290],  // вихід з есок
-  [470, 150],  // початок довгої прямої (DRS)
+  [330, 290],
+  [470, 150],
   [780, 70],
-  [1050, 150], // поворот у правій верхній частині
+  [1050, 150],
   [1130, 290],
-  [1020, 380], // еска у секторі 2
+  [1020, 380],
   [1140, 470],
-  [1040, 570], // підхід до фінішної прямої
+  [1040, 570],
 ];
 
-// Будує гладкий замкнений шлях через точки (Quadratic Bezier через середини відрізків)
-function smoothClosedPath(points) {
-  const n = points.length;
-  const mid = (a, b) => [(a[0]+b[0])/2, (a[1]+b[1])/2];
-  const m0 = mid(points[n-1], points[0]);
-  let d = 'M ' + m0[0] + ' ' + m0[1] + ' ';
-  for (let i = 0; i < n; i++) {
-    const p = points[i];
-    const next = points[(i+1) % n];
-    const m = mid(p, next);
-    d += 'Q ' + p[0] + ' ' + p[1] + ' ' + m[0] + ' ' + m[1] + ' ';
+// Кут орієнтації моделі машинки відносно напрямку руху.
+// glTF-моделі часто змодельовані "обличчям" по -Z — додаємо PI щоб розвернути на +напрямок руху.
+const CAR_YAW_OFFSET = Math.PI;
+const CAR_MODEL_URL = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/models/gltf/ferrari.glb';
+
+// 3D-стан поточної гонки (для очищення при reroll/закритті)
+let renderer3D = null, scene3D = null, camera3D = null;
+
+function disposeRace3D() {
+  if (renderer3D) {
+    try {
+      renderer3D.dispose();
+      if (renderer3D.domElement && renderer3D.domElement.parentNode) {
+        renderer3D.domElement.parentNode.removeChild(renderer3D.domElement);
+      }
+    } catch (e) {}
+    renderer3D = null;
   }
-  d += 'Z';
-  return d;
+  if (scene3D) {
+    scene3D.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose && obj.geometry.dispose();
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(m => {
+          if (m.map) m.map.dispose && m.map.dispose();
+          m.dispose && m.dispose();
+        });
+      }
+    });
+  }
+  scene3D = null;
+  camera3D = null;
 }
 
-function trackCentroid(points) {
-  return [
-    points.reduce((s,p)=>s+p[0],0) / points.length,
-    points.reduce((s,p)=>s+p[1],0) / points.length,
-  ];
+// Будує замкнену 3D-криву центральної лінії траси, центровану в (0,0,0)
+function buildTrackCurve3() {
+  const SCALE3D = 14;
+  const pts3 = TRACK_POINTS.map(([x, y]) => new THREE.Vector3(x / SCALE3D, 0, y / SCALE3D));
+  let cx = 0, cz = 0;
+  pts3.forEach(p => { cx += p.x; cz += p.z; });
+  cx /= pts3.length; cz /= pts3.length;
+  pts3.forEach(p => { p.x -= cx; p.z -= cz; });
+  return new THREE.CatmullRomCurve3(pts3, true, 'catmullrom', 0.5);
 }
 
-function scalePoints(points, factor) {
-  const [cx, cy] = trackCentroid(points);
-  return points.map(([x,y]) => [cx + (x-cx)*factor, cy + (y-cy)*factor]);
+// Текстура з канвасу (процедурна — без зовнішніх файлів)
+function makeCanvasTexture(draw, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// Будує траву, асфальт, борди (поребрики) та фінішну лінію
+function buildTrack3D(scene, curve) {
+  const STEPS = 220;
+  const ROAD_HALF = 6.5;
+  const CURB_W = 1.0;
+  const UP = new THREE.Vector3(0, 1, 0);
+
+  // ── Текстури ──
+  const asphaltTex = makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#3b3b40'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 70; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? '#46464c' : '#2f2f34';
+      ctx.beginPath();
+      ctx.arc(Math.random() * w, Math.random() * h, Math.random() * 1.6 + 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, 128, 128);
+  asphaltTex.repeat.set(STEPS / 6, 4);
+
+  const grassTex = makeCanvasTexture((ctx, w, h) => {
+    ctx.fillStyle = '#2d5a1e'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#356c24'; ctx.fillRect(0, 0, w / 2, h);
+  }, 32, 32);
+  grassTex.repeat.set(50, 50);
+
+  const finishTex = makeCanvasTexture((ctx, w, h) => {
+    const cell = 8;
+    for (let y = 0; y < h; y += cell) {
+      for (let x = 0; x < w; x += cell) {
+        ctx.fillStyle = ((x / cell + y / cell) % 2 === 0) ? '#fff' : '#111';
+        ctx.fillRect(x, y, cell, cell);
+      }
+    }
+  }, 32, 32);
+  finishTex.repeat.set((ROAD_HALF * 2 + CURB_W * 2) / 1.5, 1);
+
+  // ── Дорожнє покриття (стрічка вздовж кривої) ──
+  const positions = [], uvs = [], indices = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const u = (i % STEPS) / STEPS;
+    const p = curve.getPointAt(u);
+    const t = curve.getTangentAt(u);
+    const right = new THREE.Vector3().crossVectors(t, UP).normalize();
+    const left = p.clone().addScaledVector(right, ROAD_HALF);
+    const rgt  = p.clone().addScaledVector(right, -ROAD_HALF);
+    positions.push(left.x, 0, left.z, rgt.x, 0, rgt.z);
+    const v = (i / STEPS) * (STEPS / 6);
+    uvs.push(0, v, 1, v);
+  }
+  for (let i = 0; i < STEPS; i++) {
+    const a = i * 2, b = i * 2 + 1, c = (i + 1) * 2, d = (i + 1) * 2 + 1;
+    indices.push(a, b, c, b, d, c);
+  }
+  const roadGeo = new THREE.BufferGeometry();
+  roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  roadGeo.setIndex(indices);
+  roadGeo.computeVertexNormals();
+  scene.add(new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ map: asphaltTex })));
+
+  // ── Борди (червоно-білі поребрики) по обох краях ──
+  function buildCurb(side) {
+    const cpos = [], colors = [], cind = [];
+    for (let i = 0; i <= STEPS; i++) {
+      const u = (i % STEPS) / STEPS;
+      const p = curve.getPointAt(u);
+      const t = curve.getTangentAt(u);
+      const right = new THREE.Vector3().crossVectors(t, UP).normalize();
+      const inner = p.clone().addScaledVector(right, side * ROAD_HALF);
+      const outer = p.clone().addScaledVector(right, side * (ROAD_HALF + CURB_W));
+      cpos.push(inner.x, 0.02, inner.z, outer.x, 0.02, outer.z);
+      const stripe = (Math.floor(i / 4) % 2 === 0) ? [0.85, 0.1, 0.1] : [0.92, 0.92, 0.92];
+      colors.push(...stripe, ...stripe);
+    }
+    for (let i = 0; i < STEPS; i++) {
+      const a = i * 2, b = i * 2 + 1, c = (i + 1) * 2, d = (i + 1) * 2 + 1;
+      cind.push(a, b, c, b, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(cpos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    g.setIndex(cind);
+    g.computeVertexNormals();
+    scene.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true })));
+  }
+  buildCurb(1);
+  buildCurb(-1);
+
+  // ── Трава (фон) ──
+  const grassMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(300, 300),
+    new THREE.MeshStandardMaterial({ map: grassTex })
+  );
+  grassMesh.rotation.x = -Math.PI / 2;
+  grassMesh.position.y = -0.05;
+  scene.add(grassMesh);
+
+  // ── Фінішна лінія (шахматка) ──
+  const m0 = curve.getPointAt(0);
+  const t0 = curve.getTangentAt(0);
+  const right0 = new THREE.Vector3().crossVectors(t0, UP).normalize();
+  const finishMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_HALF * 2 + CURB_W * 2, 1.4),
+    new THREE.MeshStandardMaterial({ map: finishTex })
+  );
+  finishMesh.rotation.x = -Math.PI / 2;
+  finishMesh.rotation.y = Math.atan2(right0.x, right0.z);
+  finishMesh.position.set(m0.x, 0.03, m0.z);
+  scene.add(finishMesh);
+}
+
+// Простенька процедурна машинка (фолбек, якщо glTF не завантажився)
+function makeProceduralCar(colorHex) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.32, 0.95),
+    new THREE.MeshStandardMaterial({ color: colorHex })
+  );
+  body.position.y = 0.28;
+  g.add(body);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.26, 0.46),
+    new THREE.MeshStandardMaterial({ color: 0x222233 })
+  );
+  cabin.position.set(0, 0.52, -0.05);
+  g.add(cabin);
+
+  const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.14, 14);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  [[0.25, 0.16, 0.32], [0.25, 0.16, -0.32], [-0.25, 0.16, 0.32], [-0.25, 0.16, -0.32]].forEach(([x, y, z]) => {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, y, z);
+    g.add(w);
+  });
+  return g;
+}
+
+// Завантажує glTF-модель машинки з CDN з таймаутом; при невдачі повертає null (фолбек)
+function loadCarTemplate() {
+  return new Promise(resolve => {
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; resolve(null); } }, 6000);
+    try {
+      if (!window.THREE || !THREE.GLTFLoader) { clearTimeout(timer); resolve(null); return; }
+      new THREE.GLTFLoader().load(
+        CAR_MODEL_URL,
+        gltf => {
+          if (done) return;
+          done = true; clearTimeout(timer);
+          try {
+            const obj = gltf.scene;
+            const box = new THREE.Box3().setFromObject(obj);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            const scale = 1.1 / maxDim;
+            obj.scale.setScalar(scale);
+            obj.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+            const wrapper = new THREE.Group();
+            wrapper.add(obj);
+            resolve(wrapper);
+          } catch (e) { resolve(null); }
+        },
+        undefined,
+        () => { if (done) return; done = true; clearTimeout(timer); resolve(null); }
+      );
+    } catch (e) { resolve(null); }
+  });
 }
 
 async function runRace(qualifiers, isReroll) {
@@ -1236,147 +1425,124 @@ async function runRace(qualifiers, isReroll) {
 
   overlay.classList.add('visible');
   controls.style.display = 'none';
-  overlayHint.textContent = '';
+  overlayHint.textContent = 'Загрузка трассы...';
 
-  const n = qualifiers.length;
-  const VB_W = 1200, VB_H = 700;
-
-  const lanes = [];
-  const shrink = 0.018; // % розміру на одну дорожку
-  for (let i = 0; i < n; i++) {
-    const factor = 1 - i * shrink;
-    const pts = scalePoints(TRACK_POINTS, factor);
-    lanes.push(smoothClosedPath(pts));
-  }
-
-  const [tcx, tcy] = trackCentroid(TRACK_POINTS);
-  const innerFactor = 1 - Math.max(0, n - 1) * shrink;
-
-  // ── Реалістична траса: трава, асфальт, борди ──────────────
-  const outerBoundaryFactor = 1 + 0.03;
-  const innerBoundaryFactor = innerFactor - 0.03;
-  const outerBoundaryPath = smoothClosedPath(scalePoints(TRACK_POINTS, outerBoundaryFactor));
-  const innerBoundaryPath = smoothClosedPath(scalePoints(TRACK_POINTS, innerBoundaryFactor));
-
-  const trackDefs =
-    '<defs>' +
-      '<pattern id="grass-pattern" width="40" height="40" patternUnits="userSpaceOnUse">' +
-        '<rect width="40" height="40" fill="#2d5a1e"/>' +
-        '<rect width="20" height="40" fill="#356c24"/>' +
-      '</pattern>' +
-      '<pattern id="asphalt-pattern" width="26" height="26" patternUnits="userSpaceOnUse">' +
-        '<rect width="26" height="26" fill="#3b3b40"/>' +
-        '<circle cx="5" cy="6" r="1" fill="#4a4a50"/>' +
-        '<circle cx="17" cy="15" r="1.3" fill="#2f2f34"/>' +
-        '<circle cx="11" cy="21" r="0.8" fill="#4a4a50"/>' +
-        '<circle cx="22" cy="4" r="0.9" fill="#2f2f34"/>' +
-        '<circle cx="2" cy="18" r="0.7" fill="#2f2f34"/>' +
-      '</pattern>' +
-    '</defs>';
-
-  const grassSvg = '<rect x="0" y="0" width="' + VB_W + '" height="' + VB_H + '" fill="url(#grass-pattern)"/>';
-
-  const asphaltSvg =
-    '<path d="' + outerBoundaryPath + ' ' + innerBoundaryPath + '" fill="url(#asphalt-pattern)" fill-rule="evenodd"/>';
-
-  const curbWidth = 11;
-  const curbDash = 22;
-  const curbsSvg =
-    '<path d="' + outerBoundaryPath + '" fill="none" stroke="#e8e8e8" stroke-width="' + curbWidth + '" stroke-dasharray="' + curbDash + ' ' + curbDash + '"/>' +
-    '<path d="' + outerBoundaryPath + '" fill="none" stroke="#c0392b" stroke-width="' + curbWidth + '" stroke-dasharray="' + curbDash + ' ' + curbDash + '" stroke-dashoffset="' + curbDash + '"/>' +
-    '<path d="' + innerBoundaryPath + '" fill="none" stroke="#e8e8e8" stroke-width="' + curbWidth + '" stroke-dasharray="' + curbDash + ' ' + curbDash + '"/>' +
-    '<path d="' + innerBoundaryPath + '" fill="none" stroke="#c0392b" stroke-width="' + curbWidth + '" stroke-dasharray="' + curbDash + ' ' + curbDash + '" stroke-dashoffset="' + curbDash + '"/>';
-
-  // ── Фінішна лінія: чорно-білий "шахматка" на всю ширину трасу ──
-  const lastP = TRACK_POINTS[TRACK_POINTS.length-1];
-  const firstP = TRACK_POINTS[0];
-  const m0 = [(lastP[0]+firstP[0])/2, (lastP[1]+firstP[1])/2];
-
-  const outerFactor = 1;
-  const m0Outer = [tcx + (m0[0]-tcx)*outerFactor, tcy + (m0[1]-tcy)*outerFactor];
-  const m0Inner = [tcx + (m0[0]-tcx)*innerFactor, tcy + (m0[1]-tcy)*innerFactor];
-
-  const fCenterX = (m0Outer[0] + m0Inner[0]) / 2;
-  const fCenterY = (m0Outer[1] + m0Inner[1]) / 2;
-  const fLength = Math.max(24, Math.hypot(m0Outer[0]-m0Inner[0], m0Outer[1]-m0Inner[1]) + 24);
-  const fAngle = Math.atan2(m0Outer[1]-m0Inner[1], m0Outer[0]-m0Inner[0]) * 180 / Math.PI;
-  const fThickness = 16;
-
-  const finishCheckerDefs =
-    '<pattern id="finish-checker" width="16" height="16" patternUnits="userSpaceOnUse">' +
-      '<rect width="16" height="16" fill="#fff"/>' +
-      '<rect width="8" height="8" fill="#111"/>' +
-      '<rect x="8" y="8" width="8" height="8" fill="#111"/>' +
-    '</pattern>';
-
-  const finishLineSvg =
-    '<rect x="' + (fCenterX - fLength/2) + '" y="' + (fCenterY - fThickness/2) + '" ' +
-      'width="' + fLength + '" height="' + fThickness + '" ' +
-      'fill="url(#finish-checker)" stroke="#000" stroke-width="1.5" opacity="0.95" ' +
-      'transform="rotate(' + fAngle + ' ' + fCenterX + ' ' + fCenterY + ')"/>';
-
-  // Вставляємо pattern фінішу в загальні defs
-  const defsWithFinish = trackDefs.replace('</defs>', finishCheckerDefs + '</defs>');
-
+  disposeRace3D();
   area.innerHTML =
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
-    '<div id="race-wrap">' +
-      '<svg id="race-svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="none">' +
-        defsWithFinish +
-        grassSvg +
-        asphaltSvg +
-        curbsSvg +
-        finishLineSvg +
-      '</svg>' +
-      '<div id="race-cars"></div>' +
-      '<div id="race-countdown"></div>' +
-    '</div>';
+    '<div id="race-labels"></div>' +
+    '<div id="race-countdown"></div>';
 
-  // Реальні (приховані) path-елементи для getPointAtLength
-  const svgEl = document.getElementById('race-svg');
-  const hiddenPaths = lanes.map(d => {
-    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute('d', d);
-    p.setAttribute('fill', 'none');
-    p.setAttribute('stroke', 'none');
-    svgEl.appendChild(p);
-    return p;
-  });
+  if (!window.THREE) {
+    overlayHint.textContent = '3D недоступно (не загрузился Three.js)';
+    controls.style.display = 'flex';
+    phase = 'done';
+    return;
+  }
 
-  const carsBox = document.getElementById('race-cars');
-  const emojis = pickRandom(CAR_EMOJIS, Math.min(n, CAR_EMOJIS.length));
-  while (emojis.length < n) emojis.push(CAR_EMOJIS[emojis.length % CAR_EMOJIS.length]);
+  const n = qualifiers.length;
+  const width = area.clientWidth || 800;
+  const height = area.clientHeight || 467;
 
-  const carEls = qualifiers.map((name, i) => {
+  scene3D = new THREE.Scene();
+  scene3D.background = new THREE.Color(0x0a0a0c);
+  scene3D.fog = new THREE.Fog(0x0a0a0c, 55, 130);
+
+  camera3D = new THREE.PerspectiveCamera(45, width / height, 0.1, 500);
+
+  renderer3D = new THREE.WebGLRenderer({ antialias: true });
+  renderer3D.setSize(width, height);
+  renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  area.insertBefore(renderer3D.domElement, area.firstChild);
+
+  scene3D.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(30, 50, 20);
+  scene3D.add(sun);
+
+  const curve = buildTrackCurve3();
+  buildTrack3D(scene3D, curve);
+
+  const template = await loadCarTemplate();
+
+  const laneSpacing = 0.85;
+  const cars = [];
+  for (let i = 0; i < n; i++) {
+    const color = new THREE.Color().setHSL(i / n, 0.65, 0.55);
+    const car = template ? template.clone(true) : makeProceduralCar(color.getHex());
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.62, 24),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    car.add(ring);
+    scene3D.add(car);
+    cars.push(car);
+  }
+
+  const labelsBox = document.getElementById('race-labels');
+  const labelEls = qualifiers.map((name, i) => {
     const el = document.createElement('div');
-    el.className = 'race-car';
-    el.innerHTML = '<div class="car-emoji">' + emojis[i] + '</div><div class="car-label">' + escapeHtml(name) + '</div>';
-    carsBox.appendChild(el);
+    el.className = 'car-label-3d';
+    const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.55).getHexString();
+    el.innerHTML = '<span class="swatch" style="background:' + colorHex + '"></span>' + escapeHtml(name);
+    labelsBox.appendChild(el);
     return el;
   });
 
-  const lengths = hiddenPaths.map(p => p.getTotalLength());
+  const UP = new THREE.Vector3(0, 1, 0);
 
-  function position(progressArr) {
+  function positionCars(progressArr) {
     for (let i = 0; i < n; i++) {
-      const len = lengths[i] * (progressArr[i] % 1);
-      const pt = hiddenPaths[i].getPointAtLength(len);
-      carEls[i].style.left = (pt.x / VB_W * 100) + '%';
-      carEls[i].style.top  = (pt.y / VB_H * 100) + '%';
+      let u = progressArr[i] % 1;
+      if (u < 0) u += 1;
+      const p = curve.getPointAt(u);
+      const tangent = curve.getTangentAt(u);
+      const right = new THREE.Vector3().crossVectors(tangent, UP).normalize();
+      const offset = (i - (n - 1) / 2) * laneSpacing;
+      cars[i].position.copy(p).addScaledVector(right, offset);
+      cars[i].rotation.y = Math.atan2(tangent.x, tangent.z) + CAR_YAW_OFFSET;
+    }
+  }
+
+  function updateLabels() {
+    for (let i = 0; i < n; i++) {
+      const v = cars[i].position.clone();
+      v.y += 1.1;
+      v.project(camera3D);
+      if (v.z > 1 || v.z < -1) { labelEls[i].style.display = 'none'; continue; }
+      labelEls[i].style.display = '';
+      labelEls[i].style.left = ((v.x * 0.5 + 0.5) * width) + 'px';
+      labelEls[i].style.top  = ((-v.y * 0.5 + 0.5) * height) + 'px';
     }
   }
 
   const progress = new Array(n).fill(0);
-  position(progress);
+  positionCars(progress);
+
+  const camRadius = 38, camHeight = 30;
+  let camAngle = 0;
+
+  function renderFrame() {
+    camAngle += 0.0018;
+    camera3D.position.set(Math.cos(camAngle) * camRadius, camHeight, Math.sin(camAngle) * camRadius);
+    camera3D.lookAt(0, 0, 0);
+    updateLabels();
+    renderer3D.render(scene3D, camera3D);
+  }
+
+  renderFrame();
 
   // Зворотний відлік
   const cd = document.getElementById('race-countdown');
-  for (const txt of ['3','2','1','🏁 СТАРТ!']) {
+  overlayHint.textContent = '';
+  for (const txt of ['3', '2', '1', '🏁 СТАРТ!']) {
     cd.textContent = txt;
     cd.classList.remove('pulse');
     void cd.offsetWidth;
     cd.classList.add('pulse');
-    await sleep(700);
+    for (let k = 0; k < 14; k++) { renderFrame(); await sleep(50); }
   }
   cd.textContent = '';
 
@@ -1386,7 +1552,7 @@ async function runRace(qualifiers, isReroll) {
   const skill = qualifiers.map(() => 0.85 + Math.random() * 0.3);
   let jitter = qualifiers.map(() => 1);
   let lastJitterUpdate = 0;
-  const baseSpeed = 1 / 9.0; // повне коло за ~9с при skill=1, jitter=1
+  const baseSpeed = 1 / 9.0;
 
   let winnerIdx = -1;
   let lastTime = performance.now();
@@ -1410,13 +1576,14 @@ async function runRace(qualifiers, isReroll) {
         }
       }
 
-      position(progress);
+      positionCars(progress);
+      renderFrame();
 
       if (winnerIdx !== -1 || elapsed > 16) {
         if (winnerIdx === -1) {
           winnerIdx = progress.indexOf(Math.max(...progress));
         }
-        carEls[winnerIdx].classList.add('winner');
+        labelEls[winnerIdx].classList.add('winner');
         raceAnimId = null;
         resolve();
         return;
