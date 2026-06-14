@@ -1294,15 +1294,15 @@ function makeCanvasTexture(draw, w, h) {
 // і проблем із самоперетинами/телепортацією)
 function buildTrack3D(scene, curve) {
   const finishTex = makeCanvasTexture((ctx, w, h) => {
-    const cell = 8;
+    const cell = 32;
     for (let y = 0; y < h; y += cell) {
       for (let x = 0; x < w; x += cell) {
         ctx.fillStyle = ((x / cell + y / cell) % 2 === 0) ? '#fff' : '#111';
         ctx.fillRect(x, y, cell, cell);
       }
     }
-  }, 32, 32);
-  finishTex.repeat.set((ROAD_RADIUS * 2) / 1.5, 1);
+  }, 64, 64);
+  finishTex.repeat.set(6, 1);
 
   // ── Світлий контур траси (трохи ширший, нижче) ──
   const edgeGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS + 0.5, 16, true);
@@ -1497,7 +1497,7 @@ async function runRace(qualifiers, totalLaps) {
   const margin = ROAD_RADIUS + 2.5;
   const boundRadius = Math.hypot(Math.max(Math.abs(minX), Math.abs(maxX)) + margin, Math.max(Math.abs(minZ), Math.abs(maxZ)) + margin);
   const elevation = 38 * Math.PI / 180;
-  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 0.85;
+  const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 0.425;
   camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
   camera3D.lookAt(0, 0, 0);
   camera3D.updateProjectionMatrix();
@@ -1619,7 +1619,15 @@ async function runRace(qualifiers, totalLaps) {
     cd.classList.remove('pulse');
     void cd.offsetWidth;
     cd.classList.add('pulse');
-    for (let k = 0; k < 14; k++) { renderFrame(); await sleep(50); }
+    await new Promise(resolve => {
+      const endTime = performance.now() + 700;
+      function cdFrame(now) {
+        renderFrame();
+        if (now < endTime) requestAnimationFrame(cdFrame);
+        else resolve();
+      }
+      requestAnimationFrame(cdFrame);
+    });
   }
   cd.textContent = '';
 
