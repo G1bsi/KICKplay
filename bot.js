@@ -1557,8 +1557,8 @@ async function runRace(qualifiers, totalLaps) {
       const right = new THREE.Vector3().crossVectors(tangent, UP).normalize();
       const offset = (i - (n - 1) / 2) * laneSpacing;
       const pos = p.clone().addScaledVector(right, offset);
+      pos.y = 0.55;
       cars[i].position.copy(pos);
-      cars[i].position.y = 0.55;
       cars[i].lookAt(pos.clone().add(tangent));
     }
   }
