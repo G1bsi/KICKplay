@@ -456,46 +456,56 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #race-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 
   #race-standings {
-    position: absolute; top: 12px; left: 12px; z-index: 4;
-    background: rgba(10,10,12,0.78);
-    border: 1px solid #2a2a2e; border-radius: 10px;
-    padding: 10px 12px; min-width: 170px;
-    font-family: 'Share Tech Mono', monospace;
-    backdrop-filter: blur(3px);
+    width: 220px; flex-shrink: 0;
+    background: rgba(15,15,15,0.92);
+    border-left: 6px solid #e10600;
+    border-radius: 8px;
+    padding: 15px;
+    font-family: 'Rajdhani', sans-serif;
+    overflow-y: auto;
   }
   .standings-title {
-    font-size: 11px; color: #ffd700; letter-spacing: 2px;
-    text-transform: uppercase; margin-bottom: 6px; text-align: center;
+    font-size: 18px; font-weight: 900; color: #fff;
+    text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 10px; margin-bottom: 8px;
   }
   .standing-row {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: #ddd; padding: 2px 0;
+    display: flex; align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-weight: 600; font-size: 14px; color: #fff;
   }
-  .standing-row.winner { color: #ffd700; font-weight: 700; }
+  .standing-row.winner { color: #ffd700; }
   .standing-pos {
-    width: 16px; text-align: right; color: #888; flex-shrink: 0;
+    width: 25px; text-align: center; margin-right: 10px;
+    color: #aaa; font-size: 12px; flex-shrink: 0;
   }
   .standing-row.winner .standing-pos { color: #ffd700; }
   .standing-swatch {
-    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+    width: 8px; height: 16px; margin-right: 12px; border-radius: 2px; flex-shrink: 0;
   }
   .standing-name {
-    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px;
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; letter-spacing: 0.5px;
   }
-  .standing-lap { color: #666; font-size: 10px; flex-shrink: 0; }
+  .standing-lap { font-size: 12px; color: #888; flex-shrink: 0; }
   .standing-row.winner .standing-lap { color: #ffd700; }
+
   .car-label-3d {
     position: absolute; transform: translate(-50%, -100%);
-    display: flex; align-items: center; gap: 5px;
-    font-size: 11px; color: #fff; background: rgba(0,0,0,0.65);
-    border-radius: 4px; padding: 2px 7px;
-    white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
-    font-family: 'Share Tech Mono', monospace;
+    background: rgba(10,10,10,0.85); color: #fff;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 13px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+    font-family: 'Rajdhani', sans-serif;
+    border-bottom: 3px solid var(--car-color, #888);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.6);
     transition: left 0.05s linear, top 0.05s linear;
   }
-  .car-label-3d .swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .car-label-3d.winner {
-    background: #ffd700; color: #000; font-weight: 700;
+    background: #ffd700; color: #000; border-bottom-color: #ffd700;
     animation: winnerGlow 0.6s ease infinite alternate;
   }
 
@@ -690,7 +700,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
@@ -1221,11 +1231,14 @@ const TRACK_POINTS_2D = [
 ];
 
 const ROAD_RADIUS = 7.5;  // радіус дорожнього покриття (TubeGeometry)
-const CURB_RADIUS = 8.6;  // радіус поребрика (трохи ширше за дорогу)
 
-let renderer3D = null, scene3D = null, camera3D = null;
+let renderer3D = null, scene3D = null, camera3D = null, orbitControls3D = null;
 
 function disposeRace3D() {
+  if (orbitControls3D) {
+    try { orbitControls3D.dispose(); } catch (e) {}
+    orbitControls3D = null;
+  }
   if (renderer3D) {
     try {
       renderer3D.dispose();
@@ -1277,32 +1290,6 @@ function makeCanvasTexture(draw, w, h) {
 // (TubeGeometry сама рахує орієнтацію вздовж кривої — без ручних "right"-векторів
 // і проблем із самоперетинами/телепортацією)
 function buildTrack3D(scene, curve) {
-  const asphaltTex = makeCanvasTexture((ctx, w, h) => {
-    ctx.fillStyle = '#3b3b40'; ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 70; i++) {
-      ctx.fillStyle = Math.random() > 0.5 ? '#46464c' : '#2f2f34';
-      ctx.beginPath();
-      ctx.arc(Math.random() * w, Math.random() * h, Math.random() * 1.6 + 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }, 128, 128);
-  asphaltTex.repeat.set(60, 1);
-
-  const curbTex = makeCanvasTexture((ctx, w, h) => {
-    const cell = 16;
-    for (let x = 0; x < w; x += cell) {
-      ctx.fillStyle = (Math.floor(x / cell) % 2 === 0) ? '#d62828' : '#f4f4f4';
-      ctx.fillRect(x, 0, cell, h);
-    }
-  }, 256, 16);
-  curbTex.repeat.set(90, 1);
-
-  const grassTex = makeCanvasTexture((ctx, w, h) => {
-    ctx.fillStyle = '#2d5a1e'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#356c24'; ctx.fillRect(0, 0, w / 2, h);
-  }, 32, 32);
-  grassTex.repeat.set(60, 60);
-
   const finishTex = makeCanvasTexture((ctx, w, h) => {
     const cell = 8;
     for (let y = 0; y < h; y += cell) {
@@ -1314,28 +1301,19 @@ function buildTrack3D(scene, curve) {
   }, 32, 32);
   finishTex.repeat.set((ROAD_RADIUS * 2) / 1.5, 1);
 
-  // ── Поребрик (ширший, нижче) ──
-  const curbGeo = new THREE.TubeGeometry(curve, 400, CURB_RADIUS, 16, true);
-  curbGeo.scale(1, 0.03, 1);
-  const curbMesh = new THREE.Mesh(curbGeo, new THREE.MeshStandardMaterial({ map: curbTex }));
-  curbMesh.position.y = 0.05;
-  scene.add(curbMesh);
+  // ── Світлий контур траси (трохи ширший, нижче) ──
+  const edgeGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS + 0.5, 16, true);
+  edgeGeo.scale(1, 0.03, 1);
+  const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
+  edgeMesh.position.y = 0.05;
+  scene.add(edgeMesh);
 
-  // ── Асфальт (вужчий, трохи вище) ──
+  // ── Дорога: рівний сірий колір, без текстур та бортиків ──
   const roadGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS, 16, true);
   roadGeo.scale(1, 0.04, 1);
-  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ map: asphaltTex }));
+  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.9 }));
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
-
-  // ── Трава (фон) ──
-  const grassMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(800, 800),
-    new THREE.MeshStandardMaterial({ map: grassTex })
-  );
-  grassMesh.rotation.x = -Math.PI / 2;
-  grassMesh.position.y = -0.05;
-  scene.add(grassMesh);
 
   // ── Фінішна лінія (шахматка) ──
   const UP = new THREE.Vector3(0, 1, 0);
@@ -1512,7 +1490,7 @@ async function runRace(qualifiers, totalLaps) {
     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
     minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
   });
-  const margin = CURB_RADIUS + 2;
+  const margin = ROAD_RADIUS + 2.5;
   const boundRadius = Math.hypot(Math.max(Math.abs(minX), Math.abs(maxX)) + margin, Math.max(Math.abs(minZ), Math.abs(maxZ)) + margin);
   const elevation = 55 * Math.PI / 180;
   const camDist = boundRadius / Math.tan((camera3D.fov / 2) * Math.PI / 180) * 1.05;
@@ -1520,6 +1498,19 @@ async function runRace(qualifiers, totalLaps) {
   camera3D.lookAt(0, 0, 0);
   camera3D.updateProjectionMatrix();
   camera3D.updateMatrixWorld(true);
+
+  // ── Керування камерою: ЛКМ — обертати, колесо — зум ──
+  if (window.THREE && THREE.OrbitControls) {
+    orbitControls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
+    orbitControls3D.enableDamping = true;
+    orbitControls3D.dampingFactor = 0.08;
+    orbitControls3D.target.set(0, 0, 0);
+    orbitControls3D.maxPolarAngle = Math.PI / 2 - 0.02;
+    orbitControls3D.minDistance = camDist * 0.2;
+    orbitControls3D.maxDistance = camDist * 2.5;
+    orbitControls3D.enablePan = false;
+    orbitControls3D.update();
+  }
 
   // ── Машинки ──
   const laneSpacing = 0.9;
@@ -1543,7 +1534,8 @@ async function runRace(qualifiers, totalLaps) {
     const el = document.createElement('div');
     el.className = 'car-label-3d';
     const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString();
-    el.innerHTML = '<span class="swatch" style="background:' + colorHex + '"></span>' + escapeHtml(name);
+    el.style.setProperty('--car-color', colorHex);
+    el.textContent = name;
     labelsBox.appendChild(el);
     return el;
   });
@@ -1608,6 +1600,7 @@ async function runRace(qualifiers, totalLaps) {
   renderStandings(progress, laps, -1);
 
   function renderFrame() {
+    if (orbitControls3D) orbitControls3D.update();
     updateLabels();
     renderer3D.render(scene3D, camera3D);
   }
