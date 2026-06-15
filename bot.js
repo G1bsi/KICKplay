@@ -12,8 +12,6 @@ const CHATROOM_ID = 235222;
 const STATE_FILE  = path.join(__dirname, 'marble_state.json');
 
 // Пароль береться з Environment Variables на Render:
-//   Render Dashboard → твій сервіс → Environment → Add variable
-//   Key: WEB_PASSWORD    Value: твій_пароль
 const WEB_PASSWORD = process.env.WEB_PASSWORD;
 if (!WEB_PASSWORD) {
   console.error('╔══════════════════════════════════════════════════╗');
@@ -33,8 +31,8 @@ const PUSHER_WS =
 let rafflePlayers   = [];
 let raffleAccepting = false;
 let raffleJoinCmd   = '';
-let raffleGame      = null; // активна гра (не зберігається на диск)
-let raffleChecks    = {};   // { username: { seconds, startedAt, active, message, messageAt } }
+let raffleGame      = null; 
+let raffleChecks    = {};   
 
 // Активні сесії (token → expiry)
 const sessions = new Map();
@@ -93,9 +91,15 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 <title>Kick Marbles — Вход</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&display=swap');
+  :root {
+    --kick: #53fc18;
+    --bg-main: #070907;
+    --panel: rgba(15, 20, 16, 0.8);
+    --border: #1b261b;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0a0a0a;
+    background: radial-gradient(circle at top, #111a11 0%, var(--bg-main) 100%);
     color: #fff;
     font-family: 'Share Tech Mono', monospace;
     min-height: 100vh;
@@ -104,53 +108,60 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     justify-content: center;
   }
   .box {
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 14px;
+    background: var(--panel);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
     padding: 40px;
-    width: 320px;
+    width: 340px;
     text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
-  h1 { font-family: 'Rajdhani', sans-serif; font-size: 22px; color: #53fc18; margin-bottom: 6px; }
-  .sub { color: #444; font-size: 11px; margin-bottom: 28px; }
+  h1 { font-family: 'Rajdhani', sans-serif; font-size: 26px; color: var(--kick); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;}
+  .sub { color: #888; font-size: 12px; margin-bottom: 30px; letter-spacing: 0.5px;}
   input {
     width: 100%;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #2a3a2a;
     border-radius: 8px;
-    padding: 11px 14px;
+    padding: 14px;
     color: #fff;
     font-family: 'Share Tech Mono', monospace;
-    font-size: 14px;
-    margin-bottom: 12px;
+    font-size: 15px;
+    margin-bottom: 16px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.3s ease;
   }
-  input:focus { border-color: #53fc18; }
+  input:focus { border-color: var(--kick); box-shadow: 0 0 10px rgba(83, 252, 24, 0.2); }
   button {
     width: 100%;
-    background: #53fc18;
+    background: var(--kick);
     color: #000;
     border: none;
     border-radius: 8px;
-    padding: 11px;
+    padding: 14px;
     font-family: 'Rajdhani', sans-serif;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
     cursor: pointer;
-    letter-spacing: 0.5px;
-    transition: opacity 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(83, 252, 24, 0.2);
   }
-  button:hover { opacity: 0.85; }
-  .err { color: #ff4444; font-size: 11px; margin-top: 10px; min-height: 16px; }
+  button:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(83, 252, 24, 0.4); 
+  }
+  .err { color: #ff4444; font-size: 12px; margin-top: 12px; min-height: 16px; }
 </style>
 </head>
 <body>
 <div class="box">
-  <h1>🎮 Marbles Bot</h1>
-  <div class="sub">только для стримера</div>
-  <input type="password" id="pw" placeholder="пароль..." onkeydown="if(event.key==='Enter')login()">
-  <button onclick="login()">Войти</button>
+  <h1>🎮 Marbles Dash</h1>
+  <div class="sub">STREAMER ACCESS ONLY</div>
+  <input type="password" id="pw" placeholder="Введите пароль..." onkeydown="if(event.key==='Enter')login()">
+  <button onclick="login()">Подключиться</button>
   <div class="err" id="err"></div>
 </div>
 <script>
@@ -168,7 +179,7 @@ async function login() {
     location.reload();
   } else {
     const err = document.getElementById('err');
-    err.textContent = 'Неверный пароль';
+    err.textContent = 'Доступ запрещен. Неверный пароль.';
     setTimeout(() => err.textContent = '', 3000);
     document.getElementById('pw').value = '';
     document.getElementById('pw').focus();
@@ -185,166 +196,212 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Розыгрыш — Cash Hunt</title>
+<title>Kick Studio — Розыгрыши</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;900&family=Share+Tech+Mono&display=swap');
+  
+  :root {
+    --kick: #53fc18;
+    --kick-dark: #1a4a0a;
+    --bg-main: #060806;
+    --panel-bg: #0d120d;
+    --panel-border: #1a261a;
+    --text-main: #e8e8e8;
+    --text-muted: #889288;
+    --gold: #ffd700;
+    --red: #ff4a4a;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  
   body {
-    background: #0e0e10;
-    color: #e8e8e8;
+    background: var(--bg-main);
+    color: var(--text-main);
     font-family: 'Rajdhani', sans-serif;
     min-height: 100vh;
-    padding: 16px;
+    padding: 20px;
+    background-image: 
+      radial-gradient(circle at 15% 50%, rgba(83, 252, 24, 0.03), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(83, 252, 24, 0.03), transparent 25%);
   }
-  .topbar {
-    max-width: 1400px; margin: 0 auto 16px;
-    background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
-    padding: 14px 20px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .topbar .title { font-size: 17px; color: #aaa; }
-  .topbar .title b { color: #ffd700; font-size: 19px; letter-spacing: 1px; }
-  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-left:8px; background:#444; }
-  .dot.open { background:#53fc18; box-shadow:0 0 8px #53fc18; }
-  .dot.closed { background:#ff4444; }
 
+  /* ── Хедер ──────────────────────────────── */
+  .topbar {
+    max-width: 1400px; margin: 0 auto 20px;
+    background: var(--panel-bg); 
+    border: 1px solid var(--panel-border); 
+    border-radius: 16px;
+    padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .topbar .logo {
+    font-size: 20px; font-weight: 900; color: var(--kick); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .topbar .title { font-size: 15px; color: var(--text-muted); display: flex; align-items: center; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:10px; background:#444; transition: 0.3s; }
+  .dot.open { background: var(--kick); box-shadow: 0 0 10px var(--kick); }
+  .dot.closed { background: var(--red); box-shadow: 0 0 10px rgba(255, 74, 74, 0.4); }
+
+  /* ── Сітка Layout ──────────────────────── */
   .layout {
     max-width: 1400px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 340px 1fr;
-    gap: 16px;
+    grid-template-columns: 360px 1fr;
+    gap: 20px;
   }
   @media (max-width: 1100px) {
     .layout { grid-template-columns: 1fr; }
   }
 
   .col {
-    background: #1a1a1d; border: 1px solid #2a2a2e; border-radius: 12px;
-    padding: 18px 20px;
+    background: var(--panel-bg); 
+    border: 1px solid var(--panel-border); 
+    border-radius: 16px;
+    padding: 24px;
     display: flex; flex-direction: column;
-    height: calc(100vh - 90px);
+    height: calc(100vh - 100px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
   }
+  
   .col-title {
-    font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 14px;
+    font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 20px;
     display: flex; align-items: center; justify-content: space-between;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-  .col-title .count { color: #ffd700; }
+  .col-title .count { color: var(--kick); font-size: 18px; }
 
   /* ── Поля вводу ──────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
-  .field-row { display: flex; gap: 10px; }
-
-  /* ── Перемикач режиму гри ─────────────────── */
-  .mode-switch { display: flex; gap: 8px; }
-  .mode-btn {
-    flex: 1; padding: 9px 10px; border-radius: 8px; border: 1px solid #333;
-    background: #0e0e10; color: #888; font-size: 13px; font-weight: 700;
-    font-family: 'Rajdhani', sans-serif; cursor: pointer; transition: all 0.2s;
-  }
-  .mode-btn:hover { border-color: #555; color: #ccc; }
-  .mode-btn.active { background: #1a2a1a; border-color: #53fc18; color: #53fc18; }
-  .field.small { flex: 0 0 100px; }
-  label.field-label { font-size: 12px; color: #999; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .field-row { display: flex; gap: 12px; }
+  .field.small { flex: 0 0 110px; }
+  label.field-label { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
   input[type=text], input[type=number] {
-    background: #0e0e10; border: 1px solid #333; border-radius: 8px;
-    padding: 10px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
-    font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 10px;
+    padding: 12px 14px; color: #fff; font-family: 'Share Tech Mono', monospace;
+    font-size: 15px; outline: none; transition: all 0.2s; width: 100%;
   }
-  input:focus { border-color: #ffd700; }
-  #raffle-cmd { color: #ffd700; }
+  input:focus { border-color: var(--kick); box-shadow: inset 0 0 8px rgba(83,252,24,0.1); }
+  
+  #raffle-cmd { color: var(--kick); font-weight: bold; }
   #winners-count, #confirm-seconds { text-align: center; }
 
+  /* ── Перемикач режиму гри ─────────────────── */
+  .mode-switch { display: flex; gap: 8px; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 12px; border: 1px solid var(--panel-border); }
+  .mode-btn {
+    flex: 1; padding: 10px 8px; border-radius: 8px; border: none;
+    background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 700;
+    font-family: 'Rajdhani', sans-serif; cursor: pointer; transition: all 0.3s;
+    text-transform: uppercase;
+  }
+  .mode-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .mode-btn.active { background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 10px rgba(83,252,24,0.1); }
+
   /* ── Перемикачі (toggle) ─────────────────── */
-  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .toggle-row .toggle-label { font-size: 14px; color: #ddd; flex: 1; }
-  .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.02); }
+  .toggle-row .toggle-label { font-size: 15px; color: #ccc; flex: 1; font-weight: 600; }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
     position: absolute; cursor: pointer; inset: 0;
-    background: #333; border-radius: 22px; transition: 0.2s;
+    background: #222; border-radius: 24px; transition: 0.3s; border: 1px solid #333;
   }
   .slider:before {
     content: ''; position: absolute; height: 16px; width: 16px;
-    left: 3px; bottom: 3px; background: #ccc; border-radius: 50%; transition: 0.2s;
+    left: 3px; bottom: 3px; background: #888; border-radius: 50%; transition: 0.3s;
   }
-  .switch input:checked + .slider { background: #1a4a0a; }
-  .switch input:disabled + .slider { opacity: 0.35; cursor: not-allowed; }
-  .switch input:checked + .slider:before { transform: translateX(18px); background: #53fc18; }
+  .switch input:checked + .slider { background: var(--kick-dark); border-color: var(--kick); }
+  .switch input:checked + .slider:before { transform: translateX(20px); background: var(--kick); box-shadow: 0 0 5px var(--kick); }
 
   /* ── Кнопки ──────────────────────────────── */
   button {
-    padding: 10px 16px; border: none; border-radius: 8px; font-size: 14px;
+    padding: 12px 16px; border: none; border-radius: 10px; font-size: 15px;
     font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif;
-    letter-spacing: 0.5px; transition: opacity 0.2s, transform 0.1s;
+    text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;
   }
-  button:hover  { opacity: 0.85; }
+  button:hover  { transform: translateY(-2px); }
   button:active { transform: scale(0.97); }
-  button:disabled { opacity: 0.25; cursor: not-allowed; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 
-  .btn-primary { background: #53fc18; color: #000; width: 100%; padding: 14px; font-size: 17px; }
-  .btn-gold   { background: #ffd700; color: #000; }
-  .btn-green  { background: #1a2a1a; color: #53fc18; border: 1px solid #2a5a2a; }
+  .btn-primary { 
+    background: var(--kick); color: #000; width: 100%; padding: 16px; font-size: 18px; 
+    box-shadow: 0 4px 15px rgba(83,252,24,0.15); 
+  }
+  .btn-primary:hover { box-shadow: 0 6px 20px rgba(83,252,24,0.3); }
+  
+  .btn-gold   { background: var(--gold); color: #000; box-shadow: 0 4px 15px rgba(255,215,0,0.15); }
+  .btn-gold:hover { box-shadow: 0 6px 20px rgba(255,215,0,0.3); }
+  
+  .btn-green  { background: rgba(83,252,24,0.1); color: var(--kick); border: 1px solid rgba(83,252,24,0.3); }
+  .btn-green:hover { background: rgba(83,252,24,0.2); }
+  
   .btn-orange { background: #e67e22; color: #fff; }
-  .btn-red    { background: #c0392b; color: #fff; width: 100%; }
-  .btn-dark   { background: #232327; color: #ccc; border: 1px solid #333; }
-  .btn-small  { padding: 6px 12px; font-size: 12px; }
+  
+  .btn-red    { background: rgba(255,74,74,0.1); color: var(--red); border: 1px solid rgba(255,74,74,0.3); width: 100%; }
+  .btn-red:hover { background: rgba(255,74,74,0.2); }
+  
+  .btn-dark   { background: rgba(255,255,255,0.05); color: #ccc; border: 1px solid rgba(255,255,255,0.1); }
+  .btn-dark:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  
+  .btn-small  { padding: 8px 12px; font-size: 13px; }
 
-  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn-row { display: flex; gap: 10px; margin-top: 10px; }
   .btn-row button { flex: 1; }
 
-  .divider { height: 1px; background: #2a2a2e; margin: 14px 0; }
+  .limit-info { font-size: 13px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; margin-bottom: 16px; text-align: right; }
+  .limit-info b { color: var(--kick); font-size: 15px; }
 
-  /* ── Прогрес-бар лімиту ──────────────────── */
-  .limit-info { font-size: 12px; color: #888; font-family: 'Share Tech Mono', monospace; margin-bottom: 12px; text-align: right; }
-  .limit-info b { color: #ffd700; }
-
-  #saved-msg, #test-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; color: #555; margin-top: 4px; display:block; }
+  #saved-msg, #test-msg { font-size: 12px; font-family: 'Share Tech Mono', monospace; margin-top: 4px; display:block; height: 15px; }
 
   /* ── Тестова панель ──────────────────────── */
-  details.test-section { margin-top: 14px; }
-  details.test-section summary { font-size: 12px; color: #777; cursor: pointer; font-family: 'Share Tech Mono', monospace; }
-  details.test-section .field-row { margin-top: 10px; }
+  details.test-section { margin-top: 16px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid var(--panel-border); }
+  details.test-section summary { font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: 'Share Tech Mono', monospace; outline: none; }
+  details.test-section summary:hover { color: #ccc; }
+  details.test-section .field-row { margin-top: 12px; }
 
-  /* ── Середня колонка / box ───────────────── */
+  /* ── Списки / Бокси ───────────────── */
   .box {
-    background: #0e0e10; border: 1px solid #2a2a2e; border-radius: 10px;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 12px;
     flex: 1; min-height: 0; overflow-y: auto;
-    padding: 8px;
+    padding: 12px;
     min-height: 200px;
   }
-  .box::-webkit-scrollbar { width: 8px; }
-  .box::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  .box::-webkit-scrollbar { width: 6px; }
+  .box::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  .box::-webkit-scrollbar-track { background: transparent; }
 
   .participants-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 2px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
   }
   .participant-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px; border-radius: 6px; font-size: 13px;
-    color: #ddd;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 8px; font-size: 14px;
+    color: #ddd; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.02);
+    transition: all 0.2s;
   }
-  .participant-row:nth-child(6n+1),
-  .participant-row:nth-child(6n+2),
-  .participant-row:nth-child(6n+3) { background: #161618; }
-  .participant-row .p-num { color: #444; font-family: 'Share Tech Mono', monospace; font-size: 10px; width: 24px; flex-shrink: 0; }
+  .participant-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+  .participant-row .p-num { color: var(--text-muted); font-family: 'Share Tech Mono', monospace; font-size: 11px; width: 24px; flex-shrink: 0; }
 
-  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
+  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 15px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
 
   /* ── Сітка Cash Hunt ─────────────────────── */
-  #hint { text-align: center; font-size: 14px; color: #aaa; margin: 12px 0 4px; font-family: 'Share Tech Mono', monospace; min-height: 18px; }
-  #hint b { color: #ffd700; }
-  #progress { text-align: center; font-size: 14px; color: #aaa; margin-bottom: 8px; font-family: 'Share Tech Mono', monospace; min-height: 18px; }
-  #progress b { color: #ffd700; }
+  #hint { text-align: center; font-size: 16px; color: #ccc; margin: 10px 0 6px; font-family: 'Share Tech Mono', monospace; min-height: 20px; letter-spacing: 0.5px;}
+  #hint b { color: var(--kick); font-size: 18px; }
+  #progress { text-align: center; font-size: 15px; color: var(--text-muted); margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; min-height: 20px; }
+  #progress b { color: var(--kick); }
 
   .grid {
     display: grid;
-    gap: 4px;
+    gap: 8px;
     justify-content: center;
     align-content: center;
     height: 100%;
+    padding: 10px;
   }
 
   .cell {
@@ -352,354 +409,327 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     width: 100%;
     position: relative;
     cursor: pointer;
-    perspective: 400px;
+    perspective: 800px;
   }
   .cell-inner {
     width: 100%; height: 100%;
     position: relative;
     transform-style: preserve-3d;
-    transition: transform 0.5s;
+    transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
   }
   .cell.flipped .cell-inner { transform: rotateY(180deg); }
   .cell-face {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 6px;
+    border-radius: 12px;
     backface-visibility: hidden;
     font-family: 'Rajdhani', sans-serif;
     font-weight: 700;
     text-align: center;
     overflow: hidden;
-    padding: 2px;
+    padding: 4px;
   }
   .cell-front {
-    background: linear-gradient(145deg, #2a1e00, #1a1200);
-    border: 2px solid #4a3a00;
-    color: #ffd700;
-    font-size: 22px;
-    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+    background: linear-gradient(145deg, #162016, #0a100a);
+    border: 2px solid var(--panel-border);
+    color: var(--kick);
+    font-size: 26px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    transition: all 0.3s;
+  }
+  .cell-front:hover {
+    border-color: rgba(83,252,24,0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(83,252,24,0.1);
   }
   .cell-back {
     transform: rotateY(180deg);
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    color: #ccc;
-    font-size: 10px;
+    background: #111;
+    border: 2px solid #333;
+    color: #fff;
+    font-size: 13px;
     line-height: 1.2;
     word-break: break-word;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
   }
   .cell.selected .cell-front {
-    border-color: #ffd700;
-    box-shadow: 0 0 14px rgba(255,215,0,0.7), inset 0 0 14px rgba(255,215,0,0.25);
-  }
-  .cell.selected .cell-front::after {
-    content: '★'; position: absolute; top: 2px; right: 4px;
-    font-size: 12px; color: #ffd700;
+    border-color: var(--kick);
+    background: linear-gradient(145deg, rgba(83,252,24,0.2), rgba(20,60,10,0.8));
+    box-shadow: 0 0 20px rgba(83,252,24,0.4), inset 0 0 10px rgba(83,252,24,0.2);
+    transform: scale(1.05);
   }
   .cell.winner .cell-back {
-    background: linear-gradient(145deg, #ffd700, #ff9900);
-    border: 1px solid #ffec80;
+    background: linear-gradient(145deg, var(--kick), #28a708);
+    border: 2px solid #a4ff82;
     color: #000;
     font-weight: 900;
-    animation: winnerGlow 0.6s ease infinite alternate;
+    font-size: 16px;
+    animation: winnerGlow 1s ease infinite alternate;
   }
   @keyframes winnerGlow {
-    from { box-shadow: 0 0 6px rgba(255,215,0,0.4); }
-    to   { box-shadow: 0 0 16px rgba(255,215,0,0.9); }
+    from { box-shadow: 0 0 10px rgba(83,252,24,0.4); }
+    to   { box-shadow: 0 0 25px rgba(83,252,24,0.8); }
   }
   .cell.revealed { cursor: default; }
-  .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.07); }
+  .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.05); }
   .selecting .cell { cursor: none; }
   .selecting .cell.selected { cursor: none; }
   .selecting * { cursor: none !important; }
 
-
-  .revealing .cell, .done .cell { cursor: default; }
-
-  /* ── Гонка (3D) ───────────────────────────── */
-  #race-overlay {
+  /* ── Гонка & Рулетка (Оверлеї) ───────────────────────────── */
+  #race-overlay, #roulette-overlay {
     position: fixed; inset: 0; z-index: 9990;
-    background: rgba(5,5,8,0.94);
+    background: rgba(4,6,4,0.95);
     display: none;
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px;
-    backdrop-filter: blur(4px);
+    gap: 20px;
+    backdrop-filter: blur(8px);
   }
-  #race-overlay.visible { display: flex; }
-  #race-overlay-hint {
+  #race-overlay.visible, #roulette-overlay.visible { display: flex; }
+  
+  #race-overlay-hint, #roulette-overlay-hint {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 20px; color: #ffd700; letter-spacing: 2px;
-    min-height: 28px; text-align: center;
+    font-size: 24px; color: var(--kick); letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.4);
   }
+
   #race-track-area {
     width: min(98vw, 1560px);
     aspect-ratio: 12 / 7;
-    max-height: 90vh;
+    max-height: 85vh;
     position: relative;
-    background: #0a0a0c;
-    border: 1px solid #2a2a2e;
-    border-radius: 14px;
+    background: #000;
+    border: 2px solid var(--panel-border);
+    border-radius: 16px;
     overflow: hidden;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.8);
   }
-  #race-track-area canvas {
-    width: 100% !important; height: 100% !important; display: block;
-  }
-  #race-overlay-controls { display: flex; gap: 10px; }
-  #race-overlay-controls button { min-width: 140px; }
-  .race-close-btn {
-    position: absolute; top: -50px; right: 0; z-index: 4;
-    background: #1a1a1d; border: 1px solid #333; color: #888;
-    width: 38px; height: 38px; border-radius: 8px;
-    font-size: 18px; line-height: 1; cursor: pointer;
-  }
-  .race-close-btn:hover { border-color: #ff4444; color: #ff4444; }
-
-  #race-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
-
-  #race-standings {
-    position: absolute; top: 12px; left: 12px; z-index: 4;
-    width: 190px; max-height: calc(100% - 24px);
-    background: rgba(15,15,15,0.88);
-    border-left: 5px solid #e10600;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-family: 'Rajdhani', sans-serif;
-    overflow-y: auto;
-    pointer-events: none;
-  }
-  .standings-title {
-    font-size: 14px; font-weight: 900; color: #fff;
-    text-transform: uppercase; letter-spacing: 1px;
-    border-bottom: 2px solid #333;
-    padding-bottom: 10px; margin-bottom: 8px;
-  }
-  .standing-row {
-    display: flex; align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-weight: 600; font-size: 14px; color: #fff;
-  }
-  .standing-row.winner { color: #ffd700; }
-  .standing-pos {
-    width: 25px; text-align: center; margin-right: 10px;
-    color: #aaa; font-size: 12px; flex-shrink: 0;
-  }
-  .standing-row.winner .standing-pos { color: #ffd700; }
-  .standing-swatch {
-    width: 8px; height: 16px; margin-right: 12px; border-radius: 2px; flex-shrink: 0;
-  }
-  .standing-name {
-    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    min-width: 0; letter-spacing: 0.5px;
-  }
-  .standing-lap { font-size: 12px; color: #888; flex-shrink: 0; }
-  .standing-row.winner .standing-lap { color: #ffd700; }
-
-  .car-label-3d {
-    position: absolute; transform: translate(-50%, -100%);
-    background: rgba(10,10,10,0.85); color: #fff;
-    padding: 4px 10px; border-radius: 6px;
-    font-size: 13px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis;
-    font-family: 'Rajdhani', sans-serif;
-    border-bottom: 3px solid var(--car-color, #888);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.6);
-    transition: left 0.05s linear, top 0.05s linear;
-  }
-  .car-label-3d.winner {
-    background: #ffd700; color: #000; border-bottom-color: #ffd700;
-    animation: winnerGlow 0.6s ease infinite alternate;
-  }
-
-  #race-countdown {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 110px; font-weight: 900; color: #ffd700;
-    font-family: 'Rajdhani', sans-serif;
-    text-shadow: 0 0 40px rgba(255,215,0,0.6);
-    z-index: 3;
-    pointer-events: none;
-  }
-  #race-countdown.pulse { animation: countdownPulse 0.9s ease; }
-  @keyframes countdownPulse {
-    from { transform: scale(1.6); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
-  }
-
-  /* ── Рулетка ──────────────────────────────── */
-  #roulette-overlay {
-    position: fixed; inset: 0; z-index: 9990;
-    background: rgba(5,5,8,0.94);
-    display: none;
-    flex-direction: column; align-items: center; justify-content: center;
-    gap: 18px;
-    backdrop-filter: blur(4px);
-  }
-  #roulette-overlay.visible { display: flex; }
-  #roulette-overlay-hint {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 20px; color: #ffd700; letter-spacing: 2px;
-    min-height: 28px; text-align: center;
-  }
+  
   #roulette-track-area {
     width: min(90vw, 1100px);
     position: relative;
     padding: 40px 0;
   }
+  
   #roulette-track {
-    width: 100%; height: 140px;
-    background: linear-gradient(180deg, #161618, #0c0c0e);
-    border: 1px solid #2a2a2e;
-    border-radius: 14px;
+    width: 100%; height: 160px;
+    background: linear-gradient(180deg, #111, #050505);
+    border: 2px solid var(--panel-border);
+    border-radius: 16px;
     overflow: hidden;
     position: relative;
-    box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+    box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5);
   }
+  
   #roulette-track::before, #roulette-track::after {
-    content: ''; position: absolute; top: 0; bottom: 0; width: 80px; z-index: 5;
-    pointer-events: none;
+    content: ''; position: absolute; top: 0; bottom: 0; width: 100px; z-index: 5; pointer-events: none;
   }
-  #roulette-track::before { left: 0; background: linear-gradient(90deg, #0c0c0e, transparent); }
-  #roulette-track::after  { right: 0; background: linear-gradient(270deg, #0c0c0e, transparent); }
-  #roulette-strip {
-    display: flex; align-items: center; height: 100%;
-    position: absolute; left: 0; top: 0;
-    will-change: transform;
-  }
+  #roulette-track::before { left: 0; background: linear-gradient(90deg, #050505, transparent); }
+  #roulette-track::after  { right: 0; background: linear-gradient(270deg, #050505, transparent); }
+  
   .roulette-cell {
-    flex: 0 0 180px; height: 100%;
+    flex: 0 0 200px; height: 100%;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 22px;
-    color: #ccc;
-    border-right: 1px solid #232327;
-    text-align: center; padding: 0 14px;
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 24px;
+    color: #888;
+    border-right: 1px solid #1a1a1a;
+    text-align: center; padding: 0 16px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: rgba(255,255,255,0.02);
   }
   .roulette-cell.win {
-    color: #000; background: linear-gradient(145deg, #ffd700, #ff9900);
-    font-weight: 900;
-    animation: winnerGlow 0.6s ease infinite alternate;
+    color: #000; background: linear-gradient(145deg, var(--kick), #28a708);
+    font-weight: 900; font-size: 28px;
+    animation: winnerGlow 0.8s ease infinite alternate;
+    border: none;
   }
+  
   #roulette-pointer {
-    position: absolute; left: 50%; top: 12px; bottom: 12px;
-    width: 4px; background: #ffd700; transform: translateX(-50%);
-    z-index: 6; border-radius: 2px;
-    box-shadow: 0 0 12px rgba(255,215,0,0.8);
+    position: absolute; left: 50%; top: 6px; bottom: 6px;
+    width: 6px; background: var(--kick); transform: translateX(-50%);
+    z-index: 6; border-radius: 3px;
+    box-shadow: 0 0 15px var(--kick);
   }
-  #roulette-pointer::before, #roulette-pointer::after {
-    content: ''; position: absolute; left: 50%; transform: translateX(-50%);
-    border: 8px solid transparent;
+
+  .race-close-btn {
+    position: absolute; top: -50px; right: 0; z-index: 4;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa;
+    width: 44px; height: 44px; border-radius: 10px;
+    font-size: 20px; line-height: 1; cursor: pointer; transition: 0.2s;
   }
-  #roulette-pointer::before { top: -8px; border-top: none; border-bottom-color: #ffd700; }
-  #roulette-pointer::after  { bottom: -8px; border-bottom: none; border-top-color: #ffd700; }
-  #roulette-overlay-controls { display: flex; gap: 10px; }
-  #roulette-overlay-controls button { min-width: 140px; }
+  .race-close-btn:hover { border-color: var(--red); color: var(--red); background: rgba(255,74,74,0.1); }
 
   /* ── Список переможців ──────────────────── */
   .winner-row {
-    background: #161618; border: 1px solid #2a2a2e; border-radius: 8px;
-    padding: 10px 12px; margin-bottom: 8px;
-    animation: rowPop 0.3s ease;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 10px;
+    animation: rowPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: transform 0.2s;
   }
+  .winner-row:hover { transform: translateX(4px); }
   @keyframes rowPop {
-    from { transform: scale(0.95); opacity: 0; }
-    to   { transform: scale(1); opacity: 1; }
+    from { transform: translateX(-20px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
   }
-  .winner-row.confirmed { border-color: #2a5a2a; }
-  .winner-row.expired   { border-color: #5a2a2a; }
-  .winner-top { display: flex; align-items: center; gap: 8px; }
-  .w-status { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
-  .w-status.ok { color: #53fc18; }
-  .w-status.pending { color: #ffaa00; font-family: 'Share Tech Mono', monospace; font-size: 13px; width: auto; }
-  .w-status.bad { color: #ff4444; }
-  .w-name { font-weight: 700; color: #ffd700; flex: 1; font-size: 15px; }
-  .w-time { font-size: 11px; color: #666; font-family: 'Share Tech Mono', monospace; white-space: nowrap; }
+  .winner-row.confirmed { border-left: 4px solid var(--kick); }
+  .winner-row.expired   { border-left: 4px solid var(--red); opacity: 0.7; }
+  
+  .winner-top { display: flex; align-items: center; gap: 12px; }
+  .w-status { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+  .w-status.ok { color: var(--kick); text-shadow: 0 0 8px rgba(83,252,24,0.4); }
+  .w-status.pending { color: var(--gold); font-family: 'Share Tech Mono', monospace; font-size: 14px; width: auto; font-weight: bold; }
+  .w-status.bad { color: var(--red); }
+  .w-name { font-weight: 800; color: #fff; flex: 1; font-size: 16px; letter-spacing: 0.5px; }
+  .w-time { font-size: 12px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; }
+  
   .w-msg {
-    margin-top: 6px; font-size: 12px; color: #bbb; font-family: 'Share Tech Mono', monospace;
-    background: #0e0e10; border-radius: 6px; padding: 6px 10px;
+    margin-top: 8px; font-size: 13px; color: var(--kick); font-family: 'Share Tech Mono', monospace;
+    background: rgba(83,252,24,0.05); border-radius: 6px; padding: 8px 12px;
+    border: 1px dashed rgba(83,252,24,0.2);
   }
-  .w-msg.empty { color: #444; font-style: italic; }
-  .w-retry { margin-top: 6px; }
+  .w-msg.empty { color: var(--text-muted); font-style: italic; background: rgba(0,0,0,0.2); border-color: transparent; }
 
-  /* ── Оголошення переможця (оверлей) ──────── */
+  /* ── Оголошення переможця (кінематографічний оверлей) ──────── */
   #winner-announce {
     position: fixed; inset: 0; z-index: 9998;
-    background: rgba(0,0,0,0.85);
+    background: rgba(4,6,4,0.85);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 16px;
+    gap: 20px;
     opacity: 0; pointer-events: none;
-    transition: opacity 0.4s ease;
-    backdrop-filter: blur(6px);
+    transition: opacity 0.5s ease;
+    backdrop-filter: blur(12px);
   }
   #winner-announce.visible { opacity: 1; pointer-events: auto; }
 
   #winner-announce .wa-label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 26px; color: #888; letter-spacing: 6px; text-transform: uppercase;
+    font-size: 28px; color: var(--kick); letter-spacing: 8px; text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.3);
   }
   #winner-announce .wa-name {
     font-family: 'Rajdhani', sans-serif;
-    font-size: clamp(48px, 6vw, 90px);
+    font-size: clamp(60px, 8vw, 120px);
     font-weight: 900;
-    color: #ffd700;
-    text-shadow: 0 0 40px rgba(255,215,0,0.7), 0 0 80px rgba(255,215,0,0.3);
-    letter-spacing: 3px;
+    color: #fff;
+    text-shadow: 0 0 30px rgba(255,255,255,0.2), 0 0 60px rgba(255,255,255,0.1);
+    letter-spacing: 4px;
     text-align: center;
     max-width: 90vw;
     word-break: break-word;
-    animation: waNameIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+    animation: waNameIn 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
   }
   @keyframes waNameIn {
-    from { transform: scale(0.6); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
+    from { transform: scale(0.8) translateY(20px); opacity: 0; filter: blur(10px); }
+    to   { transform: scale(1) translateY(0);   opacity: 1; filter: blur(0); }
   }
   #winner-announce .wa-timer {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 48px;
-    color: #fff;
+    font-size: 56px;
+    color: var(--gold);
     letter-spacing: 2px;
-    min-width: 100px;
+    min-width: 120px;
     text-align: center;
+    text-shadow: 0 0 20px rgba(255,215,0,0.3);
   }
-  #winner-announce .wa-timer.expiring { color: #ff4444; animation: timerBlink 0.5s infinite alternate; }
+  #winner-announce .wa-timer.expiring { color: var(--red); text-shadow: 0 0 20px rgba(255,74,74,0.5); animation: timerBlink 0.5s infinite alternate; }
   @keyframes timerBlink {
-    from { opacity: 1; }
-    to   { opacity: 0.3; }
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0.5; transform: scale(0.95); }
   }
+  
   #winner-announce .wa-msg {
     font-family: 'Rajdhani', sans-serif;
-    font-size: clamp(28px, 3.5vw, 52px); font-weight: 700; color: #fff;
-    background: rgba(255,255,255,0.06);
-    border-radius: 12px; padding: 14px 32px;
+    font-size: clamp(32px, 4vw, 64px); font-weight: 700; color: var(--kick);
+    background: rgba(83,252,24,0.05);
+    border: 1px solid rgba(83,252,24,0.2);
+    border-radius: 16px; padding: 20px 40px;
     max-width: 85vw; text-align: center;
     letter-spacing: 1px;
-    animation: waMsgIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: waMsgIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
   @keyframes waMsgIn {
-    from { transform: translateY(10px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+    from { transform: translateY(20px) scale(0.9); opacity: 0; }
+    to   { transform: translateY(0) scale(1);    opacity: 1; }
   }
+  
   #winner-announce .wa-sub {
-    font-size: 22px; color: #888; font-family: 'Share Tech Mono', monospace; letter-spacing: 3px;
+    font-size: 20px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; letter-spacing: 4px; text-transform: uppercase;
   }
   #winner-announce .wa-close {
-    margin-top: 8px;
-    background: #1a1a1d; border: 1px solid #333; color: #888;
-    padding: 10px 28px; border-radius: 8px;
-    font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 700;
-    cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    margin-top: 20px;
+    background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #aaa;
+    padding: 12px 32px; border-radius: 10px;
+    font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: all 0.3s;
+    text-transform: uppercase; letter-spacing: 1px;
   }
-  #winner-announce .wa-close:hover { border-color: #ffd700; color: #ffd700; }
+  #winner-announce .wa-close:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
 
   /* Частинки */
   .wa-particle {
     position: fixed; pointer-events: none; border-radius: 50%; z-index: 9997;
-    animation: waPart 1.8s ease forwards;
+    animation: waPart 2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    box-shadow: 0 0 10px currentColor;
   }
   @keyframes waPart {
-    from { transform: translate(0,0) scale(1); opacity: 1; }
-    to   { transform: translate(var(--tx),var(--ty)) scale(0); opacity: 0; }
+    0% { transform: translate(0,0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--tx),var(--ty)) scale(0); opacity: 0; }
+  }
+
+  /* Race specific 3D layout fixes */
+  #race-overlay-controls, #roulette-overlay-controls { display: flex; gap: 12px; margin-top: 10px;}
+  #race-standings {
+    position: absolute; top: 16px; left: 16px; z-index: 4;
+    width: 220px; max-height: calc(100% - 32px);
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(4px);
+    border-left: 4px solid var(--kick);
+    border-radius: 12px;
+    padding: 16px;
+    font-family: 'Rajdhani', sans-serif;
+    overflow-y: auto;
+    pointer-events: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .standings-title {
+    font-size: 16px; font-weight: 900; color: #fff;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 12px; margin-bottom: 12px;
+  }
+  .standing-row {
+    display: flex; align-items: center;
+    padding: 8px 0;
+    font-weight: 600; font-size: 15px; color: #ccc;
+  }
+  .standing-row.winner { color: var(--kick); font-weight: 800; text-shadow: 0 0 8px rgba(83,252,24,0.3); }
+  .standing-pos { width: 24px; color: #666; font-size: 13px; font-family: 'Share Tech Mono', monospace; }
+  .standing-swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: 12px; }
+  .standing-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .standing-lap { font-size: 12px; color: #555; font-family: 'Share Tech Mono', monospace; }
+  
+  .car-label-3d {
+    position: absolute; transform: translate(-50%, -100%);
+    background: rgba(0,0,0,0.7); color: #fff;
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 14px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 3px solid var(--car-color, #888);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    transition: left 0.05s linear, top 0.05s linear;
+    backdrop-filter: blur(4px);
+  }
+  .car-label-3d.winner { background: var(--kick); color: #000; border-bottom-color: #fff; animation: winnerGlow 0.6s ease infinite alternate; }
+
+  #race-countdown {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 140px; font-weight: 900; color: var(--kick);
+    font-family: 'Rajdhani', sans-serif;
+    text-shadow: 0 0 50px rgba(83,252,24,0.6);
+    z-index: 3; pointer-events: none;
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -707,8 +737,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 
-<div class="topbar" style="justify-content:flex-end;">
-  <div class="title">kosteze231 <span class="dot closed" id="conn-dot"></span></div>
+<div class="topbar">
+  <div class="logo">Kick Studio</div>
+  <div class="title">bot status <span class="dot closed" id="conn-dot"></span></div>
 </div>
 
 <div class="layout">
@@ -720,8 +751,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field-row">
       <div class="field">
         <label class="field-label">Слово для участия</label>
-        <input type="text" id="raffle-cmd" value="" placeholder="буц" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
-        <button type="button" id="btn-reg-toggle" class="btn-green" style="margin-top:6px;" onclick="toggleRegistration()">▶ Начать регистрацию</button>
+        <input type="text" id="raffle-cmd" value="" placeholder="!join" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+        <button type="button" id="btn-reg-toggle" class="btn-green" style="margin-top:8px;" onclick="toggleRegistration()">▶ Начать регистрацию</button>
       </div>
       <div class="field small">
         <label class="field-label">Победителей</label>
@@ -730,7 +761,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
     <span id="saved-msg"></span>
 
-    <div class="field" style="margin-top:6px;">
+    <div class="field" style="margin-top:8px;">
       <label class="field-label">Режим игры</label>
       <div class="mode-switch">
         <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
@@ -740,7 +771,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
 
     <div id="race-count-field" style="display:none;">
-      <div class="field-row" style="margin-top:6px;">
+      <div class="field-row" style="margin-top:8px;">
         <div class="field">
           <label class="field-label">Участников гонки (2–15)</label>
           <input type="number" id="race-count" value="12" min="2" max="15">
@@ -752,21 +783,21 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="toggle-row">
-      <span class="toggle-label">Подтверждение победителя</span>
+    <div class="toggle-row" style="margin-top:8px;">
+      <span class="toggle-label">Ожидание ответа в чат</span>
       <label class="switch">
         <input type="checkbox" id="toggle-confirm" checked onchange="toggleConfirmField()">
         <span class="slider"></span>
       </label>
     </div>
     <div id="confirm-time-field" style="overflow:hidden;transition:max-height 0.3s ease,opacity 0.3s ease;max-height:80px;opacity:1;">
-      <div class="field" style="margin-top:6px;">
+      <div class="field">
         <label class="field-label">Время на ответ (сек)</label>
         <input type="number" id="confirm-seconds" value="60" min="5" max="600">
       </div>
     </div>
 
-    <div class="limit-info" style="margin-top:6px;">Участников: <b id="participant-count">0</b></div>
+    <div class="limit-info">Участников: <b id="participant-count">0</b></div>
 
     <button class="btn-primary" onclick="startGame()">🎯 Начать розыгрыш</button>
 
@@ -778,37 +809,37 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <details class="test-section">
       <summary>🧪 Тестовые участники</summary>
       <div class="field-row">
-        <input type="text" id="test-name" placeholder="имя тестового игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+        <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
         <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
         <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
       </div>
       <span id="test-msg"></span>
     </details>
 
-    <div class="col-title" style="margin-top:14px;">
+    <div class="col-title" style="margin-top:24px;">
       <span>Победители</span>
-      <span class="count">(<span id="winners-count-title">0</span>)</span>
+      <span class="count" id="winners-count-title">0</span>
     </div>
     <div class="box" id="winners-box" style="flex:1;">
       <div class="empty-box">Победителей пока нет</div>
     </div>
-    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Финиш</button>
+    <button class="btn-red" style="margin-top:16px;" onclick="finishRaffle()">🏁 Завершить стрим-розыгрыш</button>
   </div>
 
   <!-- ── Учасники / Гра ────────────────────── -->
   <div class="col">
     <div class="col-title">
       <span>Участники</span>
-      <span class="count">(<span id="participants-count-title">0</span>)</span>
+      <span class="count" id="participants-count-title">0</span>
     </div>
     <div id="hint"></div>
     <div id="progress"></div>
     <div class="box" id="main-box">
-      <div class="empty-box">Пока никто не зарегистрировался</div>
+      <div class="empty-box">Ожидание регистрации...</div>
     </div>
-    <div class="btn-row" id="game-controls" style="display:none;">
+    <div class="btn-row" id="game-controls" style="display:none; margin-top: 16px;">
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
-      <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+      <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     </div>
   </div>
 
@@ -816,11 +847,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
 <!-- Оголошення переможця -->
 <div id="winner-announce">
-  <div class="wa-label">🏆 Победитель</div>
+  <div class="wa-label">Победитель</div>
   <div class="wa-name" id="wa-name">—</div>
   <div class="wa-timer" id="wa-timer"></div>
   <div class="wa-msg" id="wa-msg" style="display:none;"></div>
-  <div class="wa-sub" id="wa-sub">Напишите любое сообщение в чате</div>
+  <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
 </div>
 
@@ -832,9 +863,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div id="race-standings"></div>
   </div>
   <div id="race-overlay-controls" style="display:none;">
-    <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
-    <button class="btn-dark" onclick="closeRaceOverlay()">Закрыть</button>
+    <button class="btn-primary" style="width:auto;" onclick="closeRaceOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -849,9 +880,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
   </div>
   <div id="roulette-overlay-controls" style="display:none;">
-    <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
-    <button class="btn-dark" onclick="closeRouletteOverlay()">Закрыть</button>
+    <button class="btn-primary" style="width:auto;" onclick="closeRouletteOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -865,12 +896,11 @@ const STICKERS = [
 ];
 
 let checkTimerInterval = null;
-let currentGame = null;     // { winnersNeeded, gridSize, cells }
-let selected = new Set();   // індекси обраних клітинок
-let phase = 'idle';         // idle | selecting | revealing | done
-let winnersHistory = [];    // [{ name, time, status: 'ok'|'pending'|'bad', message }]
+let currentGame = null;     
+let selected = new Set();   
+let phase = 'idle';         
+let winnersHistory = [];    
 
-// ── Стан / реєстрація ─────────────────────────────────────────
 async function loadState() {
   const res = await fetch('/api/raffle/state');
   if (res.status === 401) { location.reload(); return; }
@@ -888,7 +918,7 @@ async function loadState() {
 
   const regBtn = document.getElementById('btn-reg-toggle');
   if (raffleOpen) {
-    regBtn.textContent = '⏹ Завершить регистрацию';
+    regBtn.textContent = '⏹ Остановить регистрацию';
     regBtn.className = 'btn-red';
     cmdInput.disabled = true;
   } else {
@@ -903,7 +933,7 @@ async function loadState() {
 function renderParticipants(list) {
   const box = document.getElementById('main-box');
   if (!list.length) {
-    box.innerHTML = '<div class="empty-box">Пока никто не зарегистрировался</div>';
+    box.innerHTML = '<div class="empty-box">Ожидание регистрации...</div>';
     return;
   }
   box.innerHTML = '<div class="participants-grid">' +
@@ -999,14 +1029,12 @@ async function addBulkTest() {
   loadState();
 }
 
-// ── Гра Cash Hunt ─────────────────────────────────────────────
-// ── Режим гри (Cash Hunt / Гонка) ────────────────────────────
 let gameMode = 'cashhunt';
 let raceQualifiers = [];
 let raceAnimId = null;
 
 function setGameMode(mode) {
-  if (phase !== 'idle') return; // не можна перемкнути під час гри
+  if (phase !== 'idle') return; 
   gameMode = mode;
   document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
@@ -1118,7 +1146,6 @@ async function fastReroll() {
 }
 
 function resetGameUIKeepMode() {
-  // як resetGameUI, але без зміни кнопок режиму
   selected = new Set();
   phase = 'idle';
   raceQualifiers = [];
@@ -1129,7 +1156,6 @@ function resetGameUIKeepMode() {
   renderParticipants(state.participants || []);
 }
 
-// ── Режим "Рулетка" ──────────────────────────────────────────
 let rouletteTimeout = null;
 
 async function startRoulette() {
@@ -1160,10 +1186,9 @@ async function startRoulette() {
     '<div class="roulette-cell" data-idx="' + i + '">' + escapeHtml(name) + '</div>'
   ).join('');
 
-  // force reflow
   void strip.offsetWidth;
 
-  const cellWidth = 180;
+  const cellWidth = 200;
   const trackWidth = document.getElementById('roulette-track').clientWidth;
   const targetOffset = WINNER_IDX * cellWidth + cellWidth/2 - trackWidth/2;
 
@@ -1180,7 +1205,7 @@ async function startRoulette() {
   const winnerCell = strip.querySelector('[data-idx="' + WINNER_IDX + '"]');
   if (winnerCell) winnerCell.classList.add('win');
 
-  overlayHint.innerHTML = '🎉 Победитель: <b style="color:#ffd700;">' + escapeHtml(winner) + '</b>';
+  overlayHint.innerHTML = '🎉 Победитель: <b style="color:var(--kick);">' + escapeHtml(winner) + '</b>';
   controls.style.display = 'flex';
   phase = 'done';
 
@@ -1201,8 +1226,6 @@ function pickRandom(arr, n) {
   return result;
 }
 
-// ── Режим "Гонка" (3D, Three.js) ─────────────────────────────────
-
 async function startRaceGame() {
   const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 15);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
@@ -1212,11 +1235,6 @@ async function startRaceGame() {
   await runRace(raceQualifiers, laps);
 }
 
-// ── Геометрія траси: точки центральної лінії (F1-стиль, з петлею) ──
-// Координати: [x, z]. Центруються навколо центроїда при побудові кривої.
-// Шикана (точки 24-29) розширена в 1.6 рази навколо власного центру —
-// у вихідному варіанті ця ділянка перетиналась сама із собою
-// (мін. відстань 12.94 < ширини дороги 15) і траса виглядала "склеєною".
 const TRACK_POINTS_2D = [
   [60, 70], [0, 70], [-80, 70], [-120, 70], [-145, 60], [-155, 45],
   [-165, 25], [-185, 0], [-170, -50], [-130, -45], [-80, -40], [-50, -40],
@@ -1227,7 +1245,7 @@ const TRACK_POINTS_2D = [
   [140, 70], [110, 70],
 ];
 
-const ROAD_RADIUS = 7.5;  // радіус дорожнього покриття (TubeGeometry)
+const ROAD_RADIUS = 7.5;  
 
 let renderer3D = null, scene3D = null, camera3D = null, orbitControls3D = null;
 
@@ -1261,18 +1279,15 @@ function disposeRace3D() {
   camera3D = null;
 }
 
-// Будує замкнену 3D-криву (центрипетальна параметризація — стабільна навіть
-// для нерівномірно розташованих точок)
 function buildTrackCurve3() {
   let cx = 0, cz = 0;
   TRACK_POINTS_2D.forEach(([x, z]) => { cx += x; cz += z; });
   cx /= TRACK_POINTS_2D.length;
   cz /= TRACK_POINTS_2D.length;
   const points = TRACK_POINTS_2D.map(([x, z]) => new THREE.Vector3(x - cx, 0, z - cz));
-  return new THREE.CatmullRomCurve3(points, true); // 'centripetal' за замовчуванням
+  return new THREE.CatmullRomCurve3(points, true); 
 }
 
-// Текстура з канвасу (процедурна — без зовнішніх файлів)
 function makeCanvasTexture(draw, w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -1283,9 +1298,6 @@ function makeCanvasTexture(draw, w, h) {
   return tex;
 }
 
-// Будує асфальт, поребрики, траву та фінішну лінію на базі TubeGeometry
-// (TubeGeometry сама рахує орієнтацію вздовж кривої — без ручних "right"-векторів
-// і проблем із самоперетинами/телепортацією)
 function buildTrack3D(scene, curve) {
   const finishTex = makeCanvasTexture((ctx, w, h) => {
     const cell = 32;
@@ -1298,21 +1310,18 @@ function buildTrack3D(scene, curve) {
   }, 64, 64);
   finishTex.repeat.set(6, 1);
 
-  // ── Світлий контур траси (трохи ширший, нижче) ──
   const edgeGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS + 0.5, 16, true);
   edgeGeo.scale(1, 0.03, 1);
-  const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
+  const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0x53fc18, roughness: 0.8 }));
   edgeMesh.position.y = 0.05;
   scene.add(edgeMesh);
 
-  // ── Дорога: рівний сірий колір, без текстур та бортиків ──
   const roadGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS, 16, true);
   roadGeo.scale(1, 0.04, 1);
-  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.9 }));
+  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x111, roughness: 0.9 }));
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
 
-  // ── Фінішна лінія (шахматка) ──
   const UP = new THREE.Vector3(0, 1, 0);
   const m0 = curve.getPointAt(0);
   const t0 = curve.getTangentAt(0);
@@ -1327,7 +1336,6 @@ function buildTrack3D(scene, curve) {
   scene.add(finishMesh);
 }
 
-// Спільні геометрії для всіх машинок (економія пам'яті — 15 машинок x ~20 mesh)
 let CAR_GEO = null;
 function getCarGeometries() {
   if (CAR_GEO) return CAR_GEO;
@@ -1356,14 +1364,13 @@ function getCarGeometries() {
   return CAR_GEO;
 }
 
-// Детальна процедурна машинка F1 (шасі, антикрила, halo, колеса з підвіскою)
 function makeF1Car(teamColorHex) {
   const G = getCarGeometries();
   const group = new THREE.Group();
   const carBody = new THREE.Group();
 
-  const paintMat = new THREE.MeshStandardMaterial({ color: teamColorHex, metalness: 0.6, roughness: 0.2 });
-  const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.2, roughness: 0.8 });
+  const paintMat = new THREE.MeshStandardMaterial({ color: teamColorHex, metalness: 0.8, roughness: 0.2 });
+  const carbonMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.4, roughness: 0.8 });
   const metalMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.2 });
   const tireMat = new THREE.MeshStandardMaterial({ color: 0x0f0f0f, metalness: 0.1, roughness: 0.9 });
 
@@ -1423,7 +1430,6 @@ function makeF1Car(teamColorHex) {
     susp2.position.set(p.isLeft ? p.pos[0] + 1.0 : p.pos[0] - 1.0, p.pos[1], p.pos[2]); carBody.add(susp2);
   });
 
-  // Розвертаємо болід на 180° (виправлення напрямку/орієнтації моделі)
   carBody.rotation.y = 0;
   group.add(carBody);
   group.scale.set(0.45, 0.45, 0.45);
@@ -1457,7 +1463,6 @@ async function runRace(qualifiers, totalLaps) {
     return;
   }
 
-  // Чекаємо, поки layout оверлею встановиться (правильний розмір canvas — без піксельності)
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const n = qualifiers.length;
@@ -1465,7 +1470,7 @@ async function runRace(qualifiers, totalLaps) {
   const height = area.clientHeight || 467;
 
   scene3D = new THREE.Scene();
-  scene3D.background = new THREE.Color(0x0a0a0c);
+  scene3D.background = new THREE.Color(0x060806);
 
   camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
 
@@ -1474,15 +1479,14 @@ async function runRace(qualifiers, totalLaps) {
   renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   area.insertBefore(renderer3D.domElement, area.firstChild);
 
-  scene3D.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  scene3D.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
   sun.position.set(100, 200, 100);
   scene3D.add(sun);
 
   const curve = buildTrackCurve3();
   buildTrack3D(scene3D, curve);
 
-  // ── Камера: фіксований ракурс, що охоплює всю карту ──
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   curve.points.forEach(p => {
     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
@@ -1497,7 +1501,6 @@ async function runRace(qualifiers, totalLaps) {
   camera3D.updateProjectionMatrix();
   camera3D.updateMatrixWorld(true);
 
-  // ── Керування камерою: ЛКМ — обертати, колесо — зум ──
   if (window.THREE && THREE.OrbitControls) {
     orbitControls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
     orbitControls3D.enableDamping = true;
@@ -1510,11 +1513,10 @@ async function runRace(qualifiers, totalLaps) {
     orbitControls3D.update();
   }
 
-  // ── Машинки ──
   const laneSpacing = 0.9;
   const cars = [];
   for (let i = 0; i < n; i++) {
-    const color = new THREE.Color().setHSL(i / n, 0.65, 0.5);
+    const color = new THREE.Color().setHSL(i / n, 0.8, 0.5);
     const car = makeF1Car(color.getHex());
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.0, 1.3, 24),
@@ -1531,7 +1533,7 @@ async function runRace(qualifiers, totalLaps) {
   const labelEls = qualifiers.map((name, i) => {
     const el = document.createElement('div');
     el.className = 'car-label-3d';
-    const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString();
+    const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.8, 0.5).getHexString();
     el.style.setProperty('--car-color', colorHex);
     el.textContent = name;
     labelsBox.appendChild(el);
@@ -1569,9 +1571,8 @@ async function runRace(qualifiers, totalLaps) {
     }
   }
 
-  // ── Турнірна таблиця (позиції учасників) ──
   const standingsBox = document.getElementById('race-standings');
-  const carColors = qualifiers.map((_, i) => '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString());
+  const carColors = qualifiers.map((_, i) => '#' + new THREE.Color().setHSL(i / n, 0.8, 0.5).getHexString());
 
   function renderStandings(progressArr, lapsArr, winnerIdx) {
     const order = qualifiers.map((_, i) => i).sort((a, b) => {
@@ -1580,7 +1581,7 @@ async function runRace(qualifiers, totalLaps) {
       return totalB - totalA;
     });
     const leadLapDisplay = Math.min(lapsArr[order[0]] + 1, totalLaps);
-    standingsBox.innerHTML = '<div class="standings-title">🏁 Круг ' + leadLapDisplay + ' / ' + totalLaps + '</div>' +
+    standingsBox.innerHTML = '<div class="standings-title">Круг ' + leadLapDisplay + ' / ' + totalLaps + '</div>' +
       order.map((idx, pos) => {
         const cls = 'standing-row' + (idx === winnerIdx ? ' winner' : '');
         return '<div class="' + cls + '">' +
@@ -1605,10 +1606,9 @@ async function runRace(qualifiers, totalLaps) {
 
   renderFrame();
 
-  // Зворотний відлік
   const cd = document.getElementById('race-countdown');
   overlayHint.textContent = '';
-  for (const txt of ['3', '2', '1', '🏁 СТАРТ!']) {
+  for (const txt of ['3', '2', '1', 'GO!']) {
     cd.textContent = txt;
     cd.classList.remove('pulse');
     void cd.offsetWidth;
@@ -1625,9 +1625,8 @@ async function runRace(qualifiers, totalLaps) {
   }
   cd.textContent = '';
 
-  // ── Симуляція гонки: плавна фізика прискорення/гальмування ──
-  const LAP_SECONDS = 9; // середній час кола
-  const baseSpeed = 1 / (LAP_SECONDS * 60); // прогрес за кадр (60fps)
+  const LAP_SECONDS = 9; 
+  const baseSpeed = 1 / (LAP_SECONDS * 60); 
   const speed = qualifiers.map(() => baseSpeed * (0.85 + Math.random() * 0.3));
   const targetSpeed = speed.slice();
   const boostTimer = qualifiers.map(() => 30 + Math.random() * 120);
@@ -1643,7 +1642,7 @@ async function runRace(qualifiers, totalLaps) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       elapsed += dt;
-      const frames = dt * 60; // нормалізація до 60fps-кроків
+      const frames = dt * 60; 
 
       for (let i = 0; i < n; i++) {
         if (winnerIdx !== -1) continue;
@@ -1691,7 +1690,7 @@ async function runRace(qualifiers, totalLaps) {
   });
 
   const winnerName = qualifiers[winnerIdx];
-  overlayHint.innerHTML = '🏁 Победитель: <b style="color:#ffd700;">' + escapeHtml(winnerName) + '</b>';
+  overlayHint.innerHTML = 'Победитель: <b style="color:var(--kick);">' + escapeHtml(winnerName) + '</b>';
   controls.style.display = 'flex';
   phase = 'done';
 
@@ -1701,8 +1700,6 @@ async function runRace(qualifiers, totalLaps) {
 function closeRaceOverlay() {
   resetGameUI();
 }
-
-
 
 function renderGame(game) {
   currentGame = game;
@@ -1715,7 +1712,7 @@ function renderGame(game) {
   const grid = document.getElementById('grid');
 
   const cols = game.gridSize <= 12 ? game.gridSize : 12;
-  const cellSize = game.gridSize <= 12 ? 'min(70px, calc((100% - 40px) / ' + cols + '))' : '1fr';
+  const cellSize = game.gridSize <= 12 ? 'min(80px, calc((100% - 40px) / ' + cols + '))' : '1fr';
   grid.style.gridTemplateColumns = game.gridSize <= 12
     ? 'repeat(' + cols + ', ' + cellSize + ')'
     : 'repeat(' + cols + ', 1fr)';
@@ -1761,7 +1758,7 @@ function updateHint() {
   const n = currentGame.winnersNeeded;
   const hint = document.getElementById('hint');
   if (phase === 'selecting') {
-    hint.innerHTML = 'Выберите <b>' + n + '</b> ' + (n === 1 ? 'клетку' : 'клеток') +
+    hint.innerHTML = 'Выберите <b>' + n + '</b> ' + (n === 1 ? 'ячейку' : 'ячеек') +
       ' — выбрано: <b>' + selected.size + ' / ' + n + '</b>';
   }
 }
@@ -1801,22 +1798,18 @@ async function startReveal() {
 
   phase = 'done';
   document.getElementById('main-box').className = 'box done';
-  document.getElementById('hint').innerHTML = '🏁 Готово!';
+  document.getElementById('hint').innerHTML = 'Готово!';
   document.getElementById('btn-go').textContent = '🚀 Начать раскрытие';
 }
 
-// ── Список переможців ──────────────────────────────────────────
-// ── Оголошення переможця ─────────────────────────────────────
 let announceTimer = null;
 let announceSeconds = 0;
-
-// ── Звукове сповіщення при закінченні таймера ──────────────────
 let audioCtx = null;
+
 function playTimeoutSound() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
-    // Три короткі високі сигнали
     [0, 0.25, 0.5].forEach(offset => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -1839,7 +1832,6 @@ function showAnnounce(name, seconds, confirmOn) {
   const msgEl   = document.getElementById('wa-msg');
   const subEl   = document.getElementById('wa-sub');
 
-  // Скидаємо попередній таймер
   if (announceTimer) clearInterval(announceTimer);
   msgEl.style.display = 'none';
   msgEl.textContent = '';
@@ -1895,13 +1887,13 @@ function closeAnnounce() {
 }
 
 function spawnParticles() {
-  const colors = ['#ffd700','#ff9900','#53fc18','#fff','#ff44aa','#44aaff'];
-  for (let i = 0; i < 24; i++) {
+  const colors = ['#53fc18','#28a708','#fff'];
+  for (let i = 0; i < 30; i++) {
     const p = document.createElement('div');
     p.className = 'wa-particle';
-    const size = 5 + Math.random() * 10;
+    const size = 6 + Math.random() * 12;
     const angle = (Math.random() * 360) * Math.PI / 180;
-    const dist  = 120 + Math.random() * 220;
+    const dist  = 150 + Math.random() * 300;
     const tx = Math.cos(angle) * dist;
     const ty = Math.sin(angle) * dist - 100;
     p.style.cssText =
@@ -1910,9 +1902,9 @@ function spawnParticles() {
       'left:' + (window.innerWidth/2 - size/2) + 'px;' +
       'top:' + (window.innerHeight/2 - size/2) + 'px;' +
       '--tx:' + tx + 'px;--ty:' + ty + 'px;' +
-      'animation-duration:' + (1.2 + Math.random()*0.8) + 's;';
+      'animation-duration:' + (1.5 + Math.random()*1) + 's;';
     document.body.appendChild(p);
-    setTimeout(() => p.remove(), 2100);
+    setTimeout(() => p.remove(), 2500);
   }
 }
 
@@ -1965,7 +1957,7 @@ function renderWinners() {
       msgHtml = '<div class="w-msg empty">ожидание ответа...</div>';
     } else if (w.status === 'bad') {
       msgHtml = '<div class="w-msg empty">время вышло, ответа нет</div>' +
-        '<button class="btn-dark btn-small w-retry" onclick="retryWinner(\\'' + escapeAttr(w.name) + '\\')">↻ Заново</button>';
+        '<button class="btn-dark btn-small w-retry" style="margin-top:8px;" onclick="retryWinner(\\'' + escapeAttr(w.name) + '\\')">↻ Заново</button>';
     }
 
     return '<div class="winner-row ' + rowClass + '">' +
@@ -2059,7 +2051,6 @@ renderWinners();
 loadState();
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 
-// ── Перемикач "Время на ответ" ─────────────────────────────────
 function toggleConfirmField() {
   const on = document.getElementById('toggle-confirm').checked;
   const f = document.getElementById('confirm-time-field');
@@ -2067,7 +2058,6 @@ function toggleConfirmField() {
   f.style.opacity   = on ? '1' : '0';
 }
 
-// ── Прицільний курсор через Canvas ─────────────────────────────
 (function() {
   const canvas = document.createElement('canvas');
   canvas.width = 48;
@@ -2084,28 +2074,25 @@ function toggleConfirmField() {
   function draw() {
     ctx.clearRect(0, 0, 48, 48);
     pulse += 0.08;
-    const alpha = 0.75 + 0.25 * Math.sin(pulse);
+    const alpha = 0.6 + 0.4 * Math.sin(pulse);
 
     const cx = 24, cy = 24;
     const R = 14;
 
-    // Зовнішнє коло
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,215,0,' + alpha + ')';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(83,252,24,' + alpha + ')';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Внутрішнє коло маленьке
     ctx.beginPath();
-    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,215,0,' + alpha + ')';
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(83,252,24,' + alpha + ')';
     ctx.fill();
 
-    // Хрест — 4 відрізки з зазором
-    const gap = 5, len = 7;
-    ctx.strokeStyle = 'rgba(255,215,0,' + alpha + ')';
-    ctx.lineWidth = 1.8;
+    const gap = 6, len = 6;
+    ctx.strokeStyle = 'rgba(83,252,24,' + alpha + ')';
+    ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     [[cx, cy - gap, cx, cy - gap - len],
      [cx, cy + gap, cx, cy + gap + len],
@@ -2138,12 +2125,10 @@ function toggleConfirmField() {
     mouseY = e.clientY;
     canvas.style.left = (mouseX - 24) + 'px';
     canvas.style.top  = (mouseY - 24) + 'px';
-    // Показуємо/ховаємо залежно від фази
     if (phase === 'selecting') { if (!visible) show(); }
     else { if (visible) hide(); }
   });
 
-  // MutationObserver — ховаємо одразу як фаза змінилась
   const boxEl = document.getElementById('main-box');
   const boxObs = new MutationObserver(() => {
     if (phase !== 'selecting') hide();
@@ -2177,11 +2162,10 @@ const server = http.createServer((req, res) => {
         const { password } = JSON.parse(body);
         if (password === WEB_PASSWORD) {
           const token = generateToken();
-          sessions.set(token, Date.now() + 86400000); // 24 год
+          sessions.set(token, Date.now() + 86400000); 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ token }));
         } else {
-          // Затримка 1с щоб ускладнити брутфорс
           setTimeout(() => { res.writeHead(401); res.end(); }, 1000);
         }
       } catch { res.writeHead(400); res.end(); }
@@ -2228,7 +2212,6 @@ const server = http.createServer((req, res) => {
     res.end(rafflePlayers.join('\n'));
     return;
   }
-
 
   if (req.url === '/api/raffle/setcmd' && req.method === 'POST') {
     let body = '';
@@ -2311,7 +2294,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── Перевірка відповіді переможця ───────────────────────────
   if (req.url === '/api/raffle/check/start' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
@@ -2423,7 +2405,7 @@ const server = http.createServer((req, res) => {
 function buildRaffleGame(n) {
   const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
   const gridSize = Math.min(shuffled.length, 108);
-  const cells = shuffled.slice(0, gridSize); // масив ніків — по одному на клітинку
+  const cells = shuffled.slice(0, gridSize); 
 
   return {
     winnersNeeded: n,
@@ -2479,7 +2461,6 @@ function connect() {
 
       const lower = content.toLowerCase();
 
-      // Перевірка відповіді переможця розіграшу (працює завжди, незалежно від інших команд)
       const check = raffleChecks[username];
       if (check && check.active) {
         check.active = false;
