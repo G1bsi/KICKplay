@@ -2205,6 +2205,14 @@ renderWinners();
 loadState();
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 
+// Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
+// гри натискання пробілу повторно запускало startGame() з нуля)
+window.addEventListener('keydown', (e) => {
+  if ((e.code === 'Space' || e.key === ' ') && document.activeElement && document.activeElement.tagName === 'BUTTON') {
+    e.preventDefault();
+  }
+});
+
 function toggleConfirmField() {
   const on = document.getElementById('toggle-confirm').checked;
   const f = document.getElementById('confirm-time-field');
@@ -2517,8 +2525,7 @@ const server = http.createServer((req, res) => {
         const { winners } = JSON.parse(body);
         const n = parseInt(winners);
         if (!rafflePlayers.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
-        // Розширили ліміт для сітки
-        const gridSize = Math.min(rafflePlayers.length, 200);
+        const gridSize = rafflePlayers.length;
         if (!n || n < 1 || n > gridSize) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців (макс ' + gridSize + ')' })); return;
         }
@@ -2569,11 +2576,11 @@ const server = http.createServer((req, res) => {
   res.end(RAFFLE_HTML());
 });
 
-// Генерує сітку: ліміт розширено до 200
+// Генерує сітку: кількість клітинок = кількості учасників, без обмежень
 function buildRaffleGame(n) {
   const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
-  const gridSize = Math.min(shuffled.length, 200);
-  const cells = shuffled.slice(0, gridSize); 
+  const gridSize = shuffled.length;
+  const cells = shuffled.slice(0, gridSize);
 
   return {
     winnersNeeded: n,
