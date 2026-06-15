@@ -93,7 +93,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kick Marbles — Вход</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Roboto+Mono:wght@400;500&display=swap');
   :root {
     --kick: #53fc18;
     --bg-main: #070907;
@@ -104,7 +104,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
   body {
     background: radial-gradient(circle at top, #111a11 0%, var(--bg-main) 100%);
     color: #fff;
-    font-family: 'Share Tech Mono', monospace;
+    font-family: 'Inter', sans-serif;
     min-height: 100vh;
     display: flex;
     align-items: center;
@@ -120,7 +120,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     text-align: center;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
-  h1 { font-family: 'Rajdhani', sans-serif; font-size: 26px; color: var(--kick); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;}
+  h1 { font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 900; color: var(--kick); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;}
   .sub { color: #888; font-size: 12px; margin-bottom: 30px; letter-spacing: 0.5px;}
   input {
     width: 100%;
@@ -129,7 +129,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     border-radius: 8px;
     padding: 14px;
     color: #fff;
-    font-family: 'Share Tech Mono', monospace;
+    font-family: 'Roboto Mono', monospace;
     font-size: 15px;
     margin-bottom: 16px;
     outline: none;
@@ -143,9 +143,9 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     border: none;
     border-radius: 8px;
     padding: 14px;
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: 16px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -201,7 +201,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kick Studio — Розыгрыши</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;900&family=Share+Tech+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap');
   
   :root {
     --kick: #53fc18;
@@ -220,7 +220,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   body {
     background: var(--bg-main);
     color: var(--text-main);
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
     height: 100vh;
     overflow: hidden;
     padding: 16px;
@@ -229,21 +229,25 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       radial-gradient(circle at 85% 30%, rgba(83, 252, 24, 0.03), transparent 25%);
   }
 
-  /* ── Хедер ──────────────────────────────── */
-  .topbar {
-    max-width: 1700px; margin: 0 auto 12px;
-    background: var(--panel-bg); 
-    border: 1px solid var(--panel-border); 
-    border-radius: 12px;
-    padding: 12px 20px;
-    display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  /* ── Плаваючий статус бота ──────────────── */
+  #floating-status {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 1000;
+    backdrop-filter: blur(8px);
   }
-  .topbar .logo {
-    font-size: 18px; font-weight: 900; color: var(--kick); letter-spacing: 1px; text-transform: uppercase;
-  }
-  .topbar .title { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:10px; background:#444; transition: 0.3s; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:8px; background:#444; transition: 0.3s; }
   .dot.open { background: var(--kick); box-shadow: 0 0 10px var(--kick); }
   .dot.closed { background: var(--red); box-shadow: 0 0 10px rgba(255, 74, 74, 0.4); }
 
@@ -253,7 +257,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     display: grid;
     grid-template-columns: 320px 1fr 340px;
     gap: 16px;
-    height: calc(100vh - 75px); /* віднімаємо висоту topbar та padding */
+    height: calc(100vh - 32px); /* 100vh мінус верхній та нижній padding(16+16) */
   }
   @media (max-width: 1200px) {
     .layout { grid-template-columns: 320px 1fr; }
@@ -275,7 +279,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   
   .col-title {
-    font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 12px;
+    font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 12px;
     display: flex; align-items: center; justify-content: space-between;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -287,11 +291,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
   .field-row { display: flex; gap: 10px; }
   .field.small { flex: 0 0 100px; }
-  label.field-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  label.field-label { font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 
   input[type=text], input[type=number] {
     background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 8px;
-    padding: 10px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
+    padding: 10px 12px; color: #fff; font-family: 'Roboto Mono', monospace;
     font-size: 14px; outline: none; transition: all 0.2s; width: 100%;
   }
   input:focus { border-color: var(--kick); box-shadow: inset 0 0 8px rgba(83,252,24,0.1); }
@@ -303,8 +307,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .mode-switch { display: flex; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
   .mode-btn {
     flex: 1; padding: 8px 6px; border-radius: 6px; border: none;
-    background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 700;
-    font-family: 'Rajdhani', sans-serif; cursor: pointer; transition: all 0.3s;
+    background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 800;
+    font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.3s;
     text-transform: uppercase;
   }
   .mode-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
@@ -312,7 +316,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Перемикачі (toggle) ─────────────────── */
   .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); }
-  .toggle-row .toggle-label { font-size: 14px; color: #ccc; flex: 1; font-weight: 600; }
+  .toggle-row .toggle-label { font-size: 13px; color: #ccc; flex: 1; font-weight: 600; }
   .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
@@ -329,8 +333,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* ── Кнопки ──────────────────────────────── */
   button {
     padding: 10px 14px; border: none; border-radius: 8px; font-size: 14px;
-    font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif;
-    text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;
+    font-weight: 800; cursor: pointer; font-family: 'Inter', sans-serif;
+    text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s;
     flex-shrink: 0;
   }
   button:hover  { transform: translateY(-1px); }
@@ -338,7 +342,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 
   .btn-primary { 
-    background: var(--kick); color: #000; width: 100%; padding: 14px; font-size: 16px; 
+    background: var(--kick); color: #000; width: 100%; padding: 14px; font-size: 15px; 
     box-shadow: 0 4px 10px rgba(83,252,24,0.15); margin-bottom: 12px;
   }
   .btn-primary:hover { box-shadow: 0 6px 15px rgba(83,252,24,0.3); }
@@ -360,14 +364,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .btn-row { display: flex; gap: 8px; margin-top: 8px; }
   .btn-row button { flex: 1; margin: 0; }
 
-  .limit-info { font-size: 12px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; margin-bottom: 12px; text-align: right; }
+  .limit-info { font-size: 12px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; margin-bottom: 12px; text-align: right; }
   .limit-info b { color: var(--kick); font-size: 14px; }
 
-  #saved-msg, #test-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; margin-top: 4px; display:block; height: 14px; }
+  #saved-msg, #test-msg { font-size: 11px; font-family: 'Roboto Mono', monospace; margin-top: 4px; display:block; height: 14px; }
 
   /* ── Тестова панель ──────────────────────── */
   details.test-section { margin-top: 12px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); }
-  details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Share Tech Mono', monospace; outline: none; }
+  details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Roboto Mono', monospace; outline: none; }
   details.test-section summary:hover { color: #ccc; }
   details.test-section .field-row { margin-top: 10px; }
 
@@ -388,20 +392,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .participant-row {
     display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px; border-radius: 6px; font-size: 13px;
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 500;
     color: #ddd; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.02);
     transition: all 0.2s;
   }
   .participant-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
-  .participant-row .p-num { color: var(--text-muted); font-family: 'Share Tech Mono', monospace; font-size: 10px; width: 20px; flex-shrink: 0; }
+  .participant-row .p-num { color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-size: 10px; width: 20px; flex-shrink: 0; }
 
-  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
+  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 13px; font-family: 'Roboto Mono', monospace; text-align: center; padding: 20px; }
 
   /* ── Сітка Cash Hunt ─────────────────────── */
-  #hint { text-align: center; font-size: 15px; color: #ccc; margin: 8px 0 4px; font-family: 'Share Tech Mono', monospace; min-height: 18px; letter-spacing: 0.5px; flex-shrink: 0;}
-  #hint b { color: var(--kick); font-size: 16px; }
-  #progress { text-align: center; font-size: 14px; color: var(--text-muted); margin-bottom: 8px; font-family: 'Share Tech Mono', monospace; min-height: 18px; flex-shrink: 0;}
+  #hint { text-align: center; font-size: 14px; color: #ccc; margin: 8px 0 4px; font-family: 'Roboto Mono', monospace; min-height: 18px; flex-shrink: 0;}
+  #hint b { color: var(--kick); font-size: 15px; }
+  #progress { text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; font-family: 'Roboto Mono', monospace; min-height: 18px; flex-shrink: 0;}
   #progress b { color: var(--kick); }
 
   .grid {
@@ -430,8 +434,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     display: flex; align-items: center; justify-content: center;
     border-radius: 8px;
     backface-visibility: hidden;
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
     text-align: center;
     overflow: hidden;
     padding: 2px;
@@ -485,8 +489,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Кастомний Чат ─────────────────────── */
   .chat-msg {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
     line-height: 1.4;
     word-wrap: break-word;
     padding: 6px 10px;
@@ -511,8 +515,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #race-overlay.visible, #roulette-overlay.visible { display: flex; }
   
   #race-overlay-hint, #roulette-overlay-hint {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 24px; color: var(--kick); letter-spacing: 2px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 24px; font-weight: bold; color: var(--kick); letter-spacing: 2px;
     text-transform: uppercase;
     text-shadow: 0 0 15px rgba(83,252,24,0.4);
   }
@@ -560,7 +564,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .roulette-cell {
     flex: 0 0 200px; height: 100%;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 24px;
+    font-family: 'Inter', sans-serif; font-weight: 800; font-size: 24px;
     color: #888;
     border-right: 1px solid #1a1a1a;
     text-align: center; padding: 0 16px;
@@ -607,13 +611,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .winner-top { display: flex; align-items: center; gap: 10px; }
   .w-status { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
   .w-status.ok { color: var(--kick); text-shadow: 0 0 6px rgba(83,252,24,0.4); }
-  .w-status.pending { color: var(--gold); font-family: 'Share Tech Mono', monospace; font-size: 13px; width: auto; font-weight: bold; }
+  .w-status.pending { color: var(--gold); font-family: 'Roboto Mono', monospace; font-size: 12px; width: auto; font-weight: bold; }
   .w-status.bad { color: var(--red); }
-  .w-name { font-weight: 800; color: #fff; flex: 1; font-size: 15px; letter-spacing: 0.5px; }
-  .w-time { font-size: 11px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; }
+  .w-name { font-weight: 700; color: #fff; flex: 1; font-size: 14px; letter-spacing: 0.5px; }
+  .w-time { font-size: 10px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; }
   
   .w-msg {
-    margin-top: 6px; font-size: 12px; color: var(--kick); font-family: 'Share Tech Mono', monospace;
+    margin-top: 6px; font-size: 12px; color: var(--kick); font-family: 'Roboto Mono', monospace;
     background: rgba(83,252,24,0.05); border-radius: 6px; padding: 6px 10px;
     border: 1px dashed rgba(83,252,24,0.2);
   }
@@ -632,12 +636,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winner-announce.visible { opacity: 1; pointer-events: auto; }
 
   #winner-announce .wa-label {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 28px; color: var(--kick); letter-spacing: 8px; text-transform: uppercase;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 28px; font-weight: bold; color: var(--kick); letter-spacing: 8px; text-transform: uppercase;
     text-shadow: 0 0 15px rgba(83,252,24,0.3);
   }
   #winner-announce .wa-name {
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: clamp(60px, 8vw, 120px);
     font-weight: 900;
     color: #fff;
@@ -653,8 +657,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { transform: scale(1) translateY(0);   opacity: 1; filter: blur(0); }
   }
   #winner-announce .wa-timer {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 56px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 56px; font-weight: bold;
     color: var(--gold);
     letter-spacing: 2px;
     min-width: 120px;
@@ -668,8 +672,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   
   #winner-announce .wa-msg {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: clamp(32px, 4vw, 64px); font-weight: 700; color: var(--kick);
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(32px, 4vw, 64px); font-weight: 800; color: var(--kick);
     background: rgba(83,252,24,0.05);
     border: 1px solid rgba(83,252,24,0.2);
     border-radius: 16px; padding: 20px 40px;
@@ -684,13 +688,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   
   #winner-announce .wa-sub {
-    font-size: 20px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; letter-spacing: 4px; text-transform: uppercase;
+    font-size: 18px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-weight: bold; letter-spacing: 4px; text-transform: uppercase;
   }
   #winner-announce .wa-close {
     margin-top: 20px;
     background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #aaa;
     padding: 12px 32px; border-radius: 10px;
-    font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700;
+    font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 800;
     cursor: pointer; transition: all 0.3s;
     text-transform: uppercase; letter-spacing: 1px;
   }
@@ -717,7 +721,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border-left: 4px solid var(--kick);
     border-radius: 12px;
     padding: 16px;
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
     overflow-y: auto;
     pointer-events: none;
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
@@ -731,20 +735,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .standing-row {
     display: flex; align-items: center;
     padding: 8px 0;
-    font-weight: 600; font-size: 15px; color: #ccc;
+    font-weight: 600; font-size: 14px; color: #ccc;
   }
   .standing-row.winner { color: var(--kick); font-weight: 800; text-shadow: 0 0 8px rgba(83,252,24,0.3); }
-  .standing-pos { width: 24px; color: #666; font-size: 13px; font-family: 'Share Tech Mono', monospace; }
+  .standing-pos { width: 24px; color: #666; font-size: 12px; font-family: 'Roboto Mono', monospace; font-weight: bold; }
   .standing-swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: 12px; }
   .standing-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .standing-lap { font-size: 12px; color: #555; font-family: 'Share Tech Mono', monospace; }
+  .standing-lap { font-size: 11px; color: #555; font-family: 'Roboto Mono', monospace; font-weight: bold; }
   
   .car-label-3d {
     position: absolute; transform: translate(-50%, -100%);
     background: rgba(0,0,0,0.7); color: #fff;
     padding: 6px 12px; border-radius: 8px;
-    font-size: 14px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 1px;
+    font-size: 13px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px;
     border-bottom: 3px solid var(--car-color, #888);
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     transition: left 0.05s linear, top 0.05s linear;
@@ -756,7 +760,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
     font-size: 140px; font-weight: 900; color: var(--kick);
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Inter', sans-serif;
     text-shadow: 0 0 50px rgba(83,252,24,0.6);
     z-index: 3; pointer-events: none;
   }
@@ -766,9 +770,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="logo">Kick Studio</div>
-  <div class="title">bot status <span class="dot closed" id="conn-dot"></span></div>
+<div id="floating-status">
+  bot status <span class="dot closed" id="conn-dot"></span>
 </div>
 
 <div class="layout">
