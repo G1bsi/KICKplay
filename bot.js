@@ -342,8 +342,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 
   .btn-primary { 
-    background: var(--kick); color: #000; width: 100%; padding: 14px; font-size: 15px; 
-    box-shadow: 0 4px 10px rgba(83,252,24,0.15); margin-bottom: 12px;
+    background: var(--kick); color: #000; padding: 14px; font-size: 15px; 
+    box-shadow: 0 4px 10px rgba(83,252,24,0.15); 
   }
   .btn-primary:hover { box-shadow: 0 6px 15px rgba(83,252,24,0.3); }
   
@@ -362,7 +362,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .btn-small  { padding: 6px 10px; font-size: 12px; }
 
   .btn-row { display: flex; gap: 8px; margin-top: 8px; }
-  .btn-row button { flex: 1; margin: 0; }
+  .btn-row button { margin: 0; }
 
   .limit-info { font-size: 12px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; margin-bottom: 12px; text-align: right; }
   .limit-info b { color: var(--kick); font-size: 14px; }
@@ -370,7 +370,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #saved-msg, #test-msg { font-size: 11px; font-family: 'Roboto Mono', monospace; margin-top: 4px; display:block; height: 14px; }
 
   /* ── Тестова панель ──────────────────────── */
-  details.test-section { margin-top: 12px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); }
+  details.test-section { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); margin-bottom: 12px;}
   details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Roboto Mono', monospace; outline: none; }
   details.test-section summary:hover { color: #ccc; }
   details.test-section .field-row { margin-top: 10px; }
@@ -764,6 +764,27 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     text-shadow: 0 0 50px rgba(83,252,24,0.6);
     z-index: 3; pointer-events: none;
   }
+
+  /* Підказки керування 3D */
+  #race-controls-hint {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+    color: #ddd;
+    z-index: 10;
+    pointer-events: none;
+    line-height: 1.6;
+    text-align: right;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+  }
+  #race-controls-hint b { color: var(--kick); font-weight: 800; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -805,8 +826,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div id="race-count-field" style="display:none;">
       <div class="field-row" style="margin-top:8px;">
         <div class="field">
-          <label class="field-label">Участников гонки (2–15)</label>
-          <input type="number" id="race-count" value="12" min="2" max="15">
+          <label class="field-label">Участников гонки (до 300)</label>
+          <input type="number" id="race-count" value="12" min="2" max="300">
         </div>
         <div class="field small">
           <label class="field-label">Кругов</label>
@@ -831,22 +852,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
     <div class="limit-info">Участников: <b id="participant-count">0</b></div>
 
-    <button class="btn-primary" onclick="startGame()">🎯 Начать розыгрыш</button>
-
-    <div class="btn-row">
-      <button class="btn-dark" onclick="downloadCSV()">⬇ CSV</button>
-      <button class="btn-dark" onclick="resetRaffle()">🗑 Сброс</button>
+    <!-- Кнопки в один ряд -->
+    <div class="btn-row" style="margin-bottom: 12px; gap: 8px;">
+      <button class="btn-primary" style="margin:0; flex: 2; font-size: 13px;" onclick="startGame()">🎯 СТАРТ</button>
+      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">⬇ CSV</button>
+      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="resetRaffle()">🗑 Сброс</button>
     </div>
-
-    <details class="test-section">
-      <summary>🧪 Тестовые участники</summary>
-      <div class="field-row">
-        <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
-        <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
-        <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
-      </div>
-      <span id="test-msg"></span>
-    </details>
 
     <div class="col-title" style="margin-top:16px;">
       <span>Победители</span>
@@ -864,6 +875,18 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span>Участники</span>
       <span class="count" id="participants-count-title">0</span>
     </div>
+
+    <!-- Тестові учасники тут -->
+    <details class="test-section">
+      <summary>🧪 Тестовые участники</summary>
+      <div class="field-row">
+        <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+        <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
+        <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
+      </div>
+      <span id="test-msg"></span>
+    </details>
+
     <div id="hint"></div>
     <div id="progress"></div>
     <div class="box" id="main-box">
@@ -904,11 +927,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="race-track-area">
     <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
     <div id="race-standings"></div>
+    <!-- Підказки генеруються динамічно в JS -->
   </div>
   <div id="race-overlay-controls" style="display:none;">
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
-    <button class="btn-primary" style="width:auto;" onclick="closeRaceOverlay()">Завершить</button>
+    <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRaceOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -925,7 +949,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="roulette-overlay-controls" style="display:none;">
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
-    <button class="btn-primary" style="width:auto;" onclick="closeRouletteOverlay()">Завершить</button>
+    <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -1164,7 +1188,8 @@ async function startGame() {
 
 async function reroll() {
   if (gameMode === 'race') {
-    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
+    // В гонці ліміт до 300
+    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 12, 300);
     const count = Math.min(n, state.participants.length);
     raceQualifiers = pickRandom(state.participants, count);
     return runRace(raceQualifiers, true);
@@ -1185,7 +1210,7 @@ async function fastReroll() {
     if (!qualifiers.length) {
       const n = Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
       if (n < 2) return alert('Нужно минимум 2 участника');
-      qualifiers = pickRandom(state.participants, n);
+      qualifiers = pickRandom(state.participants, Math.min(n, 300));
     }
     hideRaceOverlay();
     resetGameUIKeepMode();
@@ -1297,7 +1322,8 @@ function pickRandom(arr, n) {
 }
 
 async function startRaceGame() {
-  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 15);
+  // Збільшено ліміт до 300
+  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 300);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
   const count = Math.min(n, state.participants.length);
@@ -1318,8 +1344,13 @@ const TRACK_POINTS_2D = [
 const ROAD_RADIUS = 7.5;  
 
 let renderer3D = null, scene3D = null, camera3D = null, orbitControls3D = null;
+let raceKeyHandler = null, raceMouseHandler = null, raceCtxHandler = null;
 
 function disposeRace3D() {
+  if (raceKeyHandler) { window.removeEventListener('keydown', raceKeyHandler); raceKeyHandler = null; }
+  if (raceMouseHandler) { window.removeEventListener('mousedown', raceMouseHandler); raceMouseHandler = null; }
+  if (raceCtxHandler) { window.removeEventListener('contextmenu', raceCtxHandler); raceCtxHandler = null; }
+
   if (orbitControls3D) {
     try { orbitControls3D.dispose(); } catch (e) {}
     orbitControls3D = null;
@@ -1524,7 +1555,13 @@ async function runRace(qualifiers, totalLaps) {
     '<button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>' +
     '<div id="race-standings"></div>' +
     '<div id="race-labels"></div>' +
-    '<div id="race-countdown"></div>';
+    '<div id="race-countdown"></div>' +
+    '<div id="race-controls-hint">' +
+      '<b>ЛКМ</b> — вращать камеру <br>' +
+      '<b>Колесо</b> — масштаб <br>' +
+      '<b>CTRL</b> — сменить вид (свободная / за авто) <br>' +
+      '<b>ЛКМ / ПКМ</b> (в режиме авто) — смена игрока' +
+    '</div>';
 
   if (!window.THREE) {
     overlayHint.textContent = '3D недоступно (не загрузился Three.js)';
@@ -1613,6 +1650,8 @@ async function runRace(qualifiers, totalLaps) {
   const UP = new THREE.Vector3(0, 1, 0);
 
   function positionCars(progressArr) {
+    // Щоб при 300+ машинках вони не вилітали за асфальт, обмежуємо смуги
+    const maxLanes = 12;
     for (let i = 0; i < n; i++) {
       let u = progressArr[i] % 1;
       if (u < 0) u += 1;
@@ -1621,7 +1660,10 @@ async function runRace(qualifiers, totalLaps) {
       tangent.y = 0;
       tangent.normalize();
       const right = new THREE.Vector3().crossVectors(tangent, UP).normalize();
-      const offset = (i - (n - 1) / 2) * laneSpacing;
+      
+      const laneIndex = i % maxLanes;
+      const offset = (laneIndex - (maxLanes - 1) / 2) * laneSpacing;
+      
       const pos = p.clone().addScaledVector(right, offset);
       pos.y = 0.55;
       cars[i].position.copy(pos);
@@ -1650,9 +1692,11 @@ async function runRace(qualifiers, totalLaps) {
       const totalB = lapsArr[b] + (progressArr[b] % 1);
       return totalB - totalA;
     });
+    // Відображаємо максимум ТОП 10, щоб не засмічувати екран при 300 гравцях
+    const top10 = order.slice(0, 10);
     const leadLapDisplay = Math.min(lapsArr[order[0]] + 1, totalLaps);
     standingsBox.innerHTML = '<div class="standings-title">Круг ' + leadLapDisplay + ' / ' + totalLaps + '</div>' +
-      order.map((idx, pos) => {
+      top10.map((idx, pos) => {
         const cls = 'standing-row' + (idx === winnerIdx ? ' winner' : '');
         return '<div class="' + cls + '">' +
           '<span class="standing-pos">' + (pos + 1) + '</span>' +
@@ -1668,8 +1712,51 @@ async function runRace(qualifiers, totalLaps) {
   positionCars(progress);
   renderStandings(progress, laps, -1);
 
+  // Камера від особи (Follow Mode)
+  let camMode = 'free';
+  let followIdx = 0;
+
+  raceKeyHandler = (e) => {
+    if (e.key === 'Control') {
+      camMode = camMode === 'free' ? 'follow' : 'free';
+      if (orbitControls3D) {
+        orbitControls3D.enabled = (camMode === 'free');
+        if (camMode === 'free') {
+          orbitControls3D.target.copy(cars[followIdx].position);
+          orbitControls3D.update();
+        }
+      }
+    }
+  };
+  window.addEventListener('keydown', raceKeyHandler);
+
+  raceMouseHandler = (e) => {
+    if (camMode === 'follow') {
+      if (e.button === 0) { // ЛКМ
+        followIdx = (followIdx + 1) % n;
+      } else if (e.button === 2) { // ПКМ
+        followIdx = (followIdx - 1 + n) % n;
+      }
+    }
+  };
+  raceCtxHandler = (e) => {
+    if (camMode === 'follow') {
+      e.preventDefault();
+    }
+  };
+  renderer3D.domElement.addEventListener('mousedown', raceMouseHandler);
+  renderer3D.domElement.addEventListener('contextmenu', raceCtxHandler);
+
   function renderFrame() {
-    if (orbitControls3D) orbitControls3D.update();
+    if (camMode === 'follow') {
+      const targetCar = cars[followIdx];
+      const tangent = new THREE.Vector3(0, 0, 1).applyQuaternion(targetCar.quaternion);
+      const idealPos = targetCar.position.clone().add(tangent.multiplyScalar(-12)).add(new THREE.Vector3(0, 4, 0));
+      camera3D.position.lerp(idealPos, 0.15);
+      camera3D.lookAt(targetCar.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    } else {
+      if (orbitControls3D) orbitControls3D.update();
+    }
     updateLabels();
     renderer3D.render(scene3D, camera3D);
   }
