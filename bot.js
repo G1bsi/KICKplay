@@ -370,10 +370,28 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #saved-msg, #test-msg { font-size: 11px; font-family: 'Roboto Mono', monospace; margin-top: 4px; display:block; height: 14px; }
 
   /* ── Тестова панель ──────────────────────── */
-  details.test-section { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); margin-bottom: 12px;}
-  details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Roboto Mono', monospace; outline: none; }
-  details.test-section summary:hover { color: #ccc; }
-  details.test-section .field-row { margin-top: 10px; }
+  /* Невелика непомітна панель тестових учасників у правому нижньому куті */
+  .test-section-fixed {
+    position: fixed; bottom: 10px; right: 10px; z-index: 50;
+    background: rgba(20,20,22,0.55);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 4px 8px;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+    max-width: 220px;
+  }
+  .test-section-fixed:hover,
+  .test-section-fixed[open] { opacity: 1; }
+  .test-section-fixed summary {
+    font-size: 13px; cursor: pointer; outline: none; list-style: none;
+    color: var(--text-muted); text-align: center;
+  }
+  .test-section-fixed summary::-webkit-details-marker { display: none; }
+  .test-section-fixed .field-row { margin-top: 8px; gap: 6px; }
+  .test-section-fixed input { font-size: 11px; padding: 4px 6px; }
+  .test-section-fixed .btn-small { font-size: 11px; padding: 4px 8px; }
+  .test-section-fixed #test-msg { font-size: 10px; }
 
   /* ── Списки / Бокси ───────────────── */
   .box {
@@ -866,7 +884,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="box" id="winners-box">
       <div class="empty-box">Победителей пока нет</div>
     </div>
-    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Завершить стрим-розыгрыш</button>
   </div>
 
   <!-- ── Учасники / Гра ────────────────────── -->
@@ -875,17 +892,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span>Участники</span>
       <span class="count" id="participants-count-title">0</span>
     </div>
-
-    <!-- Тестові учасники тут -->
-    <details class="test-section">
-      <summary>🧪 Тестовые участники</summary>
-      <div class="field-row">
-        <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
-        <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
-        <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
-      </div>
-      <span id="test-msg"></span>
-    </details>
 
     <div id="hint"></div>
     <div id="progress"></div>
@@ -910,6 +916,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
 
 </div>
+
+<!-- Тестові учасники — невелика непомітна панель у правому нижньому куті -->
+<details class="test-section-fixed" id="test-section-fixed">
+  <summary>🧪</summary>
+  <div class="field-row">
+    <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+    <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
+    <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
+  </div>
+  <span id="test-msg"></span>
+</details>
 
 <!-- Оголошення переможця -->
 <div id="winner-announce">
@@ -1930,9 +1947,17 @@ async function startReveal() {
 
   const cells = document.querySelectorAll('.cell');
 
+  // Швидкість розкриття клітинок масштабується під кількість учасників:
+  // стандарт (35мс) для звичної кількості (~20), пропорційно швидше для великих
+  // (на 300 учасників 35мс*297 ≈ 10.4с було дуже довго → тепер ~4мс*297 ≈ 1.2с)
+  const REFERENCE_COUNT = 20;
+  const BASE_DELAY = 35;
+  const MIN_DELAY = 4;
+  const flipDelay = Math.max(MIN_DELAY, Math.min(BASE_DELAY, BASE_DELAY * REFERENCE_COUNT / Math.max(others.length, 1)));
+
   for (const idx of others) {
     cells[idx].classList.add('flipped', 'revealed');
-    await sleep(35);
+    await sleep(flipDelay);
   }
 
   await sleep(600);
@@ -2182,17 +2207,6 @@ async function retryWinner(name) {
   if (checkTimerInterval) clearInterval(checkTimerInterval);
   checkTimerInterval = setInterval(pollCheckState, 1000);
   pollCheckState();
-}
-
-async function finishRaffle() {
-  if (!confirm('Завершить розыгрыш? Регистрация будет закрыта, список победителей очищен.')) return;
-  if (checkTimerInterval) clearInterval(checkTimerInterval);
-  await fetch('/api/raffle/finish', { method: 'POST' });
-  winnersHistory = [];
-  renderWinners();
-  closeAnnounce();
-  resetGameUI();
-  loadState();
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
