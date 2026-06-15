@@ -1895,6 +1895,40 @@ function closeRaceOverlay() {
   resetGameUI();
 }
 
+// Підбирає кількість колонок так, щоб усі N клітинок (квадратних, gap=6px)
+// влізли в контейнер без скролу. Якщо учасників мало — клітинки великі,
+// якщо багато — автоматично зменшуються (з мінімумом, нижче якого дозволяється скрол).
+function fitGridColumns(grid, box, n) {
+  const gap = 6;
+  const padX = 24; // .box padding(8*2) + .grid padding(4*2)
+  const padY = 24;
+  const W = Math.max(box.clientWidth - padX, 50);
+  const H = Math.max(box.clientHeight - padY, 50);
+  const MIN_CELL = 16;
+  const MAX_CELL = 140;
+
+  let best = { cols: n, cellSize: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cellW = (W - (cols - 1) * gap) / cols;
+    const cellH = (H - (rows - 1) * gap) / rows;
+    const cellSize = Math.min(cellW, cellH);
+    if (cellSize > best.cellSize) {
+      best = { cols, cellSize };
+    }
+  }
+
+  if (best.cellSize >= MIN_CELL) {
+    const cellSize = Math.min(best.cellSize, MAX_CELL);
+    grid.style.gridTemplateColumns = 'repeat(' + best.cols + ', ' + cellSize + 'px)';
+    grid.style.justifyContent = 'center';
+  } else {
+    // Навіть при мінімальному розмірі не влазить — дозволяємо скрол
+    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(' + MIN_CELL + 'px, 1fr))';
+    grid.style.justifyContent = '';
+  }
+}
+
 function renderGame(game) {
   currentGame = game;
   selected = new Set();
@@ -1905,8 +1939,8 @@ function renderGame(game) {
   box.className = 'box selecting';
   const grid = document.getElementById('grid');
 
-  // Динамічна авто-сітка, що підлаштовується під будь-яку кількість елементів без обрізання
-  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45px, 1fr))';
+  // Підбираємо розмір клітинок так, щоб усі влізли без скролу
+  fitGridColumns(grid, box, game.cells.length);
 
   document.getElementById('game-controls').style.display = 'flex';
   document.getElementById('btn-go').style.display = '';
@@ -2009,19 +2043,39 @@ function playTimeoutSound() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
-    [0, 0.25, 0.5].forEach(offset => {
+
+    // Один "дзвоник": основний тон (трикутна хвиля) + легкий обертон для теплого тембру
+    function chime(freq, start, dur, gainMax) {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + start);
+      gain.gain.exponentialRampToValueAtTime(gainMax, now + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.25);
-    });
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.05);
+
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 2;
+      gain2.gain.setValueAtTime(0.0001, now + start);
+      gain2.gain.exponentialRampToValueAtTime(gainMax * 0.25, now + start + 0.02);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + start + dur * 0.7);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(now + start);
+      osc2.stop(now + start + dur + 0.05);
+    }
+
+    // "Дінь-дон" (E6 → B5), повторений двічі — помітно, але не дратує (~2с)
+    chime(1318.5, 0,    0.55, 0.32);
+    chime(987.77, 0.30, 0.70, 0.32);
+    chime(1318.5, 0.95, 0.55, 0.28);
+    chime(987.77, 1.25, 0.75, 0.28);
   } catch (e) {}
 }
 
@@ -2244,6 +2298,15 @@ setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 window.addEventListener('keydown', (e) => {
   if ((e.code === 'Space' || e.key === ' ') && document.activeElement && document.activeElement.tagName === 'BUTTON') {
     e.preventDefault();
+  }
+});
+
+// Перерахувати сітку Cash Hunt при зміні розміру вікна
+window.addEventListener('resize', () => {
+  if (phase === 'selecting' || phase === 'revealing' || phase === 'done') {
+    const grid = document.getElementById('grid');
+    const box = document.getElementById('main-box');
+    if (grid && box && currentGame) fitGridColumns(grid, box, currentGame.cells.length);
   }
 });
 
