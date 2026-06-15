@@ -372,7 +372,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* ── Тестова панель ──────────────────────── */
   /* Невелика непомітна панель тестових учасників у правому нижньому куті */
   .test-section-fixed {
-    position: fixed; bottom: 10px; right: 10px; z-index: 50;
+    position: fixed; bottom: 10px; left: 10px; z-index: 50;
     background: rgba(20,20,22,0.55);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 8px;
