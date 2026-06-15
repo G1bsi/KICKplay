@@ -37,6 +37,9 @@ let raffleChecks    = {};
 // Активні сесії (token → expiry)
 const sessions = new Map();
 
+// SSE клієнти для живого чату
+let chatClients = [];
+
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -218,8 +221,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background: var(--bg-main);
     color: var(--text-main);
     font-family: 'Rajdhani', sans-serif;
-    min-height: 100vh;
-    padding: 20px;
+    height: 100vh;
+    overflow: hidden;
+    padding: 16px;
     background-image: 
       radial-gradient(circle at 15% 50%, rgba(83, 252, 24, 0.03), transparent 25%),
       radial-gradient(circle at 85% 30%, rgba(83, 252, 24, 0.03), transparent 25%);
@@ -227,19 +231,19 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Хедер ──────────────────────────────── */
   .topbar {
-    max-width: 1700px; margin: 0 auto 20px;
+    max-width: 1700px; margin: 0 auto 12px;
     background: var(--panel-bg); 
     border: 1px solid var(--panel-border); 
-    border-radius: 16px;
-    padding: 16px 24px;
+    border-radius: 12px;
+    padding: 12px 20px;
     display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   }
   .topbar .logo {
-    font-size: 20px; font-weight: 900; color: var(--kick); letter-spacing: 1px; text-transform: uppercase;
+    font-size: 18px; font-weight: 900; color: var(--kick); letter-spacing: 1px; text-transform: uppercase;
   }
-  .topbar .title { font-size: 15px; color: var(--text-muted); display: flex; align-items: center; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:10px; background:#444; transition: 0.3s; }
+  .topbar .title { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:10px; background:#444; transition: 0.3s; }
   .dot.open { background: var(--kick); box-shadow: 0 0 10px var(--kick); }
   .dot.closed { background: var(--red); box-shadow: 0 0 10px rgba(255, 74, 74, 0.4); }
 
@@ -247,45 +251,48 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 350px 1fr 350px;
-    gap: 20px;
+    grid-template-columns: 320px 1fr 340px;
+    gap: 16px;
+    height: calc(100vh - 75px); /* віднімаємо висоту topbar та padding */
   }
   @media (max-width: 1200px) {
-    .layout { grid-template-columns: 350px 1fr; }
+    .layout { grid-template-columns: 320px 1fr; }
     #chat-col { display: none; }
   }
   @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
+    .layout { grid-template-columns: 1fr; overflow-y: auto;}
+    body { overflow: auto; height: auto; }
   }
 
   .col {
     background: var(--panel-bg); 
     border: 1px solid var(--panel-border); 
-    border-radius: 16px;
-    padding: 24px;
+    border-radius: 12px;
+    padding: 16px;
     display: flex; flex-direction: column;
-    height: calc(100vh - 100px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    min-height: 0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   }
   
   .col-title {
-    font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 20px;
+    font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 12px;
     display: flex; align-items: center; justify-content: space-between;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex-shrink: 0;
   }
-  .col-title .count { color: var(--kick); font-size: 18px; }
+  .col-title .count { color: var(--kick); font-size: 16px; }
 
   /* ── Поля вводу ──────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-  .field-row { display: flex; gap: 12px; }
-  .field.small { flex: 0 0 110px; }
-  label.field-label { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .field-row { display: flex; gap: 10px; }
+  .field.small { flex: 0 0 100px; }
+  label.field-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
   input[type=text], input[type=number] {
-    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 10px;
-    padding: 12px 14px; color: #fff; font-family: 'Share Tech Mono', monospace;
-    font-size: 15px; outline: none; transition: all 0.2s; width: 100%;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 8px;
+    padding: 10px 12px; color: #fff; font-family: 'Share Tech Mono', monospace;
+    font-size: 14px; outline: none; transition: all 0.2s; width: 100%;
   }
   input:focus { border-color: var(--kick); box-shadow: inset 0 0 8px rgba(83,252,24,0.1); }
   
@@ -293,55 +300,54 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winners-count, #confirm-seconds { text-align: center; }
 
   /* ── Перемикач режиму гри ─────────────────── */
-  .mode-switch { display: flex; gap: 8px; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 12px; border: 1px solid var(--panel-border); }
+  .mode-switch { display: flex; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
   .mode-btn {
-    flex: 1; padding: 10px 8px; border-radius: 8px; border: none;
-    background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 700;
+    flex: 1; padding: 8px 6px; border-radius: 6px; border: none;
+    background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 700;
     font-family: 'Rajdhani', sans-serif; cursor: pointer; transition: all 0.3s;
     text-transform: uppercase;
   }
   .mode-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-  .mode-btn.active { background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 10px rgba(83,252,24,0.1); }
+  .mode-btn.active { background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 8px rgba(83,252,24,0.1); }
 
   /* ── Перемикачі (toggle) ─────────────────── */
-  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.02); }
-  .toggle-row .toggle-label { font-size: 15px; color: #ccc; flex: 1; font-weight: 600; }
-  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); }
+  .toggle-row .toggle-label { font-size: 14px; color: #ccc; flex: 1; font-weight: 600; }
+  .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
     position: absolute; cursor: pointer; inset: 0;
-    background: #222; border-radius: 24px; transition: 0.3s; border: 1px solid #333;
+    background: #222; border-radius: 22px; transition: 0.3s; border: 1px solid #333;
   }
   .slider:before {
-    content: ''; position: absolute; height: 16px; width: 16px;
+    content: ''; position: absolute; height: 14px; width: 14px;
     left: 3px; bottom: 3px; background: #888; border-radius: 50%; transition: 0.3s;
   }
   .switch input:checked + .slider { background: var(--kick-dark); border-color: var(--kick); }
-  .switch input:checked + .slider:before { transform: translateX(20px); background: var(--kick); box-shadow: 0 0 5px var(--kick); }
+  .switch input:checked + .slider:before { transform: translateX(18px); background: var(--kick); box-shadow: 0 0 5px var(--kick); }
 
   /* ── Кнопки ──────────────────────────────── */
   button {
-    padding: 12px 16px; border: none; border-radius: 10px; font-size: 15px;
+    padding: 10px 14px; border: none; border-radius: 8px; font-size: 14px;
     font-weight: 700; cursor: pointer; font-family: 'Rajdhani', sans-serif;
     text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;
+    flex-shrink: 0;
   }
-  button:hover  { transform: translateY(-2px); }
+  button:hover  { transform: translateY(-1px); }
   button:active { transform: scale(0.97); }
   button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 
   .btn-primary { 
-    background: var(--kick); color: #000; width: 100%; padding: 16px; font-size: 18px; 
-    box-shadow: 0 4px 15px rgba(83,252,24,0.15); 
+    background: var(--kick); color: #000; width: 100%; padding: 14px; font-size: 16px; 
+    box-shadow: 0 4px 10px rgba(83,252,24,0.15); margin-bottom: 12px;
   }
-  .btn-primary:hover { box-shadow: 0 6px 20px rgba(83,252,24,0.3); }
+  .btn-primary:hover { box-shadow: 0 6px 15px rgba(83,252,24,0.3); }
   
-  .btn-gold   { background: var(--gold); color: #000; box-shadow: 0 4px 15px rgba(255,215,0,0.15); }
-  .btn-gold:hover { box-shadow: 0 6px 20px rgba(255,215,0,0.3); }
+  .btn-gold   { background: var(--gold); color: #000; box-shadow: 0 4px 10px rgba(255,215,0,0.15); }
+  .btn-gold:hover { box-shadow: 0 6px 15px rgba(255,215,0,0.3); }
   
   .btn-green  { background: rgba(83,252,24,0.1); color: var(--kick); border: 1px solid rgba(83,252,24,0.3); }
   .btn-green:hover { background: rgba(83,252,24,0.2); }
-  
-  .btn-orange { background: #e67e22; color: #fff; }
   
   .btn-red    { background: rgba(255,74,74,0.1); color: var(--red); border: 1px solid rgba(255,74,74,0.3); width: 100%; }
   .btn-red:hover { background: rgba(255,74,74,0.2); }
@@ -349,63 +355,60 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .btn-dark   { background: rgba(255,255,255,0.05); color: #ccc; border: 1px solid rgba(255,255,255,0.1); }
   .btn-dark:hover { background: rgba(255,255,255,0.1); color: #fff; }
   
-  .btn-small  { padding: 8px 12px; font-size: 13px; }
+  .btn-small  { padding: 6px 10px; font-size: 12px; }
 
-  .btn-row { display: flex; gap: 10px; margin-top: 10px; }
-  .btn-row button { flex: 1; }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn-row button { flex: 1; margin: 0; }
 
-  .limit-info { font-size: 13px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; margin-bottom: 16px; text-align: right; }
-  .limit-info b { color: var(--kick); font-size: 15px; }
+  .limit-info { font-size: 12px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; margin-bottom: 12px; text-align: right; }
+  .limit-info b { color: var(--kick); font-size: 14px; }
 
-  #saved-msg, #test-msg { font-size: 12px; font-family: 'Share Tech Mono', monospace; margin-top: 4px; display:block; height: 15px; }
+  #saved-msg, #test-msg { font-size: 11px; font-family: 'Share Tech Mono', monospace; margin-top: 4px; display:block; height: 14px; }
 
   /* ── Тестова панель ──────────────────────── */
-  details.test-section { margin-top: 16px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid var(--panel-border); }
-  details.test-section summary { font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: 'Share Tech Mono', monospace; outline: none; }
+  details.test-section { margin-top: 12px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); }
+  details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Share Tech Mono', monospace; outline: none; }
   details.test-section summary:hover { color: #ccc; }
-  details.test-section .field-row { margin-top: 12px; }
+  details.test-section .field-row { margin-top: 10px; }
 
   /* ── Списки / Бокси ───────────────── */
   .box {
-    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 12px;
-    flex: 1; min-height: 0; overflow-y: auto;
-    padding: 12px;
-    min-height: 200px;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 10px;
+    flex: 1; min-height: 50px; overflow-y: auto; overflow-x: hidden;
+    padding: 10px;
   }
-  .box::-webkit-scrollbar { width: 6px; }
-  .box::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  .box::-webkit-scrollbar { width: 4px; }
+  .box::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
   .box::-webkit-scrollbar-track { background: transparent; }
 
   .participants-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 6px;
   }
   .participant-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 12px; border-radius: 8px; font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 6px; font-size: 13px;
     color: #ddd; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.02);
     transition: all 0.2s;
   }
   .participant-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
-  .participant-row .p-num { color: var(--text-muted); font-family: 'Share Tech Mono', monospace; font-size: 11px; width: 24px; flex-shrink: 0; }
+  .participant-row .p-num { color: var(--text-muted); font-family: 'Share Tech Mono', monospace; font-size: 10px; width: 20px; flex-shrink: 0; }
 
-  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 15px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
+  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 14px; font-family: 'Share Tech Mono', monospace; text-align: center; padding: 20px; }
 
   /* ── Сітка Cash Hunt ─────────────────────── */
-  #hint { text-align: center; font-size: 16px; color: #ccc; margin: 10px 0 6px; font-family: 'Share Tech Mono', monospace; min-height: 20px; letter-spacing: 0.5px;}
-  #hint b { color: var(--kick); font-size: 18px; }
-  #progress { text-align: center; font-size: 15px; color: var(--text-muted); margin-bottom: 12px; font-family: 'Share Tech Mono', monospace; min-height: 20px; }
+  #hint { text-align: center; font-size: 15px; color: #ccc; margin: 8px 0 4px; font-family: 'Share Tech Mono', monospace; min-height: 18px; letter-spacing: 0.5px; flex-shrink: 0;}
+  #hint b { color: var(--kick); font-size: 16px; }
+  #progress { text-align: center; font-size: 14px; color: var(--text-muted); margin-bottom: 8px; font-family: 'Share Tech Mono', monospace; min-height: 18px; flex-shrink: 0;}
   #progress b { color: var(--kick); }
 
   .grid {
     display: grid;
-    gap: 8px;
-    justify-content: center;
-    align-content: center;
-    height: 100%;
-    padding: 10px;
+    gap: 6px;
+    align-content: start;
+    padding: 4px;
   }
 
   .cell {
@@ -425,60 +428,76 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .cell-face {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 12px;
+    border-radius: 8px;
     backface-visibility: hidden;
     font-family: 'Rajdhani', sans-serif;
     font-weight: 700;
     text-align: center;
     overflow: hidden;
-    padding: 4px;
+    padding: 2px;
   }
   .cell-front {
     background: linear-gradient(145deg, #162016, #0a100a);
-    border: 2px solid var(--panel-border);
+    border: 1px solid var(--panel-border);
     color: var(--kick);
-    font-size: 26px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    font-size: 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     transition: all 0.3s;
   }
   .cell-front:hover {
     border-color: rgba(83,252,24,0.5);
     transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(83,252,24,0.1);
+    box-shadow: 0 4px 10px rgba(83,252,24,0.1);
   }
   .cell-back {
     transform: rotateY(180deg);
     background: #111;
-    border: 2px solid #333;
+    border: 1px solid #333;
     color: #fff;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.2;
     word-break: break-word;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
   }
   .cell.selected .cell-front {
     border-color: var(--kick);
     background: linear-gradient(145deg, rgba(83,252,24,0.2), rgba(20,60,10,0.8));
-    box-shadow: 0 0 20px rgba(83,252,24,0.4), inset 0 0 10px rgba(83,252,24,0.2);
+    box-shadow: 0 0 15px rgba(83,252,24,0.4), inset 0 0 8px rgba(83,252,24,0.2);
     transform: scale(1.05);
   }
   .cell.winner .cell-back {
     background: linear-gradient(145deg, var(--kick), #28a708);
-    border: 2px solid #a4ff82;
+    border: 1px solid #a4ff82;
     color: #000;
     font-weight: 900;
-    font-size: 16px;
+    font-size: 14px;
     animation: winnerGlow 1s ease infinite alternate;
   }
   @keyframes winnerGlow {
-    from { box-shadow: 0 0 10px rgba(83,252,24,0.4); }
-    to   { box-shadow: 0 0 25px rgba(83,252,24,0.8); }
+    from { box-shadow: 0 0 8px rgba(83,252,24,0.4); }
+    to   { box-shadow: 0 0 20px rgba(83,252,24,0.8); }
   }
   .cell.revealed { cursor: default; }
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.05); }
   .selecting .cell { cursor: none; }
   .selecting .cell.selected { cursor: none; }
   .selecting * { cursor: none !important; }
+
+  /* ── Кастомний Чат ─────────────────────── */
+  .chat-msg {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    padding: 6px 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 6px;
+    border-left: 2px solid var(--panel-border);
+    transition: background 0.2s;
+  }
+  .chat-msg:hover {
+    background: rgba(255,255,255,0.05);
+  }
 
   /* ── Гонка & Рулетка (Оверлеї) ───────────────────────────── */
   #race-overlay, #roulette-overlay {
@@ -572,8 +591,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Список переможців ──────────────────── */
   .winner-row {
-    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 10px;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;
+    padding: 10px; margin-bottom: 8px;
     animation: rowPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     transition: transform 0.2s;
   }
@@ -585,17 +604,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .winner-row.confirmed { border-left: 4px solid var(--kick); }
   .winner-row.expired   { border-left: 4px solid var(--red); opacity: 0.7; }
   
-  .winner-top { display: flex; align-items: center; gap: 12px; }
-  .w-status { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
-  .w-status.ok { color: var(--kick); text-shadow: 0 0 8px rgba(83,252,24,0.4); }
-  .w-status.pending { color: var(--gold); font-family: 'Share Tech Mono', monospace; font-size: 14px; width: auto; font-weight: bold; }
+  .winner-top { display: flex; align-items: center; gap: 10px; }
+  .w-status { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+  .w-status.ok { color: var(--kick); text-shadow: 0 0 6px rgba(83,252,24,0.4); }
+  .w-status.pending { color: var(--gold); font-family: 'Share Tech Mono', monospace; font-size: 13px; width: auto; font-weight: bold; }
   .w-status.bad { color: var(--red); }
-  .w-name { font-weight: 800; color: #fff; flex: 1; font-size: 16px; letter-spacing: 0.5px; }
-  .w-time { font-size: 12px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; }
+  .w-name { font-weight: 800; color: #fff; flex: 1; font-size: 15px; letter-spacing: 0.5px; }
+  .w-time { font-size: 11px; color: var(--text-muted); font-family: 'Share Tech Mono', monospace; }
   
   .w-msg {
-    margin-top: 8px; font-size: 13px; color: var(--kick); font-family: 'Share Tech Mono', monospace;
-    background: rgba(83,252,24,0.05); border-radius: 6px; padding: 8px 12px;
+    margin-top: 6px; font-size: 12px; color: var(--kick); font-family: 'Share Tech Mono', monospace;
+    background: rgba(83,252,24,0.05); border-radius: 6px; padding: 6px 10px;
     border: 1px dashed rgba(83,252,24,0.2);
   }
   .w-msg.empty { color: var(--text-muted); font-style: italic; background: rgba(0,0,0,0.2); border-color: transparent; }
@@ -759,19 +778,19 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="col-title">Настройки</div>
 
     <div class="field-row">
-      <div class="field">
+      <div class="field" style="flex:1;">
         <label class="field-label">Слово для участия</label>
         <input type="text" id="raffle-cmd" value="" placeholder="!join" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
-        <button type="button" id="btn-reg-toggle" class="btn-green" style="margin-top:8px;" onclick="toggleRegistration()">▶ Начать регистрацию</button>
       </div>
       <div class="field small">
         <label class="field-label">Победителей</label>
-        <input type="number" id="winners-count" value="1" min="1" max="108">
+        <input type="number" id="winners-count" value="1" min="1" max="200">
       </div>
     </div>
+    <button type="button" id="btn-reg-toggle" class="btn-green" style="width:100%; margin-bottom:12px;" onclick="toggleRegistration()">▶ Начать регистрацию</button>
     <span id="saved-msg"></span>
 
-    <div class="field" style="margin-top:8px;">
+    <div class="field" style="margin-top:4px;">
       <label class="field-label">Режим игры</label>
       <div class="mode-switch">
         <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
@@ -800,7 +819,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <span class="slider"></span>
       </label>
     </div>
-    <div id="confirm-time-field" style="display: block; margin-top: 8px;">
+    <div id="confirm-time-field" style="display: block; margin-bottom: 12px;">
       <div class="field">
         <label class="field-label">Время на ответ (сек)</label>
         <input type="number" id="confirm-seconds" value="60" min="5" max="600">
@@ -826,14 +845,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span id="test-msg"></span>
     </details>
 
-    <div class="col-title" style="margin-top:24px;">
+    <div class="col-title" style="margin-top:16px;">
       <span>Победители</span>
       <span class="count" id="winners-count-title">0</span>
     </div>
-    <div class="box" id="winners-box" style="flex:1;">
+    <div class="box" id="winners-box">
       <div class="empty-box">Победителей пока нет</div>
     </div>
-    <button class="btn-red" style="margin-top:16px;" onclick="finishRaffle()">🏁 Завершить стрим-розыгрыш</button>
+    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Завершить стрим-розыгрыш</button>
   </div>
 
   <!-- ── Учасники / Гра ────────────────────── -->
@@ -847,15 +866,21 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="box" id="main-box">
       <div class="empty-box">Ожидание регистрации...</div>
     </div>
-    <div class="btn-row" id="game-controls" style="display:none; margin-top: 16px;">
+    <div class="btn-row" id="game-controls" style="display:none; margin-top: 12px;">
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
       <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     </div>
   </div>
   
-  <!-- ── Чат (Нова колонка) ────────────────── -->
-  <div class="col" id="chat-col" style="padding: 0; overflow: hidden;">
-    <iframe src="https://kick.com/popout/kosteze231/chat" frameborder="0" style="width: 100%; height: 100%; border-radius: 16px;"></iframe>
+  <!-- ── Кастомний Чат ────────────────────── -->
+  <div class="col" id="chat-col">
+    <div class="col-title">
+      <span>Чат стрима</span>
+      <span class="count" id="chat-count">0</span>
+    </div>
+    <div class="box" id="chat-box" style="flex:1; display:flex; flex-direction:column; gap:6px;">
+      <div class="empty-box">Ожидание сообщений...</div>
+    </div>
   </div>
 
 </div>
@@ -915,6 +940,33 @@ let currentGame = null;
 let selected = new Set();   
 let phase = 'idle';         
 let winnersHistory = [];    
+
+// ── Ініціалізація кастомного чату (SSE) ─────────────
+const chatBox = document.getElementById('chat-box');
+const chatCount = document.getElementById('chat-count');
+let msgCount = 0;
+
+const chatEvtSource = new EventSource('/api/chat/stream');
+chatEvtSource.onmessage = (e) => {
+  const { username, content, color } = JSON.parse(e.data);
+  
+  const empty = chatBox.querySelector('.empty-box');
+  if (empty) empty.remove();
+
+  const msgEl = document.createElement('div');
+  msgEl.className = 'chat-msg';
+  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + escapeHtml(content) + '</span>';
+  
+  chatBox.appendChild(msgEl);
+  msgCount++;
+  chatCount.textContent = msgCount;
+
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  if (chatBox.children.length > 150) {
+    chatBox.removeChild(chatBox.firstChild);
+  }
+};
 
 async function loadState() {
   const res = await fetch('/api/raffle/state');
@@ -1327,14 +1379,12 @@ function buildTrack3D(scene, curve) {
 
   const edgeGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS + 0.5, 16, true);
   edgeGeo.scale(1, 0.03, 1);
-  // Відкат до оригінального сірого кольору (замість зеленого)
   const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
   edgeMesh.position.y = 0.05;
   scene.add(edgeMesh);
 
   const roadGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS, 16, true);
   roadGeo.scale(1, 0.04, 1);
-  // Відкат до оригінального сірого асфальту (замість темного)
   const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.9 }));
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
@@ -1487,7 +1537,6 @@ async function runRace(qualifiers, totalLaps) {
   const height = area.clientHeight || 467;
 
   scene3D = new THREE.Scene();
-  // Відкат до оригінального фону
   scene3D.background = new THREE.Color(0x0a0a0c);
 
   camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
@@ -1497,7 +1546,6 @@ async function runRace(qualifiers, totalLaps) {
   renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   area.insertBefore(renderer3D.domElement, area.firstChild);
 
-  // Відкат до оригінального освітлення
   scene3D.add(new THREE.AmbientLight(0xffffff, 0.75));
   const sun = new THREE.DirectionalLight(0xffffff, 0.9);
   sun.position.set(100, 200, 100);
@@ -1730,11 +1778,8 @@ function renderGame(game) {
   box.className = 'box selecting';
   const grid = document.getElementById('grid');
 
-  const cols = game.gridSize <= 12 ? game.gridSize : 12;
-  const cellSize = game.gridSize <= 12 ? 'min(80px, calc((100% - 40px) / ' + cols + '))' : '1fr';
-  grid.style.gridTemplateColumns = game.gridSize <= 12
-    ? 'repeat(' + cols + ', ' + cellSize + ')'
-    : 'repeat(' + cols + ', 1fr)';
+  // Динамічна авто-сітка, що підлаштовується під будь-яку кількість елементів без обрізання
+  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45px, 1fr))';
 
   document.getElementById('game-controls').style.display = 'flex';
   document.getElementById('btn-go').style.display = '';
@@ -2073,7 +2118,6 @@ setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 function toggleConfirmField() {
   const on = document.getElementById('toggle-confirm').checked;
   const f = document.getElementById('confirm-time-field');
-  // Тепер просто ховаємо блок повністю, щоб він не займав місця
   f.style.display = on ? 'block' : 'none';
 }
 
@@ -2171,6 +2215,20 @@ function getCookie(req, name) {
 
 // ── HTTP сервер ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+
+  // SSE маршрут для живого чату
+  if (req.url === '/api/chat/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+    chatClients.push(res);
+    req.on('close', () => {
+      chatClients = chatClients.filter(c => c !== res);
+    });
+    return;
+  }
 
   // Логін — відкритий маршрут
   if (req.url === '/api/login' && req.method === 'POST') {
@@ -2369,7 +2427,8 @@ const server = http.createServer((req, res) => {
         const { winners } = JSON.parse(body);
         const n = parseInt(winners);
         if (!rafflePlayers.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
-        const gridSize = Math.min(rafflePlayers.length, 108);
+        // Розширили ліміт для сітки
+        const gridSize = Math.min(rafflePlayers.length, 200);
         if (!n || n < 1 || n > gridSize) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців (макс ' + gridSize + ')' })); return;
         }
@@ -2420,10 +2479,10 @@ const server = http.createServer((req, res) => {
   res.end(RAFFLE_HTML());
 });
 
-// Генерує сітку: до 108 клітинок із учасниками (рандом, якщо їх більше 108)
+// Генерує сітку: ліміт розширено до 200
 function buildRaffleGame(n) {
   const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
-  const gridSize = Math.min(shuffled.length, 108);
+  const gridSize = Math.min(shuffled.length, 200);
   const cells = shuffled.slice(0, gridSize); 
 
   return {
@@ -2476,7 +2535,13 @@ function connect() {
 
       const username = data?.sender?.username;
       const content  = data?.content?.trim();
+      const color = data?.sender?.identity?.color || '#53fc18';
+      
       if (!username || !content) return;
+
+      // Відправляємо повідомлення у кастомний чат на фронтенді
+      const chatMsg = JSON.stringify({ username, content, color });
+      chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
 
       const lower = content.toLowerCase();
 
