@@ -517,6 +517,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border-left: 2px solid var(--panel-border);
     transition: background 0.2s;
   }
+  .chat-emote {
+    height: 1.6em; width: auto; vertical-align: middle;
+    margin: 0 1px; display: inline-block;
+  }
   .chat-msg:hover {
     background: rgba(255,255,255,0.05);
   }
@@ -990,6 +994,22 @@ const chatBox = document.getElementById('chat-box');
 const chatCount = document.getElementById('chat-count');
 let msgCount = 0;
 
+// Розпарсити [emote:ID:NAME] у повідомленнях Kick і вивести як <img>
+function parseChatContent(content) {
+  const re = /\\[emote:(\\d+):([^\\]]+)\\]/g;
+  let result = '';
+  let lastIndex = 0;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    result += escapeHtml(content.slice(lastIndex, m.index));
+    const id = m[1], name = m[2];
+    result += '<img class="chat-emote" src="https://files.kick.com/emotes/' + id + '/fullsize" alt="' + escapeAttr(name) + '" title="' + escapeAttr(name) + '" loading="lazy">';
+    lastIndex = re.lastIndex;
+  }
+  result += escapeHtml(content.slice(lastIndex));
+  return result;
+}
+
 const chatEvtSource = new EventSource('/api/chat/stream');
 chatEvtSource.onmessage = (e) => {
   const { username, content, color } = JSON.parse(e.data);
@@ -999,7 +1019,7 @@ chatEvtSource.onmessage = (e) => {
 
   const msgEl = document.createElement('div');
   msgEl.className = 'chat-msg';
-  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + escapeHtml(content) + '</span>';
+  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + parseChatContent(content) + '</span>';
   
   chatBox.appendChild(msgEl);
   msgCount++;
