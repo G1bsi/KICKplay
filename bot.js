@@ -227,7 +227,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Хедер ──────────────────────────────── */
   .topbar {
-    max-width: 1400px; margin: 0 auto 20px;
+    max-width: 1700px; margin: 0 auto 20px;
     background: var(--panel-bg); 
     border: 1px solid var(--panel-border); 
     border-radius: 16px;
@@ -245,12 +245,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── Сітка Layout ──────────────────────── */
   .layout {
-    max-width: 1400px; margin: 0 auto;
+    max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 360px 1fr;
+    grid-template-columns: 350px 1fr 350px;
     gap: 20px;
   }
-  @media (max-width: 1100px) {
+  @media (max-width: 1200px) {
+    .layout { grid-template-columns: 350px 1fr; }
+    #chat-col { display: none; }
+  }
+  @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }
   }
 
@@ -528,6 +532,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #roulette-track::before { left: 0; background: linear-gradient(90deg, #050505, transparent); }
   #roulette-track::after  { right: 0; background: linear-gradient(270deg, #050505, transparent); }
   
+  #roulette-strip {
+    display: flex; align-items: center; height: 100%;
+    position: absolute; left: 0; top: 0;
+    will-change: transform;
+  }
+
   .roulette-cell {
     flex: 0 0 200px; height: 100%;
     display: flex; align-items: center; justify-content: center;
@@ -790,7 +800,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <span class="slider"></span>
       </label>
     </div>
-    <div id="confirm-time-field" style="overflow:hidden;transition:max-height 0.3s ease,opacity 0.3s ease;max-height:80px;opacity:1;">
+    <div id="confirm-time-field" style="display: block; margin-top: 8px;">
       <div class="field">
         <label class="field-label">Время на ответ (сек)</label>
         <input type="number" id="confirm-seconds" value="60" min="5" max="600">
@@ -841,6 +851,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🚀 Начать раскрытие</button>
       <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     </div>
+  </div>
+  
+  <!-- ── Чат (Нова колонка) ────────────────── -->
+  <div class="col" id="chat-col" style="padding: 0; overflow: hidden;">
+    <iframe src="https://kick.com/popout/kosteze231/chat" frameborder="0" style="width: 100%; height: 100%; border-radius: 16px;"></iframe>
   </div>
 
 </div>
@@ -1312,13 +1327,15 @@ function buildTrack3D(scene, curve) {
 
   const edgeGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS + 0.5, 16, true);
   edgeGeo.scale(1, 0.03, 1);
-  const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0x53fc18, roughness: 0.8 }));
+  // Відкат до оригінального сірого кольору (замість зеленого)
+  const edgeMesh = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
   edgeMesh.position.y = 0.05;
   scene.add(edgeMesh);
 
   const roadGeo = new THREE.TubeGeometry(curve, 400, ROAD_RADIUS, 16, true);
   roadGeo.scale(1, 0.04, 1);
-  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x111, roughness: 0.9 }));
+  // Відкат до оригінального сірого асфальту (замість темного)
+  const roadMesh = new THREE.Mesh(roadGeo, new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.9 }));
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
 
@@ -1470,7 +1487,8 @@ async function runRace(qualifiers, totalLaps) {
   const height = area.clientHeight || 467;
 
   scene3D = new THREE.Scene();
-  scene3D.background = new THREE.Color(0x060806);
+  // Відкат до оригінального фону
+  scene3D.background = new THREE.Color(0x0a0a0c);
 
   camera3D = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
 
@@ -1479,8 +1497,9 @@ async function runRace(qualifiers, totalLaps) {
   renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   area.insertBefore(renderer3D.domElement, area.firstChild);
 
-  scene3D.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  // Відкат до оригінального освітлення
+  scene3D.add(new THREE.AmbientLight(0xffffff, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
   sun.position.set(100, 200, 100);
   scene3D.add(sun);
 
@@ -2054,8 +2073,8 @@ setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 function toggleConfirmField() {
   const on = document.getElementById('toggle-confirm').checked;
   const f = document.getElementById('confirm-time-field');
-  f.style.maxHeight = on ? '80px' : '0px';
-  f.style.opacity   = on ? '1' : '0';
+  // Тепер просто ховаємо блок повністю, щоб він не займав місця
+  f.style.display = on ? 'block' : 'none';
 }
 
 (function() {
