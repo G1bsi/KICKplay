@@ -1240,7 +1240,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div id="revolver-overlay">
   <div id="revolver-overlay-hint">Заряжаем барабан...</div>
   <div id="revolver-area">
-    <button class="race-close-btn" onclick="closeRevolverOverlay()">✕</button>
     <div id="revolver-barrel-indicator"></div>
     <div id="revolver-frame"></div>
     <div id="revolver-cylinder"></div>
@@ -1488,7 +1487,7 @@ function resetGameUI() {
   document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
-  document.getElementById('progress').textContent = '';
+  const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
   document.getElementById('main-box').className = 'box';
   renderParticipants(state.participants || []);
 }
@@ -1569,7 +1568,7 @@ function resetGameUIKeepMode() {
   raceQualifiers = [];
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
-  document.getElementById('progress').textContent = '';
+  const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
   document.getElementById('main-box').className = 'box';
   renderParticipants(state.participants || []);
 }
@@ -2508,15 +2507,14 @@ function renderGame(game) {
   const grid = document.getElementById('cashhunt-grid');
   grid.innerHTML = '';
 
-  // fitGridColumns адаптуємо до нового контейнера
+  // fitGridColumns після двох rAF щоб overlay вже був видимий і мав розміри
   const wrap = document.getElementById('cashhunt-grid-wrap');
-  requestAnimationFrame(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
     fitGridColumns(grid, wrap, game.cells.length);
-  });
+  }));
 
   // Прибираємо old main-box UI
   document.getElementById('game-controls').style.display = 'none';
-  document.getElementById('progress').textContent = '';
   updateHint();
 
   game.cells.forEach((name, i) => {
