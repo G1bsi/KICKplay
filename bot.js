@@ -119,7 +119,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Вход</title>
+<title>БОТЯРА</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Roboto+Mono:wght@400;500&display=swap');
   :root {
@@ -225,7 +225,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Studio — Розыгрыши</title>
+<title>БОТЯРА</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap');
   
@@ -253,6 +253,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background-image: 
       radial-gradient(circle at 15% 50%, rgba(83, 252, 24, 0.03), transparent 25%),
       radial-gradient(circle at 85% 30%, rgba(83, 252, 24, 0.03), transparent 25%);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Дозволяємо виділяти лише нікнейми учасників, переможців і чат */
+  .participant-row span:last-child,
+  .w-name,
+  .wa-name,
+  .chat-msg,
+  input[type=text], input[type=number], input[type=password] {
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   /* ── Плаваючий статус бота ──────────────── */
@@ -1088,7 +1099,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <div class="field-row" style="margin-top:8px;">
         <div class="field">
           <label class="field-label">Участников гонки</label>
-          <input type="number" id="race-count" value="12" min="2" max="300">
+          <input type="number" id="race-count" value="10" min="2" max="300">
         </div>
         <div class="field small">
           <label class="field-label">Кругов</label>
@@ -1114,7 +1125,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <!-- Кнопки відразу під час на відповідь -->
     <div class="btn-row" style="margin-bottom: 12px; gap: 8px;">
       <button class="btn-primary" style="margin:0; flex: 2; font-size: 13px;" onclick="startGame()">🎯 СТАРТ</button>
-      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">⬇ CSV</button>
+      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">🎱 Шарики</button>
       <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="resetRaffle()">🗑 Сброс</button>
     </div>
 
@@ -1499,7 +1510,7 @@ async function startGame() {
 async function reroll() {
   if (gameMode === 'race') {
     // В гонці ліміт до 300
-    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 12, 300);
+    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 10, 300);
     const count = Math.min(n, state.participants.length);
     raceQualifiers = pickRandom(state.participants, count);
     return runRace(raceQualifiers, true);
@@ -1518,7 +1529,7 @@ async function fastReroll() {
   if (gameMode === 'race') {
     let qualifiers = raceQualifiers;
     if (!qualifiers.length) {
-      const n = Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
+      const n = Math.min(parseInt(document.getElementById('race-count').value) || 10, state.participants.length);
       if (n < 2) return alert('Нужно минимум 2 участника');
       qualifiers = pickRandom(state.participants, Math.min(n, 300));
     }
@@ -1633,7 +1644,7 @@ function pickRandom(arr, n) {
 
 async function startRaceGame() {
   // Збільшено ліміт до 300
-  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 300);
+  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 10, 2), 300);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
   const count = Math.min(n, state.participants.length);
