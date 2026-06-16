@@ -1218,10 +1218,16 @@ function renderParticipants(list) {
     box.innerHTML = '<div class="empty-box">Ожидание регистрации...</div>';
     return;
   }
-  box.innerHTML = '<div class="participants-grid">' +
+  box.innerHTML = '<div class="participants-grid" id="plist-grid">' +
     list.map((name, i) =>
       '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
     ).join('') + '</div>';
+
+  // Завжди 3 колонки
+  const grid = document.getElementById('plist-grid');
+  if (grid) {
+    grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  }
 }
 
 function downloadCSV() {
