@@ -269,6 +269,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     user-select: text;
     -webkit-user-select: text;
   }
+  /* Гарантуємо що кнопки клікаються незважаючи на user-select:none */
+  button, input, select, label, a, [onclick], summary, details {
+    pointer-events: auto !important;
+    cursor: pointer;
+  }
 
   /* ── Плаваючий статус бота ──────────────── */
   #floating-status {
@@ -1464,11 +1469,19 @@ async function uploadCSVParticipants(input) {
 
   const text = await file.text();
   // Парсимо CSV: беремо перший стовпець кожного рядка, ігноруємо заголовок якщо є
-  const names = text.split(/\r?\n/)
-    .map(line => line.split(',')[0].replace(/^["']|["']$/g, '').trim())
-    .filter(n => n && !/^(name|username|nick|нік|учасник)/i.test(n));
-
-  if (!names.length) {
+  const lines = text.split('\\n');
+  const names = [];
+  for (let li = 0; li < lines.length; li++) {
+    let cell = lines[li].split(',')[0].trim();
+    if (cell.length > 1 && cell[0] === cell[cell.length-1] && (cell[0] === '"' || cell[0] === "'")) {
+      cell = cell.slice(1, -1).trim();
+    }
+    const low = cell.toLowerCase();
+    if (cell && low !== 'name' && low !== 'username' && low !== 'nick') {
+      names.push(cell);
+    }
+  }
+    if (!names.length) {
     el.style.color = '#ff4444';
     el.textContent = '✗ порожній файл';
     input.value = '';
