@@ -253,7 +253,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 320px 1fr 260px;
+    grid-template-columns: 320px 1fr minmax(200px, 280px);
     gap: 16px;
     height: calc(100vh - 32px); /* 100vh мінус верхній та нижній padding(16+16) */
   }
@@ -437,12 +437,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     position: relative;
     cursor: pointer;
     perspective: 800px;
+    user-select: none; -webkit-user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .cell-inner {
     width: 100%; height: 100%;
     position: relative;
     transform-style: preserve-3d;
     transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+    user-select: none; -webkit-user-select: none;
   }
   .cell.flipped .cell-inner { transform: rotateY(180deg); }
   .cell-face {
@@ -455,6 +459,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     text-align: center;
     overflow: hidden;
     padding: 2px;
+    user-select: none; -webkit-user-select: none;
+    pointer-events: none;
   }
   .cell-front {
     background: linear-gradient(145deg, #162016, #0a100a);
@@ -499,9 +505,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .cell.revealed { cursor: default; }
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.05); }
-  .selecting .cell { cursor: none; }
-  .selecting .cell.selected { cursor: none; }
-  .selecting * { cursor: none !important; }
+  .selecting .cell { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .selecting .cell.selected { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  /* Прибираємо прицільний курсор та будь-яке виділення тексту у клітинках */
+  .selecting * { user-select: none !important; -webkit-user-select: none !important; outline: none !important; }
   /* В режимі вибору клітинок — знімаємо паддінг/скрол з box,
      щоб fitGridColumns рахував точну площу і клітинки не обрізались */
   .box.selecting { padding: 6px; overflow: hidden; }
@@ -553,6 +560,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     flex-direction: column;
     gap: 8px;
   }
+  /* Ховаємо системний курсор в оверлеї під час вибору (заміняємо на кастомний прицільний) */
+  #cashhunt-overlay.selecting-mode { cursor: none; }
+  #cashhunt-overlay.selecting-mode * { cursor: none !important; }
   #cashhunt-hint {
     font-family: 'Roboto Mono', monospace; font-size: 16px; color: var(--kick);
     letter-spacing: 2px; text-align: center; text-transform: uppercase; min-height: 22px;
@@ -2151,16 +2161,16 @@ async function runRevolver(qualifiers) {
 
     let nextRot = currentRot + delta + (360 * 3);
 
-    cylinder.style.transition = 'transform 3s cubic-bezier(0.2, 0.9, 0.3, 1)';
+    cylinder.style.transition = 'transform 2s cubic-bezier(0.2, 0.9, 0.3, 1)';
     cylinder.style.transform = 'rotate(' + nextRot + 'deg)';
 
     chambers.forEach(c => {
-      c.inner.style.transition = 'transform 3s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      c.inner.style.transition = 'transform 2s cubic-bezier(0.2, 0.9, 0.3, 1)';
       c.inner.style.transform = 'rotate(' + (-nextRot) + 'deg)';
     });
 
     currentRot = nextRot;
-    await sleep(3100);
+    await sleep(2100);
 
     // Постріл — звук пострілу (окремий від основного)
     playRevolverShot();
@@ -2177,7 +2187,7 @@ async function runRevolver(qualifiers) {
     setTimeout(() => area.classList.remove('shake-anim'), 400);
 
     remaining.splice(killIdx, 1);
-    await sleep(2200);
+    await sleep(900);
   }
 
   const winner = remaining[0];
@@ -2247,7 +2257,8 @@ function fitGridColumns(grid, box, n) {
 }
 
 function closeCashhuntOverlay() {
-  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  const ol = document.getElementById('cashhunt-overlay');
+  ol.classList.remove('visible', 'selecting-mode');
   document.getElementById('cashhunt-controls').style.display = 'none';
   document.getElementById('cashhunt-hint').textContent = '';
   document.getElementById('cashhunt-progress-overlay').textContent = '';
@@ -2262,7 +2273,7 @@ function renderGame(game) {
 
   // Відкриваємо оверлей
   const overlay = document.getElementById('cashhunt-overlay');
-  overlay.classList.add('visible');
+  overlay.classList.add('visible', 'selecting-mode');
   document.getElementById('cashhunt-controls').style.display = 'none';
   document.getElementById('cashhunt-progress-overlay').textContent = '';
 
@@ -2299,10 +2310,18 @@ function onCellClick(idx, cellEl) {
   if (phase !== 'selecting') return;
 
   if (selected.has(idx)) {
+    // Деселект
     selected.delete(idx);
     cellEl.classList.remove('selected');
+  } else if (selected.size >= currentGame.winnersNeeded) {
+    // Ліміт досягнуто — знімаємо першу вибрану і ставимо нову (instant replace)
+    const oldIdx = [...selected][0];
+    selected.delete(oldIdx);
+    const oldCell = document.querySelector('#cashhunt-grid .cell[data-idx="' + oldIdx + '"]');
+    if (oldCell) oldCell.classList.remove('selected');
+    selected.add(idx);
+    cellEl.classList.add('selected');
   } else {
-    if (selected.size >= currentGame.winnersNeeded) return;
     selected.add(idx);
     cellEl.classList.add('selected');
   }
@@ -2330,6 +2349,7 @@ function updateHint() {
 async function startReveal() {
   if (selected.size !== currentGame.winnersNeeded) return;
   phase = 'revealing';
+  document.getElementById('cashhunt-overlay').classList.remove('selecting-mode');
 
   const hint = document.getElementById('cashhunt-hint');
   const progressEl = document.getElementById('cashhunt-progress-overlay');
@@ -2705,14 +2725,23 @@ function toggleConfirmField() {
     if (animId) { cancelAnimationFrame(animId); animId = null; }
   }
 
+  const overlayEl = document.getElementById('cashhunt-overlay');
+
   document.addEventListener('mousemove', e => {
     mouseX = e.clientX;
     mouseY = e.clientY;
     canvas.style.left = (mouseX - 24) + 'px';
     canvas.style.top  = (mouseY - 24) + 'px';
-    if (phase === 'selecting') { if (!visible) show(); }
-    else { if (visible) hide(); }
+    // Показуємо курсор лише всередині cashhunt-overlay під час вибору
+    if (phase === 'selecting' && overlayEl.classList.contains('visible') && e.target.closest('#cashhunt-overlay')) {
+      if (!visible) show();
+    } else {
+      if (visible) hide();
+    }
   });
+
+  // Коли виходимо з оверлею — ховаємо курсор
+  overlayEl.addEventListener('mouseleave', () => { if (visible) hide(); });
 
   const boxEl = document.getElementById('main-box');
   const boxObs = new MutationObserver(() => {
