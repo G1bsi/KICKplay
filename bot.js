@@ -2026,6 +2026,16 @@ async function runRace(qualifiers, totalLaps) {
   }
 
   function updateLabels() {
+    // Знаходимо лідера (максимальна сумарна дистанція)
+    let leaderIdx = 0;
+    let leaderDist = -Infinity;
+    if (typeof laps !== 'undefined' && typeof progress !== 'undefined') {
+      for (let i = 0; i < n; i++) {
+        const d = laps[i] + (progress[i] % 1);
+        if (d > leaderDist) { leaderDist = d; leaderIdx = i; }
+      }
+    }
+
     for (let i = 0; i < n; i++) {
       const v = cars[i].position.clone();
       v.y += 4.5;
@@ -2034,6 +2044,8 @@ async function runRace(qualifiers, totalLaps) {
       labelEls[i].style.display = '';
       labelEls[i].style.left = ((v.x * 0.5 + 0.5) * width) + 'px';
       labelEls[i].style.top  = ((-v.y * 0.5 + 0.5) * height) + 'px';
+      // Лідер завжди поверх інших нікнеймів
+      labelEls[i].style.zIndex = (i === leaderIdx) ? '10' : '2';
     }
   }
 
