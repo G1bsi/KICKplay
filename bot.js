@@ -302,7 +302,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winners-count, #confirm-seconds { text-align: center; }
 
   /* ── Перемикач режиму гри ─────────────────── */
-  .mode-switch { display: flex; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
   .mode-btn {
     flex: 1; padding: 8px 6px; border-radius: 6px; border: none;
     background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 800;
@@ -743,9 +743,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winner-announce.visible { opacity: 1; pointer-events: auto; }
 
   #winner-announce .wa-label {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 28px; font-weight: bold; color: var(--kick); letter-spacing: 8px; text-transform: uppercase;
-    text-shadow: 0 0 15px rgba(83,252,24,0.3);
+    font-family: 'Inter', sans-serif;
+    font-size: 30px; font-weight: 900; color: var(--kick); letter-spacing: 10px; text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.4);
   }
   #winner-announce .wa-name {
     font-family: 'Inter', sans-serif;
@@ -764,13 +764,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { transform: scale(1) translateY(0);   opacity: 1; filter: blur(0); }
   }
   #winner-announce .wa-timer {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 56px; font-weight: bold;
+    font-family: 'Inter', sans-serif;
+    font-size: 64px; font-weight: 900;
     color: var(--gold);
     letter-spacing: 2px;
     min-width: 120px;
     text-align: center;
-    text-shadow: 0 0 20px rgba(255,215,0,0.3);
+    text-shadow: 0 0 20px rgba(255,215,0,0.4);
   }
   #winner-announce .wa-timer.expiring { color: var(--red); text-shadow: 0 0 20px rgba(255,74,74,0.5); animation: timerBlink 0.5s infinite alternate; }
   @keyframes timerBlink {
@@ -780,7 +780,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   
   #winner-announce .wa-msg {
     font-family: 'Inter', sans-serif;
-    font-size: clamp(32px, 4vw, 64px); font-weight: 800; color: var(--kick);
+    font-size: clamp(32px, 4vw, 64px); font-weight: 900; color: var(--kick);
     background: rgba(83,252,24,0.05);
     border: 1px solid rgba(83,252,24,0.2);
     border-radius: 16px; padding: 20px 40px;
@@ -795,15 +795,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   
   #winner-announce .wa-sub {
-    font-size: 18px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-weight: bold; letter-spacing: 4px; text-transform: uppercase;
+    font-family: 'Inter', sans-serif;
+    font-size: 18px; font-weight: 900; color: var(--text-muted);
+    letter-spacing: 5px; text-transform: uppercase;
   }
   #winner-announce .wa-close {
     margin-top: 20px;
     background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #aaa;
-    padding: 12px 32px; border-radius: 10px;
-    font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 800;
+    padding: 12px 36px; border-radius: 10px;
+    font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 900;
     cursor: pointer; transition: all 0.3s;
-    text-transform: uppercase; letter-spacing: 1px;
+    text-transform: uppercase; letter-spacing: 3px;
   }
   #winner-announce .wa-close:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
 
@@ -924,9 +926,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field" style="margin-top:4px;">
       <label class="field-label">Режим игры</label>
       <div class="mode-switch">
-        <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
+        <button type="button" class="mode-btn active" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
-        <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
         <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
       </div>
     </div>
@@ -958,9 +960,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="limit-info">Участников: <b id="participant-count">0</b></div>
-
-    <!-- Кнопки в один ряд -->
+    <!-- Кнопки відразу під час на відповідь -->
     <div class="btn-row" style="margin-bottom: 12px; gap: 8px;">
       <button class="btn-primary" style="margin:0; flex: 2; font-size: 13px;" onclick="startGame()">🎯 СТАРТ</button>
       <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">⬇ CSV</button>
@@ -998,7 +998,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div class="col" id="chat-col">
     <div class="col-title">
       <span>Чат</span>
-      <span class="count" id="chat-count">0</span>
     </div>
     <div class="box" id="chat-box" style="flex:1; display:flex; flex-direction:column; gap:6px;">
       <div class="empty-box">Ожидание сообщений...</div>
@@ -1091,7 +1090,6 @@ let winnersHistory = [];
 
 // ── Ініціалізація кастомного чату (SSE) ─────────────
 const chatBox = document.getElementById('chat-box');
-const chatCount = document.getElementById('chat-count');
 let msgCount = 0;
 
 // Розпарсити [emote:ID:NAME] у повідомленнях Kick і вивести як <img>
@@ -1123,7 +1121,6 @@ chatEvtSource.onmessage = (e) => {
   
   chatBox.appendChild(msgEl);
   msgCount++;
-  chatCount.textContent = msgCount;
 
   chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -1260,7 +1257,7 @@ async function addBulkTest() {
   loadState();
 }
 
-let gameMode = 'cashhunt';
+let gameMode = 'roulette';
 let raceQualifiers = [];
 let raceAnimId = null;
 
@@ -2272,12 +2269,10 @@ async function startReveal() {
 
   const cells = document.querySelectorAll('.cell');
 
-  // Швидкість розкриття клітинок масштабується під кількість учасників:
-  // стандарт (35мс) для звичної кількості (~20), пропорційно швидше для великих
-  // (на 300 учасників 35мс*297 ≈ 10.4с було дуже довго → тепер ~4мс*297 ≈ 1.2с)
+  // Швидкість розкриття: стандарт 65мс (~20 учасників), мінімум 8мс (300+ учасників)
   const REFERENCE_COUNT = 20;
-  const BASE_DELAY = 35;
-  const MIN_DELAY = 4;
+  const BASE_DELAY = 65;
+  const MIN_DELAY = 8;
   const flipDelay = Math.max(MIN_DELAY, Math.min(BASE_DELAY, BASE_DELAY * REFERENCE_COUNT / Math.max(others.length, 1)));
 
   for (const idx of others) {
@@ -2285,7 +2280,7 @@ async function startReveal() {
     await sleep(flipDelay);
   }
 
-  await sleep(600);
+  await sleep(900);
 
   const winners = [];
   for (let k = 0; k < winnersOrder.length; k++) {
@@ -2297,7 +2292,7 @@ async function startReveal() {
     document.getElementById('progress').innerHTML =
       'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
     addWinner(name);
-    await sleep(900);
+    await sleep(1400);
   }
 
   phase = 'done';
