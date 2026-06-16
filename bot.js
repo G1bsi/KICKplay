@@ -300,7 +300,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     gap: 16px;
     height: calc(100vh - 32px);
     justify-content: center;
+    align-items: start;
   }
+  /* Ліва колонка (налаштування) і чат — на всю висоту */
+  .layout > .col:first-child,
+  #chat-col { align-self: stretch; }
   @media (max-width: 1200px) {
     .layout { grid-template-columns: 320px 1fr; }
     #chat-col { display: none; }
