@@ -2814,7 +2814,8 @@ async function pollCheckState() {
 
   winnersHistory.forEach(w => {
     if (w.status !== 'pending') return;
-    const c = data.checks[w.name];
+    const c = data.checks[w.name] ||
+      Object.entries(data.checks).find(([k]) => k.toLowerCase() === w.name.toLowerCase())?.[1];
     if (!c) return;
 
     if (c.message !== null) {
@@ -3346,7 +3347,8 @@ function connect() {
 
       const lower = content.toLowerCase();
 
-      const check = raffleChecks[username];
+      const check = raffleChecks[username] || raffleChecks[username.toLowerCase()] ||
+        Object.entries(raffleChecks).find(([k]) => k.toLowerCase() === username.toLowerCase())?.[1];
       if (check && check.active) {
         check.active = false;
         check.message = content;
