@@ -253,7 +253,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 320px 1fr 340px;
+    grid-template-columns: 320px 1fr 260px;
     gap: 16px;
     height: calc(100vh - 32px); /* 100vh мінус верхній та нижній padding(16+16) */
   }
@@ -527,21 +527,50 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
 
   /* ── Гонка & Рулетка (Оверлеї) ───────────────────────────── */
-  #race-overlay, #roulette-overlay {
+  #race-overlay, #roulette-overlay, #cashhunt-overlay {
     position: fixed; inset: 0; z-index: 9990;
     background: rgba(4,6,4,0.95);
     display: none;
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 20px;
+    gap: 16px;
     backdrop-filter: blur(8px);
   }
-  #race-overlay.visible, #roulette-overlay.visible { display: flex; }
+  #race-overlay.visible, #roulette-overlay.visible, #cashhunt-overlay.visible { display: flex; }
   
   #race-overlay-hint, #roulette-overlay-hint {
     font-family: 'Roboto Mono', monospace;
     font-size: 24px; font-weight: bold; color: var(--kick); letter-spacing: 2px;
     text-transform: uppercase;
     text-shadow: 0 0 15px rgba(83,252,24,0.4);
+  }
+
+  /* Cash Hunt overlay */
+  #cashhunt-area {
+    position: relative;
+    width: min(98vw, 1400px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #cashhunt-hint {
+    font-family: 'Roboto Mono', monospace; font-size: 16px; color: var(--kick);
+    letter-spacing: 2px; text-align: center; text-transform: uppercase; min-height: 22px;
+  }
+  #cashhunt-progress-overlay {
+    font-family: 'Roboto Mono', monospace; font-size: 13px; color: var(--text-muted);
+    text-align: center; min-height: 18px;
+  }
+  #cashhunt-progress-overlay b { color: var(--kick); }
+  #cashhunt-grid-wrap {
+    background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border); border-radius: 14px;
+    overflow: hidden; flex: 1;
+    max-height: 75vh;
+    padding: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cashhunt-controls {
+    display: flex; gap: 12px; justify-content: center; flex-shrink: 0;
   }
 
   #race-track-area {
@@ -979,8 +1008,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <!-- ── Учасники / Гра ────────────────────── -->
   <div class="col">
     <div class="col-title">
-      <span>Участники</span>
-      <span class="count" id="participants-count-title">0</span>
+      <span>Участники <span id="participants-count-title" style="color:var(--kick);font-size:16px;">0</span></span>
     </div>
 
     <div id="hint"></div>
@@ -1025,6 +1053,22 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div class="wa-msg" id="wa-msg" style="display:none;"></div>
   <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+</div>
+
+<!-- Оверлей Cash Hunt -->
+<div id="cashhunt-overlay">
+  <div id="cashhunt-area">
+    <button class="race-close-btn" style="position:absolute;top:-48px;right:0;" onclick="closeCashhuntOverlay()">✕</button>
+    <div id="cashhunt-hint"></div>
+    <div id="cashhunt-progress-overlay"></div>
+    <div id="cashhunt-grid-wrap">
+      <div class="grid" id="cashhunt-grid"></div>
+    </div>
+    <div id="cashhunt-controls" style="display:none;">
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+      <button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>
+    </div>
+  </div>
 </div>
 
 <!-- Оверлей гонки -->
@@ -1140,7 +1184,7 @@ async function loadState() {
   }
   raffleOpen = state.accepting;
 
-  document.getElementById('participant-count').textContent = state.count;
+  // participant-count видалено (показується через participants-count-title)
   document.getElementById('participants-count-title').textContent = state.count;
   document.getElementById('conn-dot').className = 'dot ' + (state.accepting ? 'open' : 'closed');
 
@@ -1300,6 +1344,8 @@ function resetGameUI() {
   raceQualifiers = [];
   hideRaceOverlay();
   hideRouletteOverlay();
+  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   document.getElementById('progress').textContent = '';
@@ -1892,7 +1938,10 @@ async function runRace(qualifiers, totalLaps) {
       if (orbitControls3D) {
         orbitControls3D.enabled = (camMode === 'free');
         if (camMode === 'free') {
-          orbitControls3D.target.copy(cars[followIdx].position);
+          // Повертаємо камеру на початковий загальний план
+          camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
+          camera3D.lookAt(0, 0, 0);
+          orbitControls3D.target.set(0, 0, 0);
           orbitControls3D.update();
         }
       }
@@ -2197,24 +2246,39 @@ function fitGridColumns(grid, box, n) {
   }
 }
 
+function closeCashhuntOverlay() {
+  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  document.getElementById('cashhunt-controls').style.display = 'none';
+  document.getElementById('cashhunt-hint').textContent = '';
+  document.getElementById('cashhunt-progress-overlay').textContent = '';
+  document.getElementById('cashhunt-grid').innerHTML = '';
+  if (phase !== 'idle') { phase = 'idle'; resetGameUI(); }
+}
+
 function renderGame(game) {
   currentGame = game;
   selected = new Set();
   phase = 'selecting';
 
-  const box = document.getElementById('main-box');
-  box.innerHTML = '<div class="grid" id="grid"></div>';
-  box.className = 'box selecting';
-  const grid = document.getElementById('grid');
+  // Відкриваємо оверлей
+  const overlay = document.getElementById('cashhunt-overlay');
+  overlay.classList.add('visible');
+  document.getElementById('cashhunt-controls').style.display = 'none';
+  document.getElementById('cashhunt-progress-overlay').textContent = '';
 
-  // Підбираємо розмір клітинок так, щоб усі влізли без скролу
-  fitGridColumns(grid, box, game.cells.length);
+  const grid = document.getElementById('cashhunt-grid');
+  grid.innerHTML = '';
 
-  document.getElementById('game-controls').style.display = 'flex';
-  document.getElementById('btn-go').style.display = '';
-  document.getElementById('btn-go').disabled = true;
-  updateHint();
+  // fitGridColumns адаптуємо до нового контейнера
+  const wrap = document.getElementById('cashhunt-grid-wrap');
+  requestAnimationFrame(() => {
+    fitGridColumns(grid, wrap, game.cells.length);
+  });
+
+  // Прибираємо old main-box UI
+  document.getElementById('game-controls').style.display = 'none';
   document.getElementById('progress').textContent = '';
+  updateHint();
 
   game.cells.forEach((name, i) => {
     const cell = document.createElement('div');
@@ -2244,12 +2308,19 @@ function onCellClick(idx, cellEl) {
   }
 
   updateHint();
-  document.getElementById('btn-go').disabled = selected.size !== currentGame.winnersNeeded;
+  const ctrl = document.getElementById('cashhunt-controls');
+  if (selected.size === currentGame.winnersNeeded) {
+    ctrl.style.display = 'flex';
+    ctrl.innerHTML = '<button class="btn-gold" onclick="startReveal()">🚀 Начать раскрытие</button>' +
+      '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
+  } else {
+    ctrl.style.display = 'none';
+  }
 }
 
 function updateHint() {
-  const n = currentGame.winnersNeeded;
-  const hint = document.getElementById('hint');
+  const n = currentGame ? currentGame.winnersNeeded : 0;
+  const hint = document.getElementById('cashhunt-hint');
   if (phase === 'selecting') {
     hint.innerHTML = 'Выберите <b>' + n + '</b> ' + (n === 1 ? 'ячейку' : 'ячеек') +
       ' — выбрано: <b>' + selected.size + ' / ' + n + '</b>';
@@ -2259,17 +2330,19 @@ function updateHint() {
 async function startReveal() {
   if (selected.size !== currentGame.winnersNeeded) return;
   phase = 'revealing';
-  document.getElementById('main-box').className = 'box revealing';
-  document.getElementById('hint').textContent = 'Раскрытие...';
-  document.getElementById('btn-go').disabled = true;
+
+  const hint = document.getElementById('cashhunt-hint');
+  const progressEl = document.getElementById('cashhunt-progress-overlay');
+  const ctrl = document.getElementById('cashhunt-controls');
+  ctrl.style.display = 'none';
+  hint.textContent = 'Раскрытие...';
 
   const allIdx = currentGame.cells.map((_, i) => i);
   const others = allIdx.filter(i => !selected.has(i)).sort(() => Math.random() - 0.5);
   const winnersOrder = [...selected].sort(() => Math.random() - 0.5);
 
-  const cells = document.querySelectorAll('.cell');
+  const cells = document.querySelectorAll('#cashhunt-grid .cell');
 
-  // Швидкість розкриття: стандарт 65мс (~20 учасників), мінімум 8мс (300+ учасників)
   const REFERENCE_COUNT = 20;
   const BASE_DELAY = 65;
   const MIN_DELAY = 8;
@@ -2289,16 +2362,16 @@ async function startReveal() {
     cell.classList.add('flipped', 'revealed', 'winner');
     const name = currentGame.cells[idx];
     winners.push(name);
-    document.getElementById('progress').innerHTML =
-      'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
+    progressEl.innerHTML = 'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
     addWinner(name);
     await sleep(1400);
   }
 
   phase = 'done';
-  document.getElementById('main-box').className = 'box done';
-  document.getElementById('hint').innerHTML = 'Готово!';
-  document.getElementById('btn-go').textContent = '🚀 Начать раскрытие';
+  hint.innerHTML = '🏆 Готово!';
+  ctrl.style.display = 'flex';
+  ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()">🔄 Рерол</button>' +
+    '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
 }
 
 let announceTimer = null;
@@ -2544,6 +2617,7 @@ function escapeHtml(s) {
 
 renderWinners();
 loadState();
+setGameMode('roulette'); // ховає поле переможців в дефолтному режимі
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 
 // Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
