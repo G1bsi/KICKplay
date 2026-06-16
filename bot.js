@@ -3347,12 +3347,16 @@ function connect() {
 
       const lower = content.toLowerCase();
 
-      const check = raffleChecks[username] || raffleChecks[username.toLowerCase()] ||
-        Object.entries(raffleChecks).find(([k]) => k.toLowerCase() === username.toLowerCase())?.[1];
-      if (check && check.active) {
-        check.active = false;
-        check.message = content;
-        check.messageAt = Date.now();
+      // Шукаємо переможця case-insensitive
+      const checkKey = Object.keys(raffleChecks).find(
+        k => k.toLowerCase() === username.toLowerCase()
+      );
+      console.log(`[CHAT] ${username}: "${content}" | keys: ${JSON.stringify(Object.keys(raffleChecks))} | found key: ${checkKey} | active: ${raffleChecks[checkKey]?.active}`);
+
+      if (checkKey && raffleChecks[checkKey].active) {
+        raffleChecks[checkKey].active = false;
+        raffleChecks[checkKey].message = content;
+        raffleChecks[checkKey].messageAt = Date.now();
         console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
       }
 
