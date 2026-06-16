@@ -447,7 +447,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .participants-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
   }
   .participant-row {
@@ -456,9 +456,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     color: #ddd; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.02);
     transition: all 0.2s;
+    min-width: 0; overflow: hidden;
   }
   .participant-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
   .participant-row .p-num { color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-size: 10px; width: 20px; flex-shrink: 0; }
+  .participant-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 13px; font-family: 'Roboto Mono', monospace; text-align: center; padding: 20px; }
 
@@ -1177,6 +1179,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
     <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
   </div>
+  <div style="margin-top:6px;">
+    <input type="file" id="csv-upload" accept=".csv,.txt" style="display:none" onchange="uploadCSVParticipants(this)">
+    <button class="btn-dark btn-small" style="width:100%;font-size:11px;" onclick="document.getElementById('csv-upload').click()">📂 CSV учасники</button>
+  </div>
   <span id="test-msg"></span>
 </details>
 
@@ -1360,12 +1366,6 @@ function renderParticipants(list) {
     list.map((name, i) =>
       '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
     ).join('') + '</div>';
-
-  // Завжди 3 колонки
-  const grid = document.getElementById('plist-grid');
-  if (grid) {
-    grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
-  }
 }
 
 function downloadCSV() {
@@ -1452,6 +1452,43 @@ async function addBulkTest() {
     el.textContent = '✗ ошибка';
   }
   setTimeout(() => el.textContent = '', 2500);
+  loadState();
+}
+
+async function uploadCSVParticipants(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const el = document.getElementById('test-msg');
+  el.style.color = '#aaa';
+  el.textContent = 'Загрузка...';
+
+  const text = await file.text();
+  // Парсимо CSV: беремо перший стовпець кожного рядка, ігноруємо заголовок якщо є
+  const names = text.split(/\r?\n/)
+    .map(line => line.split(',')[0].replace(/^["']|["']$/g, '').trim())
+    .filter(n => n && !/^(name|username|nick|нік|учасник)/i.test(n));
+
+  if (!names.length) {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ порожній файл';
+    input.value = '';
+    return;
+  }
+
+  const res = await fetch('/api/raffle/addcsv', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ добавлено ' + data.added + ' (всего: ' + data.count + ')';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ ' + (data.error || 'ошибка');
+  }
+  setTimeout(() => el.textContent = '', 3000);
+  input.value = '';
   loadState();
 }
 
@@ -3168,6 +3205,30 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, added, count: rafflePlayers.length }));
       } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  if (req.url === '/api/raffle/addcsv' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { names } = JSON.parse(body);
+        if (!Array.isArray(names)) { res.writeHead(400); res.end(JSON.stringify({ error: 'invalid' })); return; }
+        let added = 0;
+        names.forEach(name => {
+          const n = String(name).trim().slice(0, 64);
+          if (n && !rafflePlayers.includes(n)) {
+            rafflePlayers.push(n);
+            added++;
+          }
+        });
+        saveState();
+        console.log(`[РОЗІГРАШ CSV] завантажено ${added} учасників (всього: ${rafflePlayers.length})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, added, count: rafflePlayers.length }));
+      } catch { res.writeHead(400); res.end(JSON.stringify({ error: 'parse error' })); }
     });
     return;
   }
