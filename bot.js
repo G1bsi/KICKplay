@@ -1201,6 +1201,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
 </div>
 
+<!-- Оверлей превью учасників перед гонкою/револьвером -->
+<div id="preview-overlay" style="
+  position:fixed;inset:0;z-index:9995;
+  background:rgba(4,8,4,0.96);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:20px;backdrop-filter:blur(8px);">
+  <div id="preview-title" style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:var(--kick);letter-spacing:3px;text-transform:uppercase;"></div>
+  <div id="preview-list" style="
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;
+    max-width:min(95vw,900px);max-height:60vh;overflow-y:auto;
+    background:rgba(0,0,0,0.3);border:1px solid var(--panel-border);border-radius:12px;padding:14px;"></div>
+  <button class="btn-primary" style="min-width:200px;margin:0;" onclick="previewConfirm()">🚀 Почати!</button>
+</div>
+
 <!-- Оверлей Cash Hunt -->
 <div id="cashhunt-overlay">
   <div id="cashhunt-area">
@@ -1698,6 +1712,56 @@ function closeRouletteOverlay() {
   resetGameUI();
 }
 
+// ── Превью учасників перед стартом гонки/револьвера ──
+let _previewResolve = null;
+let _previewMode = '';
+let _previewList = [];
+let _previewN = 0;
+
+function showPreview(qualifiers, mode) {
+  _previewMode = mode;
+  _previewList = qualifiers;
+  _previewN = qualifiers.length;
+  renderPreviewList(qualifiers);
+  document.getElementById('preview-title').textContent =
+    (mode === 'гонка' ? '🏎️ Гонка' : '🔫 Револьвер') + ' — ' + qualifiers.length + ' учасників';
+  document.getElementById('preview-overlay').style.display = 'flex';
+  return new Promise(resolve => { _previewResolve = resolve; });
+}
+
+function renderPreviewList(list) {
+  const el = document.getElementById('preview-list');
+  el.innerHTML = list.map((name, i) => {
+    const isTractor = name.toLowerCase() === 'crystalyne7';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;' +
+      'border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);' +
+      'font-size:13px;font-weight:600;color:#ddd;min-width:0;">' +
+      '<span style="color:var(--text-muted);font-size:10px;width:18px;flex-shrink:0;">' + (i+1) + '</span>' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+      (isTractor ? '🚜 ' : '') + escapeHtml(name) + '</span></div>';
+  }).join('');
+}
+
+function previewConfirm() {
+  document.getElementById('preview-overlay').style.display = 'none';
+  if (_previewResolve) { _previewResolve(true); _previewResolve = null; }
+}
+
+function previewCancel() {
+  document.getElementById('preview-overlay').style.display = 'none';
+  if (_previewResolve) { _previewResolve(false); _previewResolve = null; }
+}
+
+function previewReroll() {
+  // Перевибираємо тих самих N з учасників
+  _previewList = pickRandom(state.participants, Math.min(_previewN, state.participants.length));
+  if (_previewMode === 'гонка') raceQualifiers = _previewList;
+  else revolverQualifiers = _previewList;
+  renderPreviewList(_previewList);
+  document.getElementById('preview-title').textContent =
+    (_previewMode === 'гонка' ? '🏎️ Гонка' : '🔫 Револьвер') + ' — ' + _previewList.length + ' учасників';
+}
+
 function pickRandom(arr, n) {
   const copy = [...arr];
   const result = [];
@@ -1709,12 +1773,14 @@ function pickRandom(arr, n) {
 }
 
 async function startRaceGame() {
-  // Збільшено ліміт до 300
   const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 10, 2), 300);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
   const count = Math.min(n, state.participants.length);
   raceQualifiers = pickRandom(state.participants, count);
+  // Показуємо список учасників перед стартом
+  const confirmed = await showPreview(raceQualifiers, 'гонка');
+  if (!confirmed) { raceQualifiers = []; return; }
   await runRace(raceQualifiers, laps);
 }
 
@@ -1957,7 +2023,82 @@ function makeF1Car(teamColorHex) {
   return group;
 }
 
-async function runRace(qualifiers, totalLaps) {
+// 🚜 Трактор для Crystalyne7
+function makeTractor(colorHex) {
+  const group = new THREE.Group();
+  const body = new THREE.Group();
+
+  const paintMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const darkMat  = new THREE.MeshStandardMaterial({ color: 0x222200, roughness: 0.9 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.5 });
+  const exhaustMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+
+  // Основний корпус (довгий)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 4.5), paintMat);
+  chassis.position.set(0, 0.6, 0); body.add(chassis);
+
+  // Капот двигуна (висунутий вперед)
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 2.2), paintMat);
+  hood.position.set(0, 0.85, 2.8); body.add(hood);
+
+  // Труба вихлопу (збоку капота)
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.0, 8), exhaustMat);
+  exhaust.position.set(0.7, 1.8, 2.2); body.add(exhaust);
+  const exhaustTop = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.2, 8), exhaustMat);
+  exhaustTop.position.set(0.7, 2.85, 2.2); body.add(exhaustTop);
+
+  // Кабіна
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.4, 2.2), paintMat);
+  cab.position.set(0, 1.7, -0.6); body.add(cab);
+
+  // Скло кабіни (спереду)
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.85, 1.0, 0.08), glassMat);
+  windshield.position.set(0, 1.7, 0.52); body.add(windshield);
+
+  // Скло кабіни (ззаду)
+  const rearWindow = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.8, 0.08), glassMat);
+  rearWindow.position.set(0, 1.75, -1.71); body.add(rearWindow);
+
+  // Великі задні колеса
+  const rearWheelGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.9, 16);
+  const rearWheelMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 1.0 });
+  [[-1.4, 0], [1.4, 0]].forEach(([x]) => {
+    const w = new THREE.Mesh(rearWheelGeo, rearWheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, 0.95, -1.4); body.add(w);
+    // Обід
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.95, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.8 }));
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(x, 0.95, -1.4); body.add(rim);
+  });
+
+  // Маленькі передні колеса
+  const frontWheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.6, 14);
+  [[-0.9, 0], [0.9, 0]].forEach(([x]) => {
+    const w = new THREE.Mesh(frontWheelGeo, rearWheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, 0.5, 2.8); body.add(w);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.65, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.8 }));
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(x, 0.5, 2.8); body.add(rim);
+  });
+
+  // Відвал/ківш ззаду (бонус)
+  const bucket = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.15, 1.0), darkMat);
+  bucket.position.set(0, 0.2, -2.8); body.add(bucket);
+  const bucketLeft  = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.7, 1.0), darkMat);
+  bucketLeft.position.set(-1.1, 0.55, -2.8); body.add(bucketLeft);
+  const bucketRight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.7, 1.0), darkMat);
+  bucketRight.position.set(1.1, 0.55, -2.8); body.add(bucketRight);
+
+  body.rotation.y = 0;
+  group.add(body);
+  group.scale.set(0.42, 0.42, 0.42);
+  return group;
+}
+
+
   if (!qualifiers.length) return;
   phase = 'racing';
 
@@ -2044,7 +2185,9 @@ async function runRace(qualifiers, totalLaps) {
   const cars = [];
   for (let i = 0; i < n; i++) {
     const color = new THREE.Color().setHSL(i / n, 0.8, 0.5);
-    const car = makeF1Car(color.getHex());
+    // Crystalyne7 їде на тракторі 🚜
+    const isTractor = qualifiers[i].toLowerCase() === 'crystalyne7';
+    const car = isTractor ? makeTractor(color.getHex()) : makeF1Car(color.getHex());
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.0, 1.3, 24),
       new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
@@ -2294,10 +2437,12 @@ async function runRace(qualifiers, totalLaps) {
 
 let revolverQualifiers = [];
 
-function startRevolverGame() {
+async function startRevolverGame() {
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
   const n = Math.min(state.participants.length, 6);
   revolverQualifiers = pickRandom(state.participants, n);
+  const confirmed = await showPreview(revolverQualifiers, 'револьвер');
+  if (!confirmed) { revolverQualifiers = []; return; }
   runRevolver(revolverQualifiers);
 }
 
