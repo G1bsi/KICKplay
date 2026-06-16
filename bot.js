@@ -810,10 +810,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* Ефект вистрілу — вищий (над барабаном) */
   .muzzle-flash {
     position: absolute;
-    top: -110px;       /* підняли вище */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 200px; height: 200px;
+    width: 180px; height: 180px;
     background: radial-gradient(circle,
       #fff 0%, #fff 8%,
       #fffbe0 14%,
@@ -823,7 +820,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       transparent 70%);
     opacity: 0; z-index: 100; pointer-events: none; border-radius: 50%;
     mix-blend-mode: screen;
-    animation: flashBurst 0.18s ease-out forwards;
+    animation: flashBurst 0.22s ease-out forwards;
   }
   @keyframes flashBurst {
     0%   { opacity: 0; transform: translateX(-50%) scale(0.3); }
@@ -2301,9 +2298,19 @@ async function runRevolver(qualifiers) {
 
     area.classList.add('shake-anim');
 
-    // Спалах
+    // Спалах — позиціонуємо точно на дулі
     const flash = document.createElement('div');
     flash.className = 'muzzle-flash';
+    // Отримуємо позицію дула відносно area
+    const barrelEl = document.getElementById('revolver-barrel-indicator');
+    const areaRect = area.getBoundingClientRect();
+    const barrelRect = barrelEl.getBoundingClientRect();
+    const flashSize = 180;
+    const barrelCenterX = barrelRect.left + barrelRect.width / 2 - areaRect.left;
+    const barrelCenterY = barrelRect.top + barrelRect.height / 2 - areaRect.top;
+    flash.style.top = (barrelCenterY - flashSize / 2) + 'px';
+    flash.style.left = (barrelCenterX - flashSize / 2) + 'px';
+    flash.style.transform = 'none';
     area.appendChild(flash);
 
     // Іскри
