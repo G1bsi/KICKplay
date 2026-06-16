@@ -161,9 +161,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 </head>
 <body>
 <div class="box">
-  <h1>🎮 Marbles Dash</h1>
-  <div class="sub">STREAMER ACCESS ONLY</div>
-  <input type="password" id="pw" placeholder="Введите пароль..." onkeydown="if(event.key==='Enter')login()">
+  <input type="password" id="pw" placeholder="юзер лох" onkeydown="if(event.key==='Enter')login()">
   <button onclick="login()">Подключиться</button>
   <div class="err" id="err"></div>
 </div>
@@ -504,6 +502,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .selecting .cell { cursor: none; }
   .selecting .cell.selected { cursor: none; }
   .selecting * { cursor: none !important; }
+  /* В режимі вибору клітинок — знімаємо паддінг/скрол з box,
+     щоб fitGridColumns рахував точну площу і клітинки не обрізались */
+  .box.selecting { padding: 6px; overflow: hidden; }
 
   /* ── Кастомний Чат ─────────────────────── */
   .chat-msg {
@@ -605,6 +606,90 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     width: 6px; background: var(--kick); transform: translateX(-50%);
     z-index: 6; border-radius: 3px;
     box-shadow: 0 0 15px var(--kick);
+  }
+
+  /* ── 🔫 Режим Револьвер ─────────────────── */
+  #revolver-overlay {
+    position: fixed; inset: 0; z-index: 9991;
+    background: rgba(4,6,4,0.95);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; backdrop-filter: blur(8px);
+  }
+  #revolver-overlay.visible { display: flex; }
+  #revolver-overlay-hint {
+    font-family: 'Roboto Mono', monospace; font-size: 22px; font-weight: bold;
+    color: var(--kick); letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.4); text-align: center;
+  }
+  #revolver-area {
+    position: relative; width: 450px; height: 450px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  @keyframes recoilShake {
+    0%   { transform: translate(0,0) scale(1); }
+    10%  { transform: translate(0,15px) scale(1.02); }
+    30%  { transform: translate(5px,-10px) scale(0.98); }
+    50%  { transform: translate(-5px,5px) scale(1.01); }
+    70%  { transform: translate(3px,-3px) scale(0.99); }
+    100% { transform: translate(0,0) scale(1); }
+  }
+  .shake-anim { animation: recoilShake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+  #revolver-cylinder {
+    width: 380px; height: 380px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, #222 0%, #0a0a0a 60%, #000 100%);
+    border: 8px solid #1a1a1a;
+    box-shadow: inset 0 0 60px #000, 0 20px 50px rgba(0,0,0,0.9), 0 0 0 2px #333;
+    position: relative; z-index: 2;
+  }
+  #revolver-cylinder::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    width: 55px; height: 55px; border-radius: 50%;
+    background: linear-gradient(135deg,#333,#050505);
+    border: 4px solid #111;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.9), inset 0 0 10px rgba(255,255,255,0.1);
+  }
+  #revolver-barrel-indicator {
+    position: absolute; top: -35px; left: 50%; transform: translateX(-50%);
+    color: var(--red); font-size: 40px;
+    text-shadow: 0 0 20px rgba(255,74,74,0.9); z-index: 5;
+    animation: pulseMuzzle 1.5s infinite alternate;
+  }
+  @keyframes pulseMuzzle { from { opacity:0.7; } to { opacity:1; transform:translateX(-50%) translateY(3px); } }
+  .rev-chamber {
+    width: 86px; height: 86px; border-radius: 50%;
+    background: radial-gradient(circle, #3a0b0b 0%, #110000 100%);
+    border: 3px solid #ffba00;
+    box-shadow: inset 0 0 20px rgba(255,60,0,0.4), 0 0 15px rgba(0,0,0,0.9);
+    position: absolute; left: 50%; top: 50%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; transition: all 0.3s;
+  }
+  .rev-chamber-inner {
+    color: #ffda75; font-family: 'Inter', sans-serif;
+    font-size: 11px; font-weight: 900; text-align: center;
+    word-break: break-word; padding: 4px; z-index: 2;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(255,186,0,0.5);
+    transition: all 0.3s ease-in;
+  }
+  .rev-chamber.eliminated {
+    background: #020202; border-color: #111;
+    box-shadow: inset 0 0 35px #000, inset 0 0 10px rgba(0,0,0,1);
+  }
+  .rev-chamber.eliminated .rev-chamber-inner { opacity:0; transform:scale(0.5); }
+  .rev-chamber.winner {
+    background: radial-gradient(circle, #ffea00 0%, #d48a00 100%);
+    box-shadow: 0 0 40px var(--gold), inset 0 0 20px rgba(255,255,255,0.6);
+    border-color: #fff; z-index: 4;
+  }
+  .rev-chamber.winner .rev-chamber-inner { color:#000; font-size:13px; font-weight:900; text-shadow:none; }
+  .muzzle-flash {
+    position: absolute; top: -50px; left: 50%; transform: translateX(-50%);
+    width: 250px; height: 250px;
+    background: radial-gradient(circle, #fff 5%, #ffea00 20%, #ff4a00 40%, transparent 70%);
+    opacity: 0.9; z-index: 100; pointer-events: none; border-radius: 50%;
+    mix-blend-mode: screen;
   }
 
   .race-close-btn {
@@ -842,13 +927,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
         <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
       </div>
     </div>
 
     <div id="race-count-field" style="display:none;">
       <div class="field-row" style="margin-top:8px;">
         <div class="field">
-          <label class="field-label">Участников гонки (до 300)</label>
+          <label class="field-label">Участников гонки</label>
           <input type="number" id="race-count" value="12" min="2" max="300">
         </div>
         <div class="field small">
@@ -885,7 +971,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span>Победители</span>
       <span class="count" id="winners-count-title">0</span>
     </div>
-    <div class="box" id="winners-box">
+    <div class="box" id="winners-box" style="flex:1; min-height:220px;">
       <div class="empty-box">Победителей пока нет</div>
     </div>
   </div>
@@ -911,7 +997,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <!-- ── Кастомний Чат ────────────────────── -->
   <div class="col" id="chat-col">
     <div class="col-title">
-      <span>Чат стрима</span>
+      <span>Чат</span>
       <span class="count" id="chat-count">0</span>
     </div>
     <div class="box" id="chat-box" style="flex:1; display:flex; flex-direction:column; gap:6px;">
@@ -971,6 +1057,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
+  </div>
+</div>
+
+<!-- Оверлей Револьвера -->
+<div id="revolver-overlay">
+  <div id="revolver-overlay-hint">Заряжаем барабан...</div>
+  <div id="revolver-area">
+    <button class="race-close-btn" onclick="closeRevolverOverlay()">✕</button>
+    <div id="revolver-barrel-indicator">▼</div>
+    <div id="revolver-cylinder"></div>
+  </div>
+  <div id="revolver-overlay-controls" style="display:none; margin-top:20px;">
+    <button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>
+    <button class="btn-primary" style="width:auto; margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -1165,15 +1265,17 @@ let raceQualifiers = [];
 let raceAnimId = null;
 
 function setGameMode(mode) {
-  if (phase !== 'idle') return; 
+  if (phase !== 'idle') return;
   gameMode = mode;
   document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
   document.getElementById('mode-btn-roulette').classList.toggle('active', mode === 'roulette');
+  document.getElementById('mode-btn-revolver').classList.toggle('active', mode === 'revolver');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
   hideRaceOverlay();
   hideRouletteOverlay();
+  closeRevolverOverlay();
 }
 
 function hideRaceOverlay() {
@@ -1211,6 +1313,7 @@ function resetGameUI() {
 async function startGame() {
   if (gameMode === 'race') return startRaceGame();
   if (gameMode === 'roulette') return startRoulette();
+  if (gameMode === 'revolver') return startRevolverGame();
 
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
@@ -1460,18 +1563,51 @@ function buildTrack3D(scene, curve) {
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
 
+  // ── Фінішна лінія: горизонтальний банер над трасою + два стовпи ──
   const UP = new THREE.Vector3(0, 1, 0);
   const m0 = curve.getPointAt(0);
   const t0 = curve.getTangentAt(0);
   const right0 = new THREE.Vector3().crossVectors(t0, UP).normalize();
-  const finishMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_RADIUS * 2, 2.2),
+  const BANNER_H = 12;   // висота стовпів
+  const BANNER_W = ROAD_RADIUS * 2 + 2;  // ширина банера = ширина дороги
+
+  // Горизонтальна площина (шахматка) на землі — для видимості знизу
+  const flatFinish = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_RADIUS * 2, 2.5),
     new THREE.MeshStandardMaterial({ map: finishTex })
   );
-  finishMesh.rotation.x = -Math.PI / 2;
-  finishMesh.rotation.y = Math.atan2(right0.x, right0.z);
-  finishMesh.position.set(m0.x, 0.55, m0.z);
-  scene.add(finishMesh);
+  flatFinish.rotation.x = -Math.PI / 2;
+  flatFinish.rotation.y = Math.atan2(right0.x, right0.z);
+  flatFinish.position.set(m0.x, 0.55, m0.z);
+  scene.add(flatFinish);
+
+  // Вертикальний банер (шахматка видна з кута)
+  const bannerTex2 = makeCanvasTexture((ctx, w, h) => {
+    const cell = 16;
+    for (let y = 0; y < h; y += cell) for (let x = 0; x < w; x += cell) {
+      ctx.fillStyle = ((x/cell + y/cell) % 2 === 0) ? '#fff' : '#111';
+      ctx.fillRect(x, y, cell, cell);
+    }
+  }, 64, 32);
+  bannerTex2.repeat.set(6, 1);
+
+  const bannerMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(BANNER_W, 3.5),
+    new THREE.MeshStandardMaterial({ map: bannerTex2, side: THREE.DoubleSide })
+  );
+  bannerMesh.position.set(m0.x, BANNER_H, m0.z);
+  bannerMesh.lookAt(m0.x + t0.x, BANNER_H, m0.z + t0.z);
+  scene.add(bannerMesh);
+
+  // Два стовпи
+  const poleGeo = new THREE.CylinderGeometry(0.25, 0.25, BANNER_H, 8);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.7, roughness: 0.3 });
+  [-1, 1].forEach(side => {
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.copy(m0).addScaledVector(right0, side * (BANNER_W / 2));
+    pole.position.y = BANNER_H / 2;
+    scene.add(pole);
+  });
 }
 
 let CAR_GEO = null;
@@ -1891,6 +2027,141 @@ async function runRace(qualifiers, totalLaps) {
   addWinner(winnerName);
 }
 
+// ── Режим «Револьвер» ────────────────────────────────────────────────────────
+// Бере до 6 рандомних учасників, крутить барабан, вибиває по одному — останній перемагає.
+
+let revolverQualifiers = [];
+
+function startRevolverGame() {
+  if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
+  const n = Math.min(state.participants.length, 6);
+  revolverQualifiers = pickRandom(state.participants, n);
+  runRevolver(revolverQualifiers);
+}
+
+function closeRevolverOverlay() {
+  document.getElementById('revolver-overlay').classList.remove('visible');
+  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
+}
+
+async function runRevolver(qualifiers) {
+  const overlay = document.getElementById('revolver-overlay');
+  const cylinder = document.getElementById('revolver-cylinder');
+  const hint = document.getElementById('revolver-overlay-hint');
+  const controls = document.getElementById('revolver-overlay-controls');
+  const area = document.getElementById('revolver-area');
+
+  phase = 'racing';
+  overlay.classList.add('visible');
+  controls.style.display = 'none';
+  hint.textContent = 'Заряжаем барабан...';
+
+  const n = qualifiers.length;
+  cylinder.innerHTML = '';
+  cylinder.style.transition = 'none';
+  cylinder.style.transform = 'rotate(0deg)';
+
+  const chambers = [];
+  const R = 120;
+
+  for (let i = 0; i < n; i++) {
+    const angleDeg = i * (360 / n);
+    const angleRad = angleDeg * Math.PI / 180;
+    const x = Math.cos(angleRad) * R;
+    const y = Math.sin(angleRad) * R;
+
+    const el = document.createElement('div');
+    el.className = 'rev-chamber';
+    el.style.transform = 'translate(calc(-50% + ' + x + 'px), calc(-50% + ' + y + 'px))';
+
+    const inner = document.createElement('div');
+    inner.className = 'rev-chamber-inner';
+    inner.textContent = qualifiers[i];
+
+    el.appendChild(inner);
+    cylinder.appendChild(el);
+    chambers.push({ el, inner, name: qualifiers[i], angle: angleDeg });
+  }
+
+  let remaining = [...chambers];
+  let currentRot = 0;
+  await sleep(1500);
+
+  while (remaining.length > 1) {
+    hint.textContent = 'Крутим барабан...';
+
+    const killIdx = Math.floor(Math.random() * remaining.length);
+    const target = remaining[killIdx];
+
+    const targetPos = 270;
+    let diff = (targetPos - target.angle) % 360;
+    if (diff < 0) diff += 360;
+
+    let currentMod = currentRot % 360;
+    if (currentMod < 0) currentMod += 360;
+
+    let delta = diff - currentMod;
+    if (delta <= 0) delta += 360;
+
+    let nextRot = currentRot + delta + (360 * 3);
+
+    cylinder.style.transition = 'transform 3s cubic-bezier(0.2, 0.9, 0.3, 1)';
+    cylinder.style.transform = 'rotate(' + nextRot + 'deg)';
+
+    chambers.forEach(c => {
+      c.inner.style.transition = 'transform 3s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      c.inner.style.transform = 'rotate(' + (-nextRot) + 'deg)';
+    });
+
+    currentRot = nextRot;
+    await sleep(3100);
+
+    // Постріл — звук пострілу (окремий від основного)
+    playRevolverShot();
+    hint.innerHTML = '💥 <b style="color:var(--red);">' + escapeHtml(target.name) + '</b> вылетает!';
+
+    area.classList.add('shake-anim');
+
+    const flash = document.createElement('div');
+    flash.className = 'muzzle-flash';
+    area.appendChild(flash);
+
+    setTimeout(() => target.el.classList.add('eliminated'), 50);
+    setTimeout(() => flash.remove(), 150);
+    setTimeout(() => area.classList.remove('shake-anim'), 400);
+
+    remaining.splice(killIdx, 1);
+    await sleep(2200);
+  }
+
+  const winner = remaining[0];
+  winner.el.classList.add('winner');
+  hint.innerHTML = '🎉 Победитель: <b style="color:var(--kick);">' + escapeHtml(winner.name) + '</b>';
+  controls.style.display = 'flex';
+  phase = 'done';
+
+  addWinner(winner.name);
+}
+
+// Звук пострілу (інший від основного playTimeoutSound)
+function playRevolverShot() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+    gain.gain.setValueAtTime(1, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  } catch(e) {}
+}
+
 function closeRaceOverlay() {
   resetGameUI();
 }
@@ -1900,8 +2171,8 @@ function closeRaceOverlay() {
 // якщо багато — автоматично зменшуються (з мінімумом, нижче якого дозволяється скрол).
 function fitGridColumns(grid, box, n) {
   const gap = 6;
-  const padX = 24; // .box padding(8*2) + .grid padding(4*2)
-  const padY = 24;
+  const padX = 12; // відповідає .box.selecting { padding: 6px }
+  const padY = 12;
   const W = Math.max(box.clientWidth - padX, 50);
   const H = Math.max(box.clientHeight - padY, 50);
   const MIN_CELL = 16;
@@ -2044,38 +2315,25 @@ function playTimeoutSound() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
 
-    // Один "дзвоник": основний тон (трикутна хвиля) + легкий обертон для теплого тембру
-    function chime(freq, start, dur, gainMax) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + start);
-      gain.gain.exponentialRampToValueAtTime(gainMax, now + start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(now + start);
-      osc.stop(now + start + dur + 0.05);
-
-      const osc2 = audioCtx.createOscillator();
-      const gain2 = audioCtx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.value = freq * 2;
-      gain2.gain.setValueAtTime(0.0001, now + start);
-      gain2.gain.exponentialRampToValueAtTime(gainMax * 0.25, now + start + 0.02);
-      gain2.gain.exponentialRampToValueAtTime(0.0001, now + start + dur * 0.7);
-      osc2.connect(gain2);
-      gain2.connect(audioCtx.destination);
-      osc2.start(now + start);
-      osc2.stop(now + start + dur + 0.05);
+    // Старий звук (3 короткі піпи 880Hz), відтворений двічі з паузою
+    function tripleBeep(startOffset) {
+      [0, 0.25, 0.5].forEach(offset => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, now + startOffset + offset);
+        gain.gain.exponentialRampToValueAtTime(0.3, now + startOffset + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + offset + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + startOffset + offset);
+        osc.stop(now + startOffset + offset + 0.25);
+      });
     }
 
-    // "Дінь-дон" (E6 → B5), повторений двічі — помітно, але не дратує (~2с)
-    chime(1318.5, 0,    0.55, 0.32);
-    chime(987.77, 0.30, 0.70, 0.32);
-    chime(1318.5, 0.95, 0.55, 0.28);
-    chime(987.77, 1.25, 0.75, 0.28);
+    tripleBeep(0);    // перший раз
+    tripleBeep(1.0);  // другий раз через 1 секунду
   } catch (e) {}
 }
 
