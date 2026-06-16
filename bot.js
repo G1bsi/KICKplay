@@ -1201,20 +1201,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
 </div>
 
-<!-- Оверлей превью учасників перед гонкою/револьвером -->
-<div id="preview-overlay" style="
-  position:fixed;inset:0;z-index:9995;
-  background:rgba(4,8,4,0.96);
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  gap:20px;backdrop-filter:blur(8px);">
-  <div id="preview-title" style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:var(--kick);letter-spacing:3px;text-transform:uppercase;"></div>
-  <div id="preview-list" style="
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;
-    max-width:min(95vw,900px);max-height:60vh;overflow-y:auto;
-    background:rgba(0,0,0,0.3);border:1px solid var(--panel-border);border-radius:12px;padding:14px;"></div>
-  <button class="btn-primary" style="min-width:200px;margin:0;" onclick="previewConfirm()">🚀 Почати!</button>
-</div>
-
 <!-- Оверлей Cash Hunt -->
 <div id="cashhunt-overlay">
   <div id="cashhunt-area">
@@ -1712,56 +1698,6 @@ function closeRouletteOverlay() {
   resetGameUI();
 }
 
-// ── Превью учасників перед стартом гонки/револьвера ──
-let _previewResolve = null;
-let _previewMode = '';
-let _previewList = [];
-let _previewN = 0;
-
-function showPreview(qualifiers, mode) {
-  _previewMode = mode;
-  _previewList = qualifiers;
-  _previewN = qualifiers.length;
-  renderPreviewList(qualifiers);
-  document.getElementById('preview-title').textContent =
-    (mode === 'гонка' ? '🏎️ Гонка' : '🔫 Револьвер') + ' — ' + qualifiers.length + ' учасників';
-  document.getElementById('preview-overlay').style.display = 'flex';
-  return new Promise(resolve => { _previewResolve = resolve; });
-}
-
-function renderPreviewList(list) {
-  const el = document.getElementById('preview-list');
-  el.innerHTML = list.map((name, i) => {
-    const isTractor = name.toLowerCase() === 'crystalyne7';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;' +
-      'border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);' +
-      'font-size:13px;font-weight:600;color:#ddd;min-width:0;">' +
-      '<span style="color:var(--text-muted);font-size:10px;width:18px;flex-shrink:0;">' + (i+1) + '</span>' +
-      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
-      (isTractor ? '🚜 ' : '') + escapeHtml(name) + '</span></div>';
-  }).join('');
-}
-
-function previewConfirm() {
-  document.getElementById('preview-overlay').style.display = 'none';
-  if (_previewResolve) { _previewResolve(true); _previewResolve = null; }
-}
-
-function previewCancel() {
-  document.getElementById('preview-overlay').style.display = 'none';
-  if (_previewResolve) { _previewResolve(false); _previewResolve = null; }
-}
-
-function previewReroll() {
-  // Перевибираємо тих самих N з учасників
-  _previewList = pickRandom(state.participants, Math.min(_previewN, state.participants.length));
-  if (_previewMode === 'гонка') raceQualifiers = _previewList;
-  else revolverQualifiers = _previewList;
-  renderPreviewList(_previewList);
-  document.getElementById('preview-title').textContent =
-    (_previewMode === 'гонка' ? '🏎️ Гонка' : '🔫 Револьвер') + ' — ' + _previewList.length + ' учасників';
-}
-
 function pickRandom(arr, n) {
   const copy = [...arr];
   const result = [];
@@ -1778,9 +1714,6 @@ async function startRaceGame() {
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
   const count = Math.min(n, state.participants.length);
   raceQualifiers = pickRandom(state.participants, count);
-  // Показуємо список учасників перед стартом
-  const confirmed = await showPreview(raceQualifiers, 'гонка');
-  if (!confirmed) { raceQualifiers = []; return; }
   await runRace(raceQualifiers, laps);
 }
 
@@ -2343,6 +2276,18 @@ async function runRace(qualifiers, totalLaps) {
 
   const cd = document.getElementById('race-countdown');
   overlayHint.textContent = '';
+
+  // ── Пауза перед стартом — чекаємо кнопку ──
+  await new Promise(resolve => {
+    const startBtn = document.createElement('button');
+    startBtn.className = 'btn-primary';
+    startBtn.style.cssText = 'font-size:28px;padding:16px 48px;margin:0;letter-spacing:3px;';
+    startBtn.textContent = '🚀 СТАРТ';
+    cd.innerHTML = '';
+    cd.appendChild(startBtn);
+    startBtn.onclick = () => { cd.innerHTML = ''; resolve(); };
+  });
+
   for (const txt of ['3', '2', '1', 'GO!']) {
     cd.textContent = txt;
     cd.classList.remove('pulse');
@@ -2441,8 +2386,6 @@ async function startRevolverGame() {
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
   const n = Math.min(state.participants.length, 6);
   revolverQualifiers = pickRandom(state.participants, n);
-  const confirmed = await showPreview(revolverQualifiers, 'револьвер');
-  if (!confirmed) { revolverQualifiers = []; return; }
   runRevolver(revolverQualifiers);
 }
 
@@ -2492,7 +2435,26 @@ async function runRevolver(qualifiers) {
 
   let remaining = [...chambers];
   let currentRot = 0;
-  await sleep(1500);
+
+  // ── Пауза — чекаємо кнопку СТАРТ ──
+  hint.textContent = 'Готовий до старту';
+  await new Promise(resolve => {
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'font-size:22px;padding:14px 44px;margin:20px 0 0;letter-spacing:3px;';
+    btn.textContent = '🔫 СТАРТ';
+    controls.style.display = 'flex';
+    controls.innerHTML = '';
+    controls.appendChild(btn);
+    btn.onclick = () => {
+      controls.style.display = 'none';
+      controls.innerHTML =
+        '<button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>' +
+        '<button class="btn-primary" style="width:auto;margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>';
+      resolve();
+    };
+  });
+  hint.textContent = '';
 
   while (remaining.length > 1) {
     hint.textContent = 'Крутим барабан...';
