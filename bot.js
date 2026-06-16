@@ -810,7 +810,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* Ефект вистрілу — вищий (над барабаном) */
   .muzzle-flash {
     position: absolute;
-    top: -10px;
+    top: 40px;
     left: 50%; transform: translateX(-50%);
     width: 180px; height: 180px;
     background: radial-gradient(circle,
