@@ -253,9 +253,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 320px minmax(300px, 560px) minmax(200px, 280px);
+    grid-template-columns: 320px minmax(300px, 560px) minmax(300px, 420px);
     gap: 16px;
-    height: calc(100vh - 32px); /* 100vh мінус верхній та нижній padding(16+16) */
+    height: calc(100vh - 32px);
+    justify-content: center;
   }
   @media (max-width: 1200px) {
     .layout { grid-template-columns: 320px 1fr; }
