@@ -185,10 +185,14 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     box-shadow: 0 6px 20px rgba(83, 252, 24, 0.4); 
   }
   .err { color: #ff4444; font-size: 12px; margin-top: 12px; min-height: 16px; }
+  body { user-select: none; -webkit-user-select: none; }
+  input { user-select: text; -webkit-user-select: text; }
+  .pw-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; text-align: left; margin-bottom: 6px; }
 </style>
 </head>
 <body>
 <div class="box">
+  <div class="pw-label">Пароль</div>
   <input type="password" id="pw" placeholder="юзер лох" onkeydown="if(event.key==='Enter')login()">
   <button onclick="login()">Подключиться</button>
   <div class="err" id="err"></div>
