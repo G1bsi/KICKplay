@@ -13,6 +13,34 @@ const STATE_FILE  = path.join(__dirname, 'marble_state.json');
 
 // Пароль береться з Environment Variables на Render:
 const WEB_PASSWORD = process.env.WEB_PASSWORD;
+
+// OAuth токен бота для відправки повідомлень в чат Kick
+// Render Dashboard → Environment → BOT_TOKEN = твій токен
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
+
+// Відправляє повідомлення від бота в чат (потребує BOT_TOKEN)
+async function sendChatAnnounce(msg) {
+  if (!BOT_TOKEN) return;
+  try {
+    const res = await fetch(`https://kick.com/api/v2/messages/send/${CHATROOM_ID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + BOT_TOKEN,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ content: msg, type: 'message' }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.log('[CHAT BOT] Помилка відправки:', res.status, text.slice(0, 200));
+    } else {
+      console.log('[CHAT BOT] Відправлено:', msg);
+    }
+  } catch (e) {
+    console.log('[CHAT BOT] fetch error:', e.message);
+  }
+}
 if (!WEB_PASSWORD) {
   console.error('╔══════════════════════════════════════════════════╗');
   console.error('║  ОШИБКА: WEB_PASSWORD не задан!                ║');
@@ -662,74 +690,158 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     text-shadow: 0 0 15px rgba(83,252,24,0.4); text-align: center;
   }
   #revolver-area {
-    position: relative; width: 450px; height: 450px;
+    position: relative; width: 520px; height: 520px;
     display: flex; align-items: center; justify-content: center;
   }
   @keyframes recoilShake {
-    0%   { transform: translate(0,0) scale(1); }
-    10%  { transform: translate(0,15px) scale(1.02); }
-    30%  { transform: translate(5px,-10px) scale(0.98); }
-    50%  { transform: translate(-5px,5px) scale(1.01); }
-    70%  { transform: translate(3px,-3px) scale(0.99); }
-    100% { transform: translate(0,0) scale(1); }
+    0%   { transform: translate(0,0) rotate(0deg) scale(1); }
+    8%   { transform: translate(-4px, 18px) rotate(-2deg) scale(1.03); }
+    20%  { transform: translate(6px, -12px) rotate(1.5deg) scale(0.97); }
+    40%  { transform: translate(-3px, 7px) rotate(-1deg) scale(1.01); }
+    65%  { transform: translate(2px, -3px) rotate(0.5deg) scale(0.99); }
+    100% { transform: translate(0,0) rotate(0deg) scale(1); }
   }
-  .shake-anim { animation: recoilShake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+  .shake-anim { animation: recoilShake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+
+  /* Зовнішнє кільце (рама барабана) */
+  #revolver-frame {
+    position: absolute;
+    width: 430px; height: 430px; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      #1a1a1a 0%, #2e2e2e 8%, #0f0f0f 15%, #3a3a3a 22%,
+      #111 30%, #2a2a2a 38%, #0c0c0c 45%, #333 52%,
+      #1a1a1a 60%, #2e2e2e 68%, #0f0f0f 75%, #3a3a3a 82%,
+      #111 90%, #2a2a2a 97%, #1a1a1a 100%);
+    border: 3px solid #444;
+    box-shadow:
+      0 0 0 2px #111,
+      0 0 0 5px #333,
+      0 25px 60px rgba(0,0,0,0.95),
+      inset 0 2px 4px rgba(255,255,255,0.08);
+    z-index: 1;
+  }
+
+  /* Сам барабан (обертається) */
   #revolver-cylinder {
     width: 380px; height: 380px; border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, #222 0%, #0a0a0a 60%, #000 100%);
-    border: 8px solid #1a1a1a;
-    box-shadow: inset 0 0 60px #000, 0 20px 50px rgba(0,0,0,0.9), 0 0 0 2px #333;
+    background:
+      radial-gradient(circle at 38% 35%, #2a2a2a 0%, #141414 35%, #060606 65%, #000 100%);
+    border: 6px solid #222;
+    box-shadow:
+      inset 0 3px 8px rgba(255,255,255,0.06),
+      inset 0 -3px 8px rgba(0,0,0,0.9),
+      inset 0 0 50px #000,
+      0 0 0 2px #111;
     position: relative; z-index: 2;
   }
+  /* Центральна вісь (шпиндель) */
   #revolver-cylinder::after {
     content: ''; position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%);
-    width: 55px; height: 55px; border-radius: 50%;
-    background: linear-gradient(135deg,#333,#050505);
-    border: 4px solid #111;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.9), inset 0 0 10px rgba(255,255,255,0.1);
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #555 0%, #1a1a1a 50%, #000 100%);
+    border: 3px solid #333;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.9), inset 0 1px 3px rgba(255,255,255,0.15);
   }
+
+  /* Дуло (трикутник-вказівник) */
   #revolver-barrel-indicator {
-    position: absolute; top: -35px; left: 50%; transform: translateX(-50%);
-    color: var(--red); font-size: 40px;
-    text-shadow: 0 0 20px rgba(255,74,74,0.9); z-index: 5;
-    animation: pulseMuzzle 1.5s infinite alternate;
+    position: absolute; top: -48px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-top: 22px solid var(--red);
+    filter: drop-shadow(0 0 8px rgba(255,74,74,1)) drop-shadow(0 0 20px rgba(255,74,74,0.6));
+    z-index: 5;
+    animation: pulseMuzzle 1.2s ease-in-out infinite alternate;
   }
-  @keyframes pulseMuzzle { from { opacity:0.7; } to { opacity:1; transform:translateX(-50%) translateY(3px); } }
+  @keyframes pulseMuzzle {
+    from { filter: drop-shadow(0 0 6px rgba(255,74,74,0.8)); opacity: 0.85; }
+    to   { filter: drop-shadow(0 0 18px rgba(255,74,74,1)) drop-shadow(0 0 35px rgba(255,100,100,0.5)); opacity: 1; }
+  }
+
+  /* Камора патрону */
   .rev-chamber {
-    width: 86px; height: 86px; border-radius: 50%;
-    background: radial-gradient(circle, #3a0b0b 0%, #110000 100%);
-    border: 3px solid #ffba00;
-    box-shadow: inset 0 0 20px rgba(255,60,0,0.4), 0 0 15px rgba(0,0,0,0.9);
+    width: 88px; height: 88px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 40% 38%, #5a1a0a 0%, #2d0a02 40%, #0a0000 100%);
+    border: 3px solid #c8920a;
+    box-shadow:
+      inset 0 2px 6px rgba(255,120,0,0.3),
+      inset 0 0 20px rgba(0,0,0,0.8),
+      0 0 12px rgba(0,0,0,0.9),
+      inset 0 -2px 4px rgba(255,180,0,0.15);
     position: absolute; left: 50%; top: 50%;
     display: flex; align-items: center; justify-content: center;
-    overflow: hidden; transition: all 0.3s;
+    overflow: hidden; transition: all 0.35s ease;
+  }
+  /* Відблиск всередині камори */
+  .rev-chamber::before {
+    content: '';
+    position: absolute; top: 8%; left: 15%;
+    width: 30%; height: 25%;
+    background: radial-gradient(ellipse, rgba(255,200,100,0.25) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
   }
   .rev-chamber-inner {
-    color: #ffda75; font-family: 'Inter', sans-serif;
-    font-size: 11px; font-weight: 900; text-align: center;
-    word-break: break-word; padding: 4px; z-index: 2;
+    color: #ffd060; font-family: 'Inter', sans-serif;
+    font-size: 10px; font-weight: 900; text-align: center;
+    word-break: break-word; padding: 6px; z-index: 2; line-height: 1.2;
     text-transform: uppercase;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(255,186,0,0.5);
-    transition: all 0.3s ease-in;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(255,180,0,0.4);
+    transition: all 0.35s ease-in;
   }
   .rev-chamber.eliminated {
-    background: #020202; border-color: #111;
-    box-shadow: inset 0 0 35px #000, inset 0 0 10px rgba(0,0,0,1);
+    background: radial-gradient(circle, #050505 0%, #000 100%);
+    border-color: #1a1a1a;
+    box-shadow: inset 0 0 30px #000, inset 0 0 8px rgba(0,0,0,1), 0 0 4px rgba(0,0,0,0.5);
   }
-  .rev-chamber.eliminated .rev-chamber-inner { opacity:0; transform:scale(0.5); }
+  .rev-chamber.eliminated::before { opacity: 0; }
+  .rev-chamber.eliminated .rev-chamber-inner { opacity: 0; transform: scale(0.3); }
   .rev-chamber.winner {
-    background: radial-gradient(circle, #ffea00 0%, #d48a00 100%);
-    box-shadow: 0 0 40px var(--gold), inset 0 0 20px rgba(255,255,255,0.6);
-    border-color: #fff; z-index: 4;
+    background: radial-gradient(circle at 40% 35%, #ffe566 0%, #ffb800 50%, #cc8800 100%);
+    box-shadow: 0 0 35px var(--gold), 0 0 70px rgba(255,184,0,0.4), inset 0 0 15px rgba(255,255,200,0.5);
+    border-color: #ffe0a0; z-index: 4;
   }
-  .rev-chamber.winner .rev-chamber-inner { color:#000; font-size:13px; font-weight:900; text-shadow:none; }
+  .rev-chamber.winner .rev-chamber-inner { color: #1a0a00; font-size: 10px; font-weight: 900; text-shadow: none; }
+
+  /* Ефект вистрілу — вищий (над барабаном) */
   .muzzle-flash {
-    position: absolute; top: -50px; left: 50%; transform: translateX(-50%);
-    width: 250px; height: 250px;
-    background: radial-gradient(circle, #fff 5%, #ffea00 20%, #ff4a00 40%, transparent 70%);
-    opacity: 0.9; z-index: 100; pointer-events: none; border-radius: 50%;
+    position: absolute;
+    top: -110px;       /* підняли вище */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px; height: 200px;
+    background: radial-gradient(circle,
+      #fff 0%, #fff 8%,
+      #fffbe0 14%,
+      #ffea00 22%,
+      #ff8800 38%,
+      #ff4400 52%,
+      transparent 70%);
+    opacity: 0; z-index: 100; pointer-events: none; border-radius: 50%;
     mix-blend-mode: screen;
+    animation: flashBurst 0.18s ease-out forwards;
+  }
+  @keyframes flashBurst {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.3); }
+    15%  { opacity: 1; transform: translateX(-50%) scale(1.1); }
+    50%  { opacity: 0.85; transform: translateX(-50%) scale(1.0); }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  }
+  /* Іскри після пострілу */
+  .spark {
+    position: absolute; top: -60px; left: 50%;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: #ffdd00;
+    pointer-events: none; z-index: 99;
+    animation: sparkFly 0.4s ease-out forwards;
+  }
+  @keyframes sparkFly {
+    0%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
   }
 
   .race-close-btn {
@@ -1119,7 +1231,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="revolver-overlay-hint">Заряжаем барабан...</div>
   <div id="revolver-area">
     <button class="race-close-btn" onclick="closeRevolverOverlay()">✕</button>
-    <div id="revolver-barrel-indicator">▼</div>
+    <div id="revolver-barrel-indicator"></div>
+    <div id="revolver-frame"></div>
     <div id="revolver-cylinder"></div>
   </div>
   <div id="revolver-overlay-controls" style="display:none; margin-top:20px;">
@@ -2177,21 +2290,40 @@ async function runRevolver(qualifiers) {
     });
 
     currentRot = nextRot;
+
+    // Звук прокрутки барабана
+    playRevolverSpin();
     await sleep(2100);
 
-    // Постріл — звук пострілу (окремий від основного)
+    // Постріл
     playRevolverShot();
     hint.innerHTML = '💥 <b style="color:var(--red);">' + escapeHtml(target.name) + '</b> вылетает!';
 
     area.classList.add('shake-anim');
 
+    // Спалах
     const flash = document.createElement('div');
     flash.className = 'muzzle-flash';
     area.appendChild(flash);
 
-    setTimeout(() => target.el.classList.add('eliminated'), 50);
-    setTimeout(() => flash.remove(), 150);
-    setTimeout(() => area.classList.remove('shake-anim'), 400);
+    // Іскри
+    for (let s = 0; s < 9; s++) {
+      const spark = document.createElement('div');
+      spark.className = 'spark';
+      const angle = (Math.random() * 360) * Math.PI / 180;
+      const dist = 35 + Math.random() * 65;
+      spark.style.setProperty('--sx', (Math.cos(angle) * dist) + 'px');
+      spark.style.setProperty('--sy', (Math.sin(angle) * dist - 30) + 'px');
+      spark.style.animationDelay = (Math.random() * 0.06) + 's';
+      spark.style.width = spark.style.height = (2 + Math.random() * 3) + 'px';
+      spark.style.background = Math.random() > 0.4 ? '#ffdd00' : '#ff8800';
+      area.appendChild(spark);
+      setTimeout(() => spark.remove(), 500);
+    }
+
+    setTimeout(() => target.el.classList.add('eliminated'), 60);
+    setTimeout(() => flash.remove(), 230);
+    setTimeout(() => area.classList.remove('shake-anim'), 500);
 
     remaining.splice(killIdx, 1);
     await sleep(900);
@@ -2207,21 +2339,84 @@ async function runRevolver(qualifiers) {
 }
 
 // Звук пострілу (інший від основного playTimeoutSound)
+// Звук пострілу револьвера (bang + металевий відгук)
 function playRevolverShot() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(150, now);
-    osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    gain.gain.setValueAtTime(1, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.2);
+
+    // Основний удар ("bang") — шум + низький тон
+    const bufferSize = audioCtx.sampleRate * 0.25;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+
+    // Фільтр — надає характер пострілу
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, now);
+    filter.frequency.exponentialRampToValueAtTime(120, now + 0.15);
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(2.5, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noise.start(now);
+
+    // Низькочастотний "boom"
+    const boom = audioCtx.createOscillator();
+    const boomGain = audioCtx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(90, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+    boomGain.gain.setValueAtTime(1.2, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    boom.connect(boomGain);
+    boomGain.connect(audioCtx.destination);
+    boom.start(now); boom.stop(now + 0.22);
+
+    // Металевий відгук гільзи
+    const clank = audioCtx.createOscillator();
+    const clankGain = audioCtx.createGain();
+    clank.type = 'triangle';
+    clank.frequency.setValueAtTime(600, now + 0.08);
+    clank.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+    clankGain.gain.setValueAtTime(0, now);
+    clankGain.gain.setValueAtTime(0.3, now + 0.08);
+    clankGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    clank.connect(clankGain);
+    clankGain.connect(audioCtx.destination);
+    clank.start(now + 0.08); clank.stop(now + 0.38);
+  } catch(e) {}
+}
+
+// Звук прокрутки барабана (клацання механізму)
+function playRevolverSpin() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+
+    // Серія клацань
+    const clicks = 7;
+    for (let i = 0; i < clicks; i++) {
+      const t = now + i * 0.06 * (1 + i * 0.04); // прискорення на початку, сповільнення в кінці
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(900 - i * 60, t);
+      osc.frequency.exponentialRampToValueAtTime(300, t + 0.04);
+      g.gain.setValueAtTime(0.25 - i * 0.02, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      osc.connect(g); g.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + 0.07);
+    }
   } catch(e) {}
 }
 
@@ -2533,6 +2728,12 @@ function addWinner(name) {
     if (checkTimerInterval) clearInterval(checkTimerInterval);
     checkTimerInterval = setInterval(pollCheckState, 1000);
     pollCheckState();
+  } else {
+    // Без підтвердження — просто повідомляємо в чат
+    fetch('/api/chat/announce', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner: name })
+    });
   }
 }
 
@@ -2940,6 +3141,10 @@ const server = http.createServer((req, res) => {
         if (!w) { res.writeHead(400); res.end(); return; }
         raffleChecks[w] = { seconds: sec, startedAt: Date.now(), active: true, message: null, messageAt: null };
         console.log(`[РОЗІГРАШ] Таймер запущен для ${w} (${sec}с)`);
+
+        // Відправляємо повідомлення в чат Kick
+        sendChatAnnounce(`🏆 ПОБЕДИТЕЛЬ: @${w} | ⏳ У тебя ${sec} сек на ответ в чат!`);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch { res.writeHead(400); res.end(); }
@@ -2962,6 +3167,21 @@ const server = http.createServer((req, res) => {
         const w = (winner || '').trim();
         if (w) delete raffleChecks[w];
         res.writeHead(200); res.end();
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  // Відправка повідомлення в чат без підтвердження (коли toggle вимкнено)
+  if (req.url === '/api/chat/announce' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winner } = JSON.parse(body);
+        const w = (winner || '').trim();
+        if (w) sendChatAnnounce(`🏆 ПОБЕДИТЕЛЬ: @${w} — поздравляем!`);
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
       } catch { res.writeHead(400); res.end(); }
     });
     return;
