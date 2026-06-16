@@ -1287,7 +1287,22 @@ function parseChatContent(content) {
 
 const chatEvtSource = new EventSource('/api/chat/stream');
 chatEvtSource.onmessage = (e) => {
-  const { username, content, color } = JSON.parse(e.data);
+  const parsed = JSON.parse(e.data);
+
+  // Пуш від сервера: переможець відповів — оновлюємо одразу без polling
+  if (parsed.type === 'winner_reply') {
+    const { name, message } = parsed;
+    const w = winnersHistory.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if (w && w.status === 'pending') {
+      w.status = 'ok';
+      w.message = message;
+      renderWinners();
+      updateAnnounceMsg(name, message);
+    }
+    return;
+  }
+
+  const { username, content, color } = parsed;
   
   const empty = chatBox.querySelector('.empty-box');
   if (empty) empty.remove();
@@ -2692,7 +2707,8 @@ function showAnnounce(name, seconds, confirmOn) {
 function updateAnnounceMsg(name, message) {
   const ann = document.getElementById('winner-announce');
   if (!ann.classList.contains('visible')) return;
-  if (document.getElementById('wa-name').textContent !== name) return;
+  const waName = document.getElementById('wa-name').textContent;
+  if (waName.toLowerCase() !== name.toLowerCase()) return;
 
   if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
   const timerEl = document.getElementById('wa-timer');
@@ -2819,6 +2835,7 @@ async function pollCheckState() {
     if (!c) return;
 
     if (c.message !== null) {
+      console.log('[CLIENT] Winner replied:', w.name, 'message:', c.message, 'updating announce...');
       w.status = 'ok';
       w.message = c.message;
       updateAnnounceMsg(w.name, c.message);
@@ -3358,6 +3375,9 @@ function connect() {
         raffleChecks[checkKey].message = content;
         raffleChecks[checkKey].messageAt = Date.now();
         console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
+        // Push до клієнта — не чекаємо наступного poll
+        const pushMsg = JSON.stringify({ type: 'winner_reply', name: checkKey, message: content });
+        chatClients.forEach(c => c.write(`data: ${pushMsg}\n\n`));
       }
 
       if (raffleAccepting && raffleJoinCmd && lower === raffleJoinCmd) {
