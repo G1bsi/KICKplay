@@ -746,7 +746,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* Дуло (трикутник-вказівник) */
   #revolver-barrel-indicator {
-    position: absolute; top: -48px; left: 50%;
+    position: absolute; top: 52px; left: 50%;
     transform: translateX(-50%);
     width: 0; height: 0;
     border-left: 12px solid transparent;
@@ -1180,7 +1180,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <!-- Оверлей Cash Hunt -->
 <div id="cashhunt-overlay">
   <div id="cashhunt-area">
-    <button class="race-close-btn" style="position:absolute;top:-48px;right:0;" onclick="closeCashhuntOverlay()">✕</button>
     <div id="cashhunt-hint"></div>
     <div id="cashhunt-progress-overlay"></div>
     <div id="cashhunt-grid-wrap">
@@ -1212,7 +1211,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div id="roulette-overlay">
   <div id="roulette-overlay-hint"></div>
   <div id="roulette-track-area">
-    <button class="race-close-btn" onclick="closeRouletteOverlay()">✕</button>
     <div id="roulette-pointer"></div>
     <div id="roulette-track">
       <div id="roulette-strip"></div>
