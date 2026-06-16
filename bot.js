@@ -300,11 +300,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     gap: 16px;
     height: calc(100vh - 32px);
     justify-content: center;
-    align-items: start;
   }
-  /* Ліва колонка (налаштування) і чат — на всю висоту */
-  .layout > .col:first-child,
-  #chat-col { align-self: stretch; }
   @media (max-width: 1200px) {
     .layout { grid-template-columns: 320px 1fr; }
     #chat-col { display: none; }
@@ -1152,8 +1148,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span>Участники <span id="participants-count-title" style="color:var(--kick);font-size:16px;">0</span></span>
     </div>
 
-    <div id="hint"></div>
-    <div id="progress"></div>
     <div class="box" id="main-box">
       <div class="empty-box">Ожидание регистрации...</div>
     </div>
