@@ -2098,7 +2098,7 @@ function makeTractor(colorHex) {
   return group;
 }
 
-
+async function runRace(qualifiers, totalLaps) {
   if (!qualifiers.length) return;
   phase = 'racing';
 
