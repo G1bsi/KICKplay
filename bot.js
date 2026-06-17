@@ -13,6 +13,34 @@ const STATE_FILE  = path.join(__dirname, 'marble_state.json');
 
 // Пароль береться з Environment Variables на Render:
 const WEB_PASSWORD = process.env.WEB_PASSWORD;
+
+// OAuth токен бота для відправки повідомлень в чат Kick
+// Render Dashboard → Environment → BOT_TOKEN = твій токен
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
+
+// Відправляє повідомлення від бота в чат (потребує BOT_TOKEN)
+async function sendChatAnnounce(msg) {
+  if (!BOT_TOKEN) return;
+  try {
+    const res = await fetch(`https://kick.com/api/v2/messages/send/${CHATROOM_ID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + BOT_TOKEN,
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ content: msg, type: 'message' }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.log('[CHAT BOT] Помилка відправки:', res.status, text.slice(0, 200));
+    } else {
+      console.log('[CHAT BOT] Відправлено:', msg);
+    }
+  } catch (e) {
+    console.log('[CHAT BOT] fetch error:', e.message);
+  }
+}
 if (!WEB_PASSWORD) {
   console.error('╔══════════════════════════════════════════════════╗');
   console.error('║  ОШИБКА: WEB_PASSWORD не задан!                ║');
@@ -91,7 +119,7 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Marbles — Вход</title>
+<title>БОТЯРА</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Roboto+Mono:wght@400;500&display=swap');
   :root {
@@ -157,13 +185,15 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
     box-shadow: 0 6px 20px rgba(83, 252, 24, 0.4); 
   }
   .err { color: #ff4444; font-size: 12px; margin-top: 12px; min-height: 16px; }
+  body { user-select: none; -webkit-user-select: none; }
+  input { user-select: text; -webkit-user-select: text; }
+  .pw-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; text-align: left; margin-bottom: 6px; }
 </style>
 </head>
 <body>
 <div class="box">
-  <h1>🎮 Marbles Dash</h1>
-  <div class="sub">STREAMER ACCESS ONLY</div>
-  <input type="password" id="pw" placeholder="Введите пароль..." onkeydown="if(event.key==='Enter')login()">
+  <div class="pw-label">Пароль</div>
+  <input type="password" id="pw" placeholder="юзер лох" onkeydown="if(event.key==='Enter')login()">
   <button onclick="login()">Подключиться</button>
   <div class="err" id="err"></div>
 </div>
@@ -199,7 +229,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kick Studio — Розыгрыши</title>
+<title>БОТЯРА</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap');
   
@@ -227,6 +257,22 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     background-image: 
       radial-gradient(circle at 15% 50%, rgba(83, 252, 24, 0.03), transparent 25%),
       radial-gradient(circle at 85% 30%, rgba(83, 252, 24, 0.03), transparent 25%);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Дозволяємо виділяти лише нікнейми учасників, переможців і чат */
+  .participant-row span:last-child,
+  .w-name,
+  .wa-name,
+  .chat-msg,
+  input[type=text], input[type=number], input[type=password] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  /* Гарантуємо що кнопки клікаються незважаючи на user-select:none */
+  button, input, select, label, a, [onclick], summary, details {
+    pointer-events: auto !important;
+    cursor: pointer;
   }
 
   /* ── Плаваючий статус бота ──────────────── */
@@ -255,9 +301,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .layout {
     max-width: 1700px; margin: 0 auto;
     display: grid;
-    grid-template-columns: 320px 1fr 340px;
+    grid-template-columns: 320px minmax(300px, 560px) minmax(300px, 420px);
     gap: 16px;
-    height: calc(100vh - 32px); /* 100vh мінус верхній та нижній padding(16+16) */
+    height: calc(100vh - 32px);
+    justify-content: center;
   }
   @media (max-width: 1200px) {
     .layout { grid-template-columns: 320px 1fr; }
@@ -304,7 +351,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winners-count, #confirm-seconds { text-align: center; }
 
   /* ── Перемикач режиму гри ─────────────────── */
-  .mode-switch { display: flex; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
   .mode-btn {
     flex: 1; padding: 8px 6px; border-radius: 6px; border: none;
     background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 800;
@@ -370,10 +417,28 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #saved-msg, #test-msg { font-size: 11px; font-family: 'Roboto Mono', monospace; margin-top: 4px; display:block; height: 14px; }
 
   /* ── Тестова панель ──────────────────────── */
-  details.test-section { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); margin-bottom: 12px;}
-  details.test-section summary { font-size: 12px; color: var(--text-muted); cursor: pointer; font-family: 'Roboto Mono', monospace; outline: none; }
-  details.test-section summary:hover { color: #ccc; }
-  details.test-section .field-row { margin-top: 10px; }
+  /* Невелика непомітна панель тестових учасників у правому нижньому куті */
+  .test-section-fixed {
+    position: fixed; bottom: 10px; left: 10px; z-index: 50;
+    background: rgba(20,20,22,0.55);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 4px 8px;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+    max-width: 220px;
+  }
+  .test-section-fixed:hover,
+  .test-section-fixed[open] { opacity: 1; }
+  .test-section-fixed summary {
+    font-size: 13px; cursor: pointer; outline: none; list-style: none;
+    color: var(--text-muted); text-align: center;
+  }
+  .test-section-fixed summary::-webkit-details-marker { display: none; }
+  .test-section-fixed .field-row { margin-top: 8px; gap: 6px; }
+  .test-section-fixed input { font-size: 11px; padding: 4px 6px; }
+  .test-section-fixed .btn-small { font-size: 11px; padding: 4px 8px; }
+  .test-section-fixed #test-msg { font-size: 10px; }
 
   /* ── Списки / Бокси ───────────────── */
   .box {
@@ -387,7 +452,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   .participants-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
   }
   .participant-row {
@@ -396,9 +461,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     color: #ddd; background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.02);
     transition: all 0.2s;
+    min-width: 0; overflow: hidden;
   }
   .participant-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
   .participant-row .p-num { color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-size: 10px; width: 20px; flex-shrink: 0; }
+  .participant-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 13px; font-family: 'Roboto Mono', monospace; text-align: center; padding: 20px; }
 
@@ -421,12 +488,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     position: relative;
     cursor: pointer;
     perspective: 800px;
+    user-select: none; -webkit-user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .cell-inner {
     width: 100%; height: 100%;
     position: relative;
     transform-style: preserve-3d;
     transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+    user-select: none; -webkit-user-select: none;
   }
   .cell.flipped .cell-inner { transform: rotateY(180deg); }
   .cell-face {
@@ -439,6 +510,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     text-align: center;
     overflow: hidden;
     padding: 2px;
+    user-select: none; -webkit-user-select: none;
+    pointer-events: none;
   }
   .cell-front {
     background: linear-gradient(145deg, #162016, #0a100a);
@@ -483,9 +556,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .cell.revealed { cursor: default; }
   .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.05); }
-  .selecting .cell { cursor: none; }
-  .selecting .cell.selected { cursor: none; }
-  .selecting * { cursor: none !important; }
+  .selecting .cell { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .selecting .cell.selected { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  /* Прибираємо прицільний курсор та будь-яке виділення тексту у клітинках */
+  .selecting * { user-select: none !important; -webkit-user-select: none !important; outline: none !important; }
+  /* В режимі вибору клітинок — знімаємо паддінг/скрол з box,
+     щоб fitGridColumns рахував точну площу і клітинки не обрізались */
+  .box.selecting { padding: 6px; overflow: hidden; }
 
   /* ── Кастомний Чат ─────────────────────── */
   .chat-msg {
@@ -499,26 +576,62 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border-left: 2px solid var(--panel-border);
     transition: background 0.2s;
   }
+  .chat-emote {
+    height: 1.6em; width: auto; vertical-align: middle;
+    margin: 0 1px; display: inline-block;
+  }
   .chat-msg:hover {
     background: rgba(255,255,255,0.05);
   }
 
   /* ── Гонка & Рулетка (Оверлеї) ───────────────────────────── */
-  #race-overlay, #roulette-overlay {
+  #race-overlay, #roulette-overlay, #cashhunt-overlay {
     position: fixed; inset: 0; z-index: 9990;
     background: rgba(4,6,4,0.95);
     display: none;
     flex-direction: column; align-items: center; justify-content: center;
-    gap: 20px;
+    gap: 16px;
     backdrop-filter: blur(8px);
   }
-  #race-overlay.visible, #roulette-overlay.visible { display: flex; }
+  #race-overlay.visible, #roulette-overlay.visible, #cashhunt-overlay.visible { display: flex; }
   
   #race-overlay-hint, #roulette-overlay-hint {
     font-family: 'Roboto Mono', monospace;
     font-size: 24px; font-weight: bold; color: var(--kick); letter-spacing: 2px;
     text-transform: uppercase;
     text-shadow: 0 0 15px rgba(83,252,24,0.4);
+  }
+
+  /* Cash Hunt overlay */
+  #cashhunt-area {
+    position: relative;
+    width: min(98vw, 1400px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* Ховаємо системний курсор в оверлеї під час вибору (заміняємо на кастомний прицільний) */
+  #cashhunt-overlay.selecting-mode { cursor: none; }
+  #cashhunt-overlay.selecting-mode * { cursor: none !important; }
+  #cashhunt-hint {
+    font-family: 'Roboto Mono', monospace; font-size: 16px; color: var(--kick);
+    letter-spacing: 2px; text-align: center; text-transform: uppercase; min-height: 22px;
+  }
+  #cashhunt-progress-overlay {
+    font-family: 'Roboto Mono', monospace; font-size: 13px; color: var(--text-muted);
+    text-align: center; min-height: 18px;
+  }
+  #cashhunt-progress-overlay b { color: var(--kick); }
+  #cashhunt-grid-wrap {
+    background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border); border-radius: 14px;
+    overflow: hidden; flex: 1;
+    max-height: 75vh;
+    padding: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cashhunt-controls {
+    display: flex; gap: 12px; justify-content: center; flex-shrink: 0;
   }
 
   #race-track-area {
@@ -585,6 +698,274 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     box-shadow: 0 0 15px var(--kick);
   }
 
+  /* ── 🔫 Режим Револьвер ─────────────────── */
+  /* ── 💬 Режим Чат ──────────────────────────── */
+  #chatgame-overlay {
+    position: fixed; inset: 0; z-index: 9992;
+    background: rgba(4,6,4,0.96);
+    display: none; flex-direction: row; gap: 0;
+    backdrop-filter: blur(6px);
+  }
+  #chatgame-overlay.visible { display: flex; }
+
+  /* Левая панель — победитель + его сообщения */
+  #chatgame-left {
+    width: 400px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    padding: 24px 20px;
+    border-right: 1px solid var(--panel-border);
+    gap: 12px;
+    background: rgba(0,0,0,0.3);
+  }
+  #chatgame-winner-name {
+    font-family: 'Inter', sans-serif;
+    font-size: 36px; font-weight: 900; color: #fff;
+    text-align: center; word-break: break-word;
+  }
+  #chatgame-timer-block { text-align: center; }
+  #chatgame-timer {
+    font-family: 'Inter', sans-serif; font-size: 52px; font-weight: 900;
+    color: var(--gold); line-height: 1;
+  }
+  #chatgame-timer.expiring { color: var(--red); animation: timerBlink 0.5s infinite alternate; }
+  #chatgame-sub {
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+    color: var(--text-muted); letter-spacing: 4px; text-transform: uppercase; margin-top: 4px;
+  }
+  #chatgame-msgs-label {
+    font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 2px; font-family: 'Roboto Mono', monospace;
+    border-top: 1px solid var(--panel-border); padding-top: 10px;
+  }
+  #chatgame-msgs {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+  }
+  .chatgame-msg-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--panel-border);
+    border-radius: 8px; padding: 8px 10px;
+    font-family: 'Roboto Mono', monospace; font-size: 12px; color: #ddd;
+  }
+  .chatgame-msg-text { flex: 1; word-break: break-word; }
+  .chatgame-msg-save {
+    flex-shrink: 0; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--kick); color: #000; border: none; cursor: pointer;
+    white-space: nowrap;
+  }
+  .chatgame-msg-save:hover { filter: brightness(1.2); }
+  #chatgame-no-msgs {
+    color: var(--text-muted); font-family: 'Roboto Mono', monospace;
+    font-size: 12px; text-align: center; padding: 20px;
+  }
+
+  /* Правая панель — список победителей */
+  #chatgame-right {
+    flex: 1; display: flex; flex-direction: column;
+    padding: 24px 20px; gap: 12px; overflow: hidden;
+  }
+  #chatgame-right-title {
+    font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900;
+    color: var(--kick); text-transform: uppercase; letter-spacing: 2px;
+  }
+  #chatgame-winners-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  }
+  .chatgame-winner-row {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .chatgame-winner-row .cg-num {
+    font-size: 13px; color: var(--text-muted); font-family: 'Roboto Mono', monospace;
+    width: 22px; flex-shrink: 0; padding-top: 2px;
+  }
+  .chatgame-winner-info { flex: 1; min-width: 0; }
+  .chatgame-winner-info .cg-nick {
+    font-size: 16px; font-weight: 900; color: #fff; font-family: 'Inter', sans-serif;
+  }
+  .chatgame-winner-info .cg-slot {
+    font-size: 13px; color: var(--kick); font-family: 'Roboto Mono', monospace;
+    margin-top: 3px; word-break: break-word;
+  }
+  .chatgame-winner-info .cg-slot.empty { color: var(--text-muted); font-style: italic; }
+  .chatgame-delete-btn {
+    flex-shrink: 0; background: transparent; border: 1px solid #333;
+    color: #666; border-radius: 6px; width: 30px; height: 30px;
+    font-size: 16px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1; padding: 0;
+  }
+  .chatgame-delete-btn:hover { border-color: var(--red); color: var(--red); background: rgba(255,74,74,0.1); }
+  #chatgame-controls {
+    display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+  }
+  #revolver-overlay {
+    position: fixed; inset: 0; z-index: 9991;
+    background: rgba(4,6,4,0.95);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; backdrop-filter: blur(8px);
+  }
+  #revolver-overlay.visible { display: flex; }
+  #revolver-overlay-hint {
+    font-family: 'Roboto Mono', monospace; font-size: 22px; font-weight: bold;
+    color: var(--kick); letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.4); text-align: center;
+  }
+  #revolver-area {
+    position: relative; width: 520px; height: 520px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  @keyframes recoilShake {
+    0%   { transform: translate(0,0) rotate(0deg) scale(1); }
+    8%   { transform: translate(-4px, 18px) rotate(-2deg) scale(1.03); }
+    20%  { transform: translate(6px, -12px) rotate(1.5deg) scale(0.97); }
+    40%  { transform: translate(-3px, 7px) rotate(-1deg) scale(1.01); }
+    65%  { transform: translate(2px, -3px) rotate(0.5deg) scale(0.99); }
+    100% { transform: translate(0,0) rotate(0deg) scale(1); }
+  }
+  .shake-anim { animation: recoilShake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+
+  /* Зовнішнє кільце (рама барабана) */
+  #revolver-frame {
+    position: absolute;
+    width: 430px; height: 430px; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      #1a1a1a 0%, #2e2e2e 8%, #0f0f0f 15%, #3a3a3a 22%,
+      #111 30%, #2a2a2a 38%, #0c0c0c 45%, #333 52%,
+      #1a1a1a 60%, #2e2e2e 68%, #0f0f0f 75%, #3a3a3a 82%,
+      #111 90%, #2a2a2a 97%, #1a1a1a 100%);
+    border: 3px solid #444;
+    box-shadow:
+      0 0 0 2px #111,
+      0 0 0 5px #333,
+      0 25px 60px rgba(0,0,0,0.95),
+      inset 0 2px 4px rgba(255,255,255,0.08);
+    z-index: 1;
+  }
+
+  /* Сам барабан (обертається) */
+  #revolver-cylinder {
+    width: 380px; height: 380px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 38% 35%, #2a2a2a 0%, #141414 35%, #060606 65%, #000 100%);
+    border: 6px solid #222;
+    box-shadow:
+      inset 0 3px 8px rgba(255,255,255,0.06),
+      inset 0 -3px 8px rgba(0,0,0,0.9),
+      inset 0 0 50px #000,
+      0 0 0 2px #111;
+    position: relative; z-index: 2;
+  }
+  /* Центральна вісь (шпиндель) */
+  #revolver-cylinder::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #555 0%, #1a1a1a 50%, #000 100%);
+    border: 3px solid #333;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.9), inset 0 1px 3px rgba(255,255,255,0.15);
+  }
+
+  /* Дуло (трикутник-вказівник) */
+  #revolver-barrel-indicator {
+    position: absolute; top: 52px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-top: 22px solid var(--red);
+    filter: drop-shadow(0 0 8px rgba(255,74,74,1)) drop-shadow(0 0 20px rgba(255,74,74,0.6));
+    z-index: 5;
+    animation: pulseMuzzle 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes pulseMuzzle {
+    from { filter: drop-shadow(0 0 6px rgba(255,74,74,0.8)); opacity: 0.85; }
+    to   { filter: drop-shadow(0 0 18px rgba(255,74,74,1)) drop-shadow(0 0 35px rgba(255,100,100,0.5)); opacity: 1; }
+  }
+
+  /* Камора патрону */
+  .rev-chamber {
+    width: 88px; height: 88px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 40% 38%, #5a1a0a 0%, #2d0a02 40%, #0a0000 100%);
+    border: 3px solid #c8920a;
+    box-shadow:
+      inset 0 2px 6px rgba(255,120,0,0.3),
+      inset 0 0 20px rgba(0,0,0,0.8),
+      0 0 12px rgba(0,0,0,0.9),
+      inset 0 -2px 4px rgba(255,180,0,0.15);
+    position: absolute; left: 50%; top: 50%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; transition: all 0.35s ease;
+  }
+  /* Відблиск всередині камори */
+  .rev-chamber::before {
+    content: '';
+    position: absolute; top: 8%; left: 15%;
+    width: 30%; height: 25%;
+    background: radial-gradient(ellipse, rgba(255,200,100,0.25) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .rev-chamber-inner {
+    color: #ffd060; font-family: 'Inter', sans-serif;
+    font-size: 10px; font-weight: 900; text-align: center;
+    word-break: break-word; padding: 6px; z-index: 2; line-height: 1.2;
+    text-transform: uppercase;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(255,180,0,0.4);
+    transition: all 0.35s ease-in;
+  }
+  .rev-chamber.eliminated {
+    background: radial-gradient(circle, #050505 0%, #000 100%);
+    border-color: #1a1a1a;
+    box-shadow: inset 0 0 30px #000, inset 0 0 8px rgba(0,0,0,1), 0 0 4px rgba(0,0,0,0.5);
+  }
+  .rev-chamber.eliminated::before { opacity: 0; }
+  .rev-chamber.eliminated .rev-chamber-inner { opacity: 0; transform: scale(0.3); }
+  .rev-chamber.winner {
+    background: radial-gradient(circle at 40% 35%, #ffe566 0%, #ffb800 50%, #cc8800 100%);
+    box-shadow: 0 0 35px var(--gold), 0 0 70px rgba(255,184,0,0.4), inset 0 0 15px rgba(255,255,200,0.5);
+    border-color: #ffe0a0; z-index: 4;
+  }
+  .rev-chamber.winner .rev-chamber-inner { color: #1a0a00; font-size: 10px; font-weight: 900; text-shadow: none; }
+
+  /* Ефект вистрілу — вищий (над барабаном) */
+  .muzzle-flash {
+    position: absolute;
+    top: 40px;
+    left: 50%; transform: translateX(-50%);
+    width: 180px; height: 180px;
+    background: radial-gradient(circle,
+      #fff 0%, #fff 8%,
+      #fffbe0 14%,
+      #ffea00 22%,
+      #ff8800 38%,
+      #ff4400 52%,
+      transparent 70%);
+    opacity: 0; z-index: 100; pointer-events: none; border-radius: 50%;
+    mix-blend-mode: screen;
+    animation: flashBurst 0.22s ease-out forwards;
+  }
+  @keyframes flashBurst {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.3); }
+    15%  { opacity: 1; transform: translateX(-50%) scale(1.1); }
+    50%  { opacity: 0.85; transform: translateX(-50%) scale(1.0); }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  }
+  /* Іскри після пострілу */
+  .spark {
+    position: absolute; top: -60px; left: 50%;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: #ffdd00;
+    pointer-events: none; z-index: 99;
+    animation: sparkFly 0.4s ease-out forwards;
+  }
+  @keyframes sparkFly {
+    0%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+  }
+
   .race-close-btn {
     position: absolute; top: -50px; right: 0; z-index: 4;
     background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa;
@@ -636,9 +1017,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #winner-announce.visible { opacity: 1; pointer-events: auto; }
 
   #winner-announce .wa-label {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 28px; font-weight: bold; color: var(--kick); letter-spacing: 8px; text-transform: uppercase;
-    text-shadow: 0 0 15px rgba(83,252,24,0.3);
+    font-family: 'Inter', sans-serif;
+    font-size: 30px; font-weight: 900; color: var(--kick); letter-spacing: 10px; text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(83,252,24,0.4);
   }
   #winner-announce .wa-name {
     font-family: 'Inter', sans-serif;
@@ -657,13 +1038,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     to   { transform: scale(1) translateY(0);   opacity: 1; filter: blur(0); }
   }
   #winner-announce .wa-timer {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 56px; font-weight: bold;
+    font-family: 'Inter', sans-serif;
+    font-size: 64px; font-weight: 900;
     color: var(--gold);
     letter-spacing: 2px;
     min-width: 120px;
     text-align: center;
-    text-shadow: 0 0 20px rgba(255,215,0,0.3);
+    text-shadow: 0 0 20px rgba(255,215,0,0.4);
   }
   #winner-announce .wa-timer.expiring { color: var(--red); text-shadow: 0 0 20px rgba(255,74,74,0.5); animation: timerBlink 0.5s infinite alternate; }
   @keyframes timerBlink {
@@ -673,7 +1054,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   
   #winner-announce .wa-msg {
     font-family: 'Inter', sans-serif;
-    font-size: clamp(32px, 4vw, 64px); font-weight: 800; color: var(--kick);
+    font-size: clamp(32px, 4vw, 64px); font-weight: 900; color: var(--kick);
     background: rgba(83,252,24,0.05);
     border: 1px solid rgba(83,252,24,0.2);
     border-radius: 16px; padding: 20px 40px;
@@ -688,15 +1069,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   
   #winner-announce .wa-sub {
-    font-size: 18px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; font-weight: bold; letter-spacing: 4px; text-transform: uppercase;
+    font-family: 'Inter', sans-serif;
+    font-size: 18px; font-weight: 900; color: var(--text-muted);
+    letter-spacing: 5px; text-transform: uppercase;
   }
   #winner-announce .wa-close {
     margin-top: 20px;
     background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #aaa;
-    padding: 12px 32px; border-radius: 10px;
-    font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 800;
+    padding: 12px 36px; border-radius: 10px;
+    font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 900;
     cursor: pointer; transition: all 0.3s;
-    text-transform: uppercase; letter-spacing: 1px;
+    text-transform: uppercase; letter-spacing: 3px;
   }
   #winner-announce .wa-close:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
 
@@ -817,17 +1200,19 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div class="field" style="margin-top:4px;">
       <label class="field-label">Режим игры</label>
       <div class="mode-switch">
-        <button type="button" class="mode-btn" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
+        <button type="button" class="mode-btn active" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
-        <button type="button" class="mode-btn active" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
+        <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
+        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')">💬 Чат</button>
       </div>
     </div>
 
     <div id="race-count-field" style="display:none;">
       <div class="field-row" style="margin-top:8px;">
         <div class="field">
-          <label class="field-label">Участников гонки (до 300)</label>
-          <input type="number" id="race-count" value="12" min="2" max="300">
+          <label class="field-label">Участников гонки</label>
+          <input type="number" id="race-count" value="10" min="2" max="300">
         </div>
         <div class="field small">
           <label class="field-label">Кругов</label>
@@ -850,12 +1235,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="limit-info">Участников: <b id="participant-count">0</b></div>
-
-    <!-- Кнопки в один ряд -->
+    <!-- Кнопки відразу під час на відповідь -->
     <div class="btn-row" style="margin-bottom: 12px; gap: 8px;">
       <button class="btn-primary" style="margin:0; flex: 2; font-size: 13px;" onclick="startGame()">🎯 СТАРТ</button>
-      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">⬇ CSV</button>
+      <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="downloadCSV()">🎱 Шарики</button>
       <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="resetRaffle()">🗑 Сброс</button>
     </div>
 
@@ -863,32 +1246,17 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <span>Победители</span>
       <span class="count" id="winners-count-title">0</span>
     </div>
-    <div class="box" id="winners-box">
+    <div class="box" id="winners-box" style="flex:1; min-height:220px;">
       <div class="empty-box">Победителей пока нет</div>
     </div>
-    <button class="btn-red" style="margin-top:12px;" onclick="finishRaffle()">🏁 Завершить стрим-розыгрыш</button>
   </div>
 
   <!-- ── Учасники / Гра ────────────────────── -->
   <div class="col">
     <div class="col-title">
-      <span>Участники</span>
-      <span class="count" id="participants-count-title">0</span>
+      <span>Участники <span id="participants-count-title" style="color:var(--kick);font-size:16px;">0</span></span>
     </div>
 
-    <!-- Тестові учасники тут -->
-    <details class="test-section">
-      <summary>🧪 Тестовые участники</summary>
-      <div class="field-row">
-        <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
-        <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
-        <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
-      </div>
-      <span id="test-msg"></span>
-    </details>
-
-    <div id="hint"></div>
-    <div id="progress"></div>
     <div class="box" id="main-box">
       <div class="empty-box">Ожидание регистрации...</div>
     </div>
@@ -901,8 +1269,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <!-- ── Кастомний Чат ────────────────────── -->
   <div class="col" id="chat-col">
     <div class="col-title">
-      <span>Чат стрима</span>
-      <span class="count" id="chat-count">0</span>
+      <span>Чат</span>
     </div>
     <div class="box" id="chat-box" style="flex:1; display:flex; flex-direction:column; gap:6px;">
       <div class="empty-box">Ожидание сообщений...</div>
@@ -910,6 +1277,21 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
 
 </div>
+
+<!-- Тестові учасники — невелика непомітна панель у правому нижньому куті -->
+<details class="test-section-fixed" id="test-section-fixed">
+  <summary>🧪</summary>
+  <div class="field-row">
+    <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+    <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
+    <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
+  </div>
+  <div style="margin-top:6px;">
+    <input type="file" id="csv-upload" accept=".csv,.txt" style="display:none" onchange="uploadCSVParticipants(this)">
+    <button class="btn-dark btn-small" style="width:100%;font-size:11px;" onclick="document.getElementById('csv-upload').click()">📂 CSV учасники</button>
+  </div>
+  <span id="test-msg"></span>
+</details>
 
 <!-- Оголошення переможця -->
 <div id="winner-announce">
@@ -919,6 +1301,21 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div class="wa-msg" id="wa-msg" style="display:none;"></div>
   <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+</div>
+
+<!-- Оверлей Cash Hunt -->
+<div id="cashhunt-overlay">
+  <div id="cashhunt-area">
+    <div id="cashhunt-hint"></div>
+    <div id="cashhunt-progress-overlay"></div>
+    <div id="cashhunt-grid-wrap">
+      <div class="grid" id="cashhunt-grid"></div>
+    </div>
+    <div id="cashhunt-controls" style="display:none;">
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+      <button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>
+    </div>
+  </div>
 </div>
 
 <!-- Оверлей гонки -->
@@ -940,7 +1337,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div id="roulette-overlay">
   <div id="roulette-overlay-hint"></div>
   <div id="roulette-track-area">
-    <button class="race-close-btn" onclick="closeRouletteOverlay()">✕</button>
     <div id="roulette-pointer"></div>
     <div id="roulette-track">
       <div id="roulette-strip"></div>
@@ -950,6 +1346,49 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
+  </div>
+</div>
+
+<!-- Оверлей режима ЧАТ -->
+<div id="chatgame-overlay">
+  <!-- Ліва панель: список переможців -->
+  <div id="chatgame-right">
+    <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
+    <div id="chatgame-winners-list">
+      <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">
+        Победителей пока нет
+      </div>
+    </div>
+    <div id="chatgame-controls">
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
+      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
+    </div>
+  </div>
+  <!-- Права панель: поточний переможець + його повідомлення -->
+  <div id="chatgame-left">
+    <div id="chatgame-winner-name">—</div>
+    <div id="chatgame-timer-block">
+      <div id="chatgame-timer">—</div>
+      <div id="chatgame-sub">ВРЕМЯ НА ОТВЕТ</div>
+    </div>
+    <div id="chatgame-msgs-label">Сообщения в чат:</div>
+    <div id="chatgame-msgs">
+      <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Оверлей Револьвера -->
+<div id="revolver-overlay">
+  <div id="revolver-overlay-hint">Заряжаем барабан...</div>
+  <div id="revolver-area">
+    <div id="revolver-barrel-indicator"></div>
+    <div id="revolver-frame"></div>
+    <div id="revolver-cylinder"></div>
+  </div>
+  <div id="revolver-overlay-controls" style="display:none; margin-top:20px;">
+    <button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>
+    <button class="btn-primary" style="width:auto; margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>
   </div>
 </div>
 
@@ -970,29 +1409,61 @@ let winnersHistory = [];
 
 // ── Ініціалізація кастомного чату (SSE) ─────────────
 const chatBox = document.getElementById('chat-box');
-const chatCount = document.getElementById('chat-count');
 let msgCount = 0;
+
+// Розпарсити [emote:ID:NAME] у повідомленнях Kick і вивести як <img>
+function parseChatContent(content) {
+  const re = /\\[emote:(\\d+):([^\\]]+)\\]/g;
+  let result = '';
+  let lastIndex = 0;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    result += escapeHtml(content.slice(lastIndex, m.index));
+    const id = m[1], name = m[2];
+    result += '<img class="chat-emote" src="https://files.kick.com/emotes/' + id + '/fullsize" alt="' + escapeAttr(name) + '" title="' + escapeAttr(name) + '" loading="lazy">';
+    lastIndex = re.lastIndex;
+  }
+  result += escapeHtml(content.slice(lastIndex));
+  return result;
+}
 
 const chatEvtSource = new EventSource('/api/chat/stream');
 chatEvtSource.onmessage = (e) => {
-  const { username, content, color } = JSON.parse(e.data);
+  const parsed = JSON.parse(e.data);
+
+  // Пуш від сервера: переможець відповів — оновлюємо одразу без polling
+  if (parsed.type === 'winner_reply') {
+    const { name, message } = parsed;
+    const w = winnersHistory.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if (w && w.status === 'pending') {
+      w.status = 'ok';
+      w.message = message;
+      renderWinners();
+      updateAnnounceMsg(name, message);
+    }
+    return;
+  }
+
+  const { username, content, color } = parsed;
   
   const empty = chatBox.querySelector('.empty-box');
   if (empty) empty.remove();
 
   const msgEl = document.createElement('div');
   msgEl.className = 'chat-msg';
-  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + escapeHtml(content) + '</span>';
+  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + parseChatContent(content) + '</span>';
   
   chatBox.appendChild(msgEl);
   msgCount++;
-  chatCount.textContent = msgCount;
 
   chatBox.scrollTop = chatBox.scrollHeight;
 
   if (chatBox.children.length > 150) {
     chatBox.removeChild(chatBox.firstChild);
   }
+
+  // Перехватываем сообщения победителя в режиме ЧАТ
+  if (gameMode === 'chatgame') handleChatgameMessage(username, content);
 };
 
 async function loadState() {
@@ -1006,7 +1477,7 @@ async function loadState() {
   }
   raffleOpen = state.accepting;
 
-  document.getElementById('participant-count').textContent = state.count;
+  // participant-count видалено (показується через participants-count-title)
   document.getElementById('participants-count-title').textContent = state.count;
   document.getElementById('conn-dot').className = 'dot ' + (state.accepting ? 'open' : 'closed');
 
@@ -1030,7 +1501,7 @@ function renderParticipants(list) {
     box.innerHTML = '<div class="empty-box">Ожидание регистрации...</div>';
     return;
   }
-  box.innerHTML = '<div class="participants-grid">' +
+  box.innerHTML = '<div class="participants-grid" id="plist-grid">' +
     list.map((name, i) =>
       '<div class="participant-row"><span class="p-num">' + (i+1) + '</span><span>' + escapeHtml(name) + '</span></div>'
     ).join('') + '</div>';
@@ -1123,20 +1594,69 @@ async function addBulkTest() {
   loadState();
 }
 
-let gameMode = 'cashhunt';
+async function uploadCSVParticipants(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const el = document.getElementById('test-msg');
+  el.style.color = '#aaa';
+  el.textContent = 'Загрузка...';
+
+  const text = await file.text();
+  // Парсимо CSV: беремо перший стовпець кожного рядка, ігноруємо заголовок якщо є
+  const lines = text.split('\\n');
+  const names = [];
+  for (let li = 0; li < lines.length; li++) {
+    let cell = lines[li].split(',')[0].trim();
+    if (cell.length > 1 && cell[0] === cell[cell.length-1] && (cell[0] === '"' || cell[0] === "'")) {
+      cell = cell.slice(1, -1).trim();
+    }
+    const low = cell.toLowerCase();
+    if (cell && low !== 'name' && low !== 'username' && low !== 'nick') {
+      names.push(cell);
+    }
+  }
+    if (!names.length) {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ порожній файл';
+    input.value = '';
+    return;
+  }
+
+  const res = await fetch('/api/raffle/addcsv', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    el.style.color = '#53fc18';
+    el.textContent = '✓ добавлено ' + data.added + ' (всего: ' + data.count + ')';
+  } else {
+    el.style.color = '#ff4444';
+    el.textContent = '✗ ' + (data.error || 'ошибка');
+  }
+  setTimeout(() => el.textContent = '', 3000);
+  input.value = '';
+  loadState();
+}
+
+let gameMode = 'roulette';
 let raceQualifiers = [];
 let raceAnimId = null;
 
 function setGameMode(mode) {
-  if (phase !== 'idle') return; 
+  if (phase !== 'idle') return;
   gameMode = mode;
   document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
   document.getElementById('mode-btn-roulette').classList.toggle('active', mode === 'roulette');
+  document.getElementById('mode-btn-revolver').classList.toggle('active', mode === 'revolver');
+  document.getElementById('mode-btn-chatgame').classList.toggle('active', mode === 'chatgame');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
   hideRaceOverlay();
   hideRouletteOverlay();
+  closeRevolverOverlay();
+  closeChatgameOverlay();
 }
 
 function hideRaceOverlay() {
@@ -1164,9 +1684,11 @@ function resetGameUI() {
   raceQualifiers = [];
   hideRaceOverlay();
   hideRouletteOverlay();
+  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
-  document.getElementById('progress').textContent = '';
+  const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
   document.getElementById('main-box').className = 'box';
   renderParticipants(state.participants || []);
 }
@@ -1174,6 +1696,8 @@ function resetGameUI() {
 async function startGame() {
   if (gameMode === 'race') return startRaceGame();
   if (gameMode === 'roulette') return startRoulette();
+  if (gameMode === 'revolver') return startRevolverGame();
+  if (gameMode === 'chatgame') return startChatgame();
 
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
@@ -1189,7 +1713,7 @@ async function startGame() {
 async function reroll() {
   if (gameMode === 'race') {
     // В гонці ліміт до 300
-    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 12, 300);
+    const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 10, 300);
     const count = Math.min(n, state.participants.length);
     raceQualifiers = pickRandom(state.participants, count);
     return runRace(raceQualifiers, true);
@@ -1208,7 +1732,7 @@ async function fastReroll() {
   if (gameMode === 'race') {
     let qualifiers = raceQualifiers;
     if (!qualifiers.length) {
-      const n = Math.min(parseInt(document.getElementById('race-count').value) || 12, state.participants.length);
+      const n = Math.min(parseInt(document.getElementById('race-count').value) || 10, state.participants.length);
       if (n < 2) return alert('Нужно минимум 2 участника');
       qualifiers = pickRandom(state.participants, Math.min(n, 300));
     }
@@ -1246,7 +1770,7 @@ function resetGameUIKeepMode() {
   raceQualifiers = [];
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
-  document.getElementById('progress').textContent = '';
+  const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
   document.getElementById('main-box').className = 'box';
   renderParticipants(state.participants || []);
 }
@@ -1322,8 +1846,7 @@ function pickRandom(arr, n) {
 }
 
 async function startRaceGame() {
-  // Збільшено ліміт до 300
-  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 12, 2), 300);
+  const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 10, 2), 300);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');
   const count = Math.min(n, state.participants.length);
@@ -1423,18 +1946,51 @@ function buildTrack3D(scene, curve) {
   roadMesh.position.y = 0.1;
   scene.add(roadMesh);
 
+  // ── Фінішна лінія: горизонтальний банер над трасою + два стовпи ──
   const UP = new THREE.Vector3(0, 1, 0);
   const m0 = curve.getPointAt(0);
   const t0 = curve.getTangentAt(0);
   const right0 = new THREE.Vector3().crossVectors(t0, UP).normalize();
-  const finishMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_RADIUS * 2, 2.2),
+  const BANNER_H = 12;   // висота стовпів
+  const BANNER_W = ROAD_RADIUS * 2 + 2;  // ширина банера = ширина дороги
+
+  // Горизонтальна площина (шахматка) на землі — для видимості знизу
+  const flatFinish = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROAD_RADIUS * 2, 2.5),
     new THREE.MeshStandardMaterial({ map: finishTex })
   );
-  finishMesh.rotation.x = -Math.PI / 2;
-  finishMesh.rotation.y = Math.atan2(right0.x, right0.z);
-  finishMesh.position.set(m0.x, 0.55, m0.z);
-  scene.add(finishMesh);
+  flatFinish.rotation.x = -Math.PI / 2;
+  flatFinish.rotation.y = Math.atan2(right0.x, right0.z);
+  flatFinish.position.set(m0.x, 0.55, m0.z);
+  scene.add(flatFinish);
+
+  // Вертикальний банер (шахматка видна з кута)
+  const bannerTex2 = makeCanvasTexture((ctx, w, h) => {
+    const cell = 16;
+    for (let y = 0; y < h; y += cell) for (let x = 0; x < w; x += cell) {
+      ctx.fillStyle = ((x/cell + y/cell) % 2 === 0) ? '#fff' : '#111';
+      ctx.fillRect(x, y, cell, cell);
+    }
+  }, 64, 32);
+  bannerTex2.repeat.set(6, 1);
+
+  const bannerMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(BANNER_W, 3.5),
+    new THREE.MeshStandardMaterial({ map: bannerTex2, side: THREE.DoubleSide })
+  );
+  bannerMesh.position.set(m0.x, BANNER_H, m0.z);
+  bannerMesh.lookAt(m0.x + t0.x, BANNER_H, m0.z + t0.z);
+  scene.add(bannerMesh);
+
+  // Два стовпи
+  const poleGeo = new THREE.CylinderGeometry(0.25, 0.25, BANNER_H, 8);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.7, roughness: 0.3 });
+  [-1, 1].forEach(side => {
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.copy(m0).addScaledVector(right0, side * (BANNER_W / 2));
+    pole.position.y = BANNER_H / 2;
+    scene.add(pole);
+  });
 }
 
 let CAR_GEO = null;
@@ -1537,6 +2093,81 @@ function makeF1Car(teamColorHex) {
   return group;
 }
 
+// 🚜 Трактор для Crystalyne7
+function makeTractor(colorHex) {
+  const group = new THREE.Group();
+  const body = new THREE.Group();
+
+  const paintMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const darkMat  = new THREE.MeshStandardMaterial({ color: 0x222200, roughness: 0.9 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.5 });
+  const exhaustMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+
+  // Основний корпус (довгий)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 4.5), paintMat);
+  chassis.position.set(0, 0.6, 0); body.add(chassis);
+
+  // Капот двигуна (висунутий вперед)
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 2.2), paintMat);
+  hood.position.set(0, 0.85, 2.8); body.add(hood);
+
+  // Труба вихлопу (збоку капота)
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.0, 8), exhaustMat);
+  exhaust.position.set(0.7, 1.8, 2.2); body.add(exhaust);
+  const exhaustTop = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.2, 8), exhaustMat);
+  exhaustTop.position.set(0.7, 2.85, 2.2); body.add(exhaustTop);
+
+  // Кабіна
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.4, 2.2), paintMat);
+  cab.position.set(0, 1.7, -0.6); body.add(cab);
+
+  // Скло кабіни (спереду)
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.85, 1.0, 0.08), glassMat);
+  windshield.position.set(0, 1.7, 0.52); body.add(windshield);
+
+  // Скло кабіни (ззаду)
+  const rearWindow = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.8, 0.08), glassMat);
+  rearWindow.position.set(0, 1.75, -1.71); body.add(rearWindow);
+
+  // Великі задні колеса
+  const rearWheelGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.9, 16);
+  const rearWheelMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 1.0 });
+  [[-1.4, 0], [1.4, 0]].forEach(([x]) => {
+    const w = new THREE.Mesh(rearWheelGeo, rearWheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, 0.95, -1.4); body.add(w);
+    // Обід
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.95, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.8 }));
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(x, 0.95, -1.4); body.add(rim);
+  });
+
+  // Маленькі передні колеса
+  const frontWheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.6, 14);
+  [[-0.9, 0], [0.9, 0]].forEach(([x]) => {
+    const w = new THREE.Mesh(frontWheelGeo, rearWheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, 0.5, 2.8); body.add(w);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.65, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.8 }));
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(x, 0.5, 2.8); body.add(rim);
+  });
+
+  // Відвал/ківш ззаду (бонус)
+  const bucket = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.15, 1.0), darkMat);
+  bucket.position.set(0, 0.2, -2.8); body.add(bucket);
+  const bucketLeft  = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.7, 1.0), darkMat);
+  bucketLeft.position.set(-1.1, 0.55, -2.8); body.add(bucketLeft);
+  const bucketRight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.7, 1.0), darkMat);
+  bucketRight.position.set(1.1, 0.55, -2.8); body.add(bucketRight);
+
+  body.rotation.y = 0;
+  group.add(body);
+  group.scale.set(0.65, 0.65, 0.65);
+  return group;
+}
+
 async function runRace(qualifiers, totalLaps) {
   if (!qualifiers.length) return;
   phase = 'racing';
@@ -1624,7 +2255,9 @@ async function runRace(qualifiers, totalLaps) {
   const cars = [];
   for (let i = 0; i < n; i++) {
     const color = new THREE.Color().setHSL(i / n, 0.8, 0.5);
-    const car = makeF1Car(color.getHex());
+    // Crystalyne7 їде на тракторі 🚜
+    const isTractor = qualifiers[i].toLowerCase() === 'crystalyne7';
+    const car = isTractor ? makeTractor(color.getHex()) : makeF1Car(color.getHex());
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.0, 1.3, 24),
       new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
@@ -1672,6 +2305,16 @@ async function runRace(qualifiers, totalLaps) {
   }
 
   function updateLabels() {
+    // Знаходимо лідера (максимальна сумарна дистанція)
+    let leaderIdx = 0;
+    let leaderDist = -Infinity;
+    if (typeof laps !== 'undefined' && typeof progress !== 'undefined') {
+      for (let i = 0; i < n; i++) {
+        const d = laps[i] + (progress[i] % 1);
+        if (d > leaderDist) { leaderDist = d; leaderIdx = i; }
+      }
+    }
+
     for (let i = 0; i < n; i++) {
       const v = cars[i].position.clone();
       v.y += 4.5;
@@ -1680,6 +2323,8 @@ async function runRace(qualifiers, totalLaps) {
       labelEls[i].style.display = '';
       labelEls[i].style.left = ((v.x * 0.5 + 0.5) * width) + 'px';
       labelEls[i].style.top  = ((-v.y * 0.5 + 0.5) * height) + 'px';
+      // Лідер завжди поверх інших нікнеймів
+      labelEls[i].style.zIndex = (i === leaderIdx) ? '10' : '2';
     }
   }
 
@@ -1722,7 +2367,10 @@ async function runRace(qualifiers, totalLaps) {
       if (orbitControls3D) {
         orbitControls3D.enabled = (camMode === 'free');
         if (camMode === 'free') {
-          orbitControls3D.target.copy(cars[followIdx].position);
+          // Повертаємо камеру на початковий загальний план
+          camera3D.position.set(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
+          camera3D.lookAt(0, 0, 0);
+          orbitControls3D.target.set(0, 0, 0);
           orbitControls3D.update();
         }
       }
@@ -1765,6 +2413,65 @@ async function runRace(qualifiers, totalLaps) {
 
   const cd = document.getElementById('race-countdown');
   overlayHint.textContent = '';
+
+  // ── Оверлей з гравцями перед стартом ──
+  await new Promise(resolve => {
+    const preRace = document.createElement('div');
+    preRace.id = 'pre-race-overlay';
+    preRace.style.cssText = [
+      'position:absolute;inset:0;z-index:10',
+      'background:rgba(4,8,4,0.92)',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px',
+      'padding:24px',
+    ].join(';');
+
+    // Сітка гравців
+    const grid = document.createElement('div');
+    grid.style.cssText = [
+      'display:grid',
+      'grid-template-columns:repeat(auto-fill,minmax(140px,1fr))',
+      'gap:8px',
+      'max-width:min(95%,900px)',
+      'max-height:70%',
+      'overflow-y:auto',
+      'width:100%',
+    ].join(';');
+
+    qualifiers.forEach((name, i) => {
+      const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString();
+      const isTractor = name.toLowerCase() === 'crystalyne7';
+      const row = document.createElement('div');
+      row.style.cssText = [
+        'display:flex;align-items:center;gap:8px',
+        'padding:7px 12px;border-radius:8px',
+        'background:rgba(255,255,255,0.05)',
+        'border:1px solid ' + colorHex + '55',
+        'font-size:13px;font-weight:700;color:#eee',
+        'overflow:hidden',
+      ].join(';');
+      const dot = document.createElement('div');
+      dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:' + colorHex + ';flex-shrink:0';
+      const label = document.createElement('span');
+      label.textContent = (isTractor ? '🚜 ' : '') + name;
+      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      row.appendChild(dot);
+      row.appendChild(label);
+      grid.appendChild(row);
+    });
+
+    // Кнопка старт
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'font-size:24px;padding:14px 60px;margin:0;letter-spacing:3px;flex-shrink:0;';
+    btn.textContent = '🚀 СТАРТ';
+    btn.onclick = () => { area.removeChild(preRace); resolve(); };
+
+    preRace.appendChild(grid);
+    preRace.appendChild(btn);
+    area.appendChild(preRace);
+    renderFrame();
+  });
+
   for (const txt of ['3', '2', '1', 'GO!']) {
     cd.textContent = txt;
     cd.classList.remove('pulse');
@@ -1854,8 +2561,452 @@ async function runRace(qualifiers, totalLaps) {
   addWinner(winnerName);
 }
 
+// ── Режим «Револьвер» ────────────────────────────────────────────────────────
+// Бере до 6 рандомних учасників, крутить барабан, вибиває по одному — останній перемагає.
+
+let revolverQualifiers = [];
+
+async function startRevolverGame() {
+  if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
+  const n = Math.min(state.participants.length, 6);
+  revolverQualifiers = pickRandom(state.participants, n);
+  runRevolver(revolverQualifiers);
+}
+
+function closeRevolverOverlay() {
+  document.getElementById('revolver-overlay').classList.remove('visible');
+  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
+}
+
+async function runRevolver(qualifiers) {
+  const overlay = document.getElementById('revolver-overlay');
+  const cylinder = document.getElementById('revolver-cylinder');
+  const hint = document.getElementById('revolver-overlay-hint');
+  const controls = document.getElementById('revolver-overlay-controls');
+  const area = document.getElementById('revolver-area');
+
+  phase = 'racing';
+  overlay.classList.add('visible');
+  controls.style.display = 'none';
+  hint.textContent = 'Заряжаем барабан...';
+
+  const n = qualifiers.length;
+  cylinder.innerHTML = '';
+  cylinder.style.transition = 'none';
+  cylinder.style.transform = 'rotate(0deg)';
+
+  const chambers = [];
+  const R = 120;
+
+  for (let i = 0; i < n; i++) {
+    const angleDeg = i * (360 / n);
+    const angleRad = angleDeg * Math.PI / 180;
+    const x = Math.cos(angleRad) * R;
+    const y = Math.sin(angleRad) * R;
+
+    const el = document.createElement('div');
+    el.className = 'rev-chamber';
+    el.style.transform = 'translate(calc(-50% + ' + x + 'px), calc(-50% + ' + y + 'px))';
+
+    const inner = document.createElement('div');
+    inner.className = 'rev-chamber-inner';
+    inner.textContent = qualifiers[i];
+
+    el.appendChild(inner);
+    cylinder.appendChild(el);
+    chambers.push({ el, inner, name: qualifiers[i], angle: angleDeg });
+  }
+
+  let remaining = [...chambers];
+  let currentRot = 0;
+
+  // ── Пауза — чекаємо кнопку СТАРТ ──
+  hint.textContent = 'Готовий до старту';
+  await new Promise(resolve => {
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'font-size:22px;padding:14px 44px;margin:20px 0 0;letter-spacing:3px;';
+    btn.textContent = '🔫 СТАРТ';
+    controls.style.display = 'flex';
+    controls.innerHTML = '';
+    controls.appendChild(btn);
+    btn.onclick = () => {
+      controls.style.display = 'none';
+      controls.innerHTML =
+        '<button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>' +
+        '<button class="btn-primary" style="width:auto;margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>';
+      resolve();
+    };
+  });
+  hint.textContent = '';
+
+  while (remaining.length > 1) {
+    hint.textContent = 'Крутим барабан...';
+
+    const killIdx = Math.floor(Math.random() * remaining.length);
+    const target = remaining[killIdx];
+
+    const targetPos = 270;
+    let diff = (targetPos - target.angle) % 360;
+    if (diff < 0) diff += 360;
+
+    let currentMod = currentRot % 360;
+    if (currentMod < 0) currentMod += 360;
+
+    let delta = diff - currentMod;
+    if (delta <= 0) delta += 360;
+
+    let nextRot = currentRot + delta + (360 * 3);
+
+    cylinder.style.transition = 'transform 2s cubic-bezier(0.2, 0.9, 0.3, 1)';
+    cylinder.style.transform = 'rotate(' + nextRot + 'deg)';
+
+    chambers.forEach(c => {
+      c.inner.style.transition = 'transform 2s cubic-bezier(0.2, 0.9, 0.3, 1)';
+      c.inner.style.transform = 'rotate(' + (-nextRot) + 'deg)';
+    });
+
+    currentRot = nextRot;
+
+    // Звук прокрутки барабана
+    playRevolverSpin();
+    await sleep(2100);
+
+    // Постріл
+    playRevolverShot();
+    hint.innerHTML = '💥 <b style="color:var(--red);">' + escapeHtml(target.name) + '</b> вылетает!';
+
+    area.classList.add('shake-anim');
+
+    // Спалах — позиціонуємо точно на дулі
+    const flash = document.createElement('div');
+    flash.className = 'muzzle-flash';
+    // Отримуємо позицію дула відносно area
+    flash.style.top = '';
+    flash.style.left = '';
+    flash.style.transform = '';
+    area.appendChild(flash);
+
+    // Іскри
+    for (let s = 0; s < 9; s++) {
+      const spark = document.createElement('div');
+      spark.className = 'spark';
+      const angle = (Math.random() * 360) * Math.PI / 180;
+      const dist = 35 + Math.random() * 65;
+      spark.style.setProperty('--sx', (Math.cos(angle) * dist) + 'px');
+      spark.style.setProperty('--sy', (Math.sin(angle) * dist - 30) + 'px');
+      spark.style.animationDelay = (Math.random() * 0.06) + 's';
+      spark.style.width = spark.style.height = (2 + Math.random() * 3) + 'px';
+      spark.style.background = Math.random() > 0.4 ? '#ffdd00' : '#ff8800';
+      area.appendChild(spark);
+      setTimeout(() => spark.remove(), 500);
+    }
+
+    setTimeout(() => target.el.classList.add('eliminated'), 60);
+    setTimeout(() => flash.remove(), 230);
+    setTimeout(() => area.classList.remove('shake-anim'), 500);
+
+    remaining.splice(killIdx, 1);
+    await sleep(900);
+  }
+
+  const winner = remaining[0];
+  winner.el.classList.add('winner');
+  hint.innerHTML = '🎉 Победитель: <b style="color:var(--kick);">' + escapeHtml(winner.name) + '</b>';
+  controls.style.display = 'flex';
+  phase = 'done';
+
+  addWinner(winner.name);
+}
+
+// Звук пострілу (інший від основного playTimeoutSound)
+// Звук пострілу револьвера (bang + металевий відгук)
+function playRevolverShot() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+
+    // Основний удар ("bang") — шум + низький тон
+    const bufferSize = audioCtx.sampleRate * 0.25;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+
+    // Фільтр — надає характер пострілу
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(800, now);
+    filter.frequency.exponentialRampToValueAtTime(120, now + 0.15);
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(2.5, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noise.start(now);
+
+    // Низькочастотний "boom"
+    const boom = audioCtx.createOscillator();
+    const boomGain = audioCtx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(90, now);
+    boom.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+    boomGain.gain.setValueAtTime(1.2, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    boom.connect(boomGain);
+    boomGain.connect(audioCtx.destination);
+    boom.start(now); boom.stop(now + 0.22);
+
+    // Металевий відгук гільзи
+    const clank = audioCtx.createOscillator();
+    const clankGain = audioCtx.createGain();
+    clank.type = 'triangle';
+    clank.frequency.setValueAtTime(600, now + 0.08);
+    clank.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+    clankGain.gain.setValueAtTime(0, now);
+    clankGain.gain.setValueAtTime(0.3, now + 0.08);
+    clankGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    clank.connect(clankGain);
+    clankGain.connect(audioCtx.destination);
+    clank.start(now + 0.08); clank.stop(now + 0.38);
+  } catch(e) {}
+}
+
+// Звук прокрутки барабана (клацання механізму)
+function playRevolverSpin() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+
+    // Серія клацань
+    const clicks = 7;
+    for (let i = 0; i < clicks; i++) {
+      const t = now + i * 0.06 * (1 + i * 0.04); // прискорення на початку, сповільнення в кінці
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(900 - i * 60, t);
+      osc.frequency.exponentialRampToValueAtTime(300, t + 0.04);
+      g.gain.setValueAtTime(0.25 - i * 0.02, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      osc.connect(g); g.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + 0.07);
+    }
+  } catch(e) {}
+}
+
+// ── Режим «Чат» ──────────────────────────────────────────────────────────────
+// Рулетка выбирает победителя, бот перехватывает его сообщения,
+// стример нажимает «Сохранить» на нужном, список победителей справа.
+
+let chatgameWinners = [];       // [{nick, slot, time}]
+let chatgameCurrentNick = '';   // кто сейчас отвечает
+let chatgameMsgBuffer = [];     // сообщения текущего победителя
+let chatgameTimer = null;
+let chatgameTimerSeconds = 0;
+
+function startChatgame() {
+  if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
+  const winner = pickRandom(state.participants, 1)[0];
+  openChatgameOverlay(winner);
+}
+
+function openChatgameOverlay(nick) {
+  chatgameCurrentNick = nick;
+  chatgameMsgBuffer = [];
+  phase = 'racing';
+
+  const overlay = document.getElementById('chatgame-overlay');
+  overlay.classList.add('visible');
+
+  document.getElementById('chatgame-winner-name').textContent = nick;
+  document.getElementById('chatgame-msgs').innerHTML =
+    '<div id="chatgame-no-msgs">Ожидаем сообщение...</div>';
+
+  // Запускаем таймер
+  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  chatgameTimerSeconds = seconds;
+  renderChatgameTimer(seconds);
+
+  if (chatgameTimer) clearInterval(chatgameTimer);
+  chatgameTimer = setInterval(() => {
+    chatgameTimerSeconds--;
+    renderChatgameTimer(chatgameTimerSeconds);
+    if (chatgameTimerSeconds <= 0) {
+      clearInterval(chatgameTimer);
+      chatgameTimer = null;
+      // Время вышло — добавляем без слота
+      if (!chatgameWinners.find(w => w.nick === chatgameCurrentNick)) {
+        addChatgameWinner(chatgameCurrentNick, '— время вышло, нет ответа —');
+      }
+    }
+  }, 1000);
+
+  renderChatgameWinners();
+}
+
+function renderChatgameTimer(sec) {
+  const el = document.getElementById('chatgame-timer');
+  el.textContent = sec + 'с';
+  el.className = sec <= 10 ? 'expiring' : '';
+  document.getElementById('chatgame-sub').style.display = sec > 0 ? '' : 'none';
+}
+
+// Вызывается из SSE-обработчика при каждом сообщении чата
+function handleChatgameMessage(username, content) {
+  if (!chatgameCurrentNick) return;
+  if (username.toLowerCase() !== chatgameCurrentNick.toLowerCase()) return;
+
+  chatgameMsgBuffer.push(content);
+
+  const box = document.getElementById('chatgame-msgs');
+  const noMsg = document.getElementById('chatgame-no-msgs');
+  if (noMsg) noMsg.remove();
+
+  const row = document.createElement('div');
+  row.className = 'chatgame-msg-row';
+
+  const txt = document.createElement('div');
+  txt.className = 'chatgame-msg-text';
+  txt.textContent = content;
+
+  const btn = document.createElement('button');
+  btn.className = 'chatgame-msg-save';
+  btn.textContent = '✓ Сохранить';
+  const captured = content;
+  const capturedNick = chatgameCurrentNick;
+  btn.onclick = () => {
+    addChatgameWinner(capturedNick, captured);
+    stopChatgameTimer();
+  };
+
+  row.appendChild(txt);
+  row.appendChild(btn);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addChatgameWinner(nick, slot) {
+  // Не дублировать
+  const existing = chatgameWinners.find(w => w.nick === nick);
+  if (existing) {
+    existing.slot = slot;
+    existing.time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+  } else {
+    chatgameWinners.push({
+      nick,
+      slot,
+      time: new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+    });
+  }
+  renderChatgameWinners();
+  document.getElementById('chatgame-winner-name').textContent = nick;
+}
+
+function deleteChatgameWinner(idx) {
+  chatgameWinners.splice(idx, 1);
+  renderChatgameWinners();
+}
+
+function renderChatgameWinners() {
+  const list = document.getElementById('chatgame-winners-list');
+  document.getElementById('chatgame-count').textContent = chatgameWinners.length;
+  if (!chatgameWinners.length) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:12px;text-align:center;padding:20px;">Победителей пока нет</div>';
+    return;
+  }
+  list.innerHTML = chatgameWinners.map((w, i) =>
+    '<div class="chatgame-winner-row">' +
+      '<div class="cg-num">' + (i+1) + '</div>' +
+      '<div class="chatgame-winner-info">' +
+        '<div class="cg-nick">' + escapeHtml(w.nick) + '</div>' +
+        '<div class="cg-slot' + (w.slot ? '' : ' empty') + '">' +
+          escapeHtml(w.slot || 'ожидаем сообщение...') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + w.time + '</div>' +
+      '</div>' +
+      '<button class="chatgame-delete-btn" onclick="deleteChatgameWinner(' + i + ')" title="Удалить">🗑</button>' +
+    '</div>'
+  ).join('');
+}
+
+function stopChatgameTimer() {
+  if (chatgameTimer) { clearInterval(chatgameTimer); chatgameTimer = null; }
+  chatgameCurrentNick = '';
+  document.getElementById('chatgame-timer').textContent = '—';
+  document.getElementById('chatgame-sub').style.display = 'none';
+}
+
+function chatgameNextWinner() {
+  // Выбираем следующего случайного из участников (не из уже победивших)
+  stopChatgameTimer();
+  const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
+  const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
+  if (!pool.length) { alert('Все участники уже победили!'); return; }
+  const next = pickRandom(pool, 1)[0];
+  openChatgameOverlay(next);
+}
+
+function closeChatgameOverlay() {
+  stopChatgameTimer();
+  chatgameCurrentNick = '';
+  chatgameMsgBuffer = [];
+  document.getElementById('chatgame-overlay').classList.remove('visible');
+  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
+}
+
 function closeRaceOverlay() {
   resetGameUI();
+}
+
+// Підбирає кількість колонок так, щоб усі N клітинок (квадратних, gap=6px)
+// влізли в контейнер без скролу. Якщо учасників мало — клітинки великі,
+// якщо багато — автоматично зменшуються (з мінімумом, нижче якого дозволяється скрол).
+function fitGridColumns(grid, box, n) {
+  const gap = 6;
+  const padX = 12; // відповідає .box.selecting { padding: 6px }
+  const padY = 12;
+  const W = Math.max(box.clientWidth - padX, 50);
+  const H = Math.max(box.clientHeight - padY, 50);
+  const MIN_CELL = 16;
+  const MAX_CELL = 140;
+
+  let best = { cols: n, cellSize: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cellW = (W - (cols - 1) * gap) / cols;
+    const cellH = (H - (rows - 1) * gap) / rows;
+    const cellSize = Math.min(cellW, cellH);
+    if (cellSize > best.cellSize) {
+      best = { cols, cellSize };
+    }
+  }
+
+  if (best.cellSize >= MIN_CELL) {
+    const cellSize = Math.min(best.cellSize, MAX_CELL);
+    grid.style.gridTemplateColumns = 'repeat(' + best.cols + ', ' + cellSize + 'px)';
+    grid.style.justifyContent = 'center';
+  } else {
+    // Навіть при мінімальному розмірі не влазить — дозволяємо скрол
+    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(' + MIN_CELL + 'px, 1fr))';
+    grid.style.justifyContent = '';
+  }
+}
+
+function closeCashhuntOverlay() {
+  const ol = document.getElementById('cashhunt-overlay');
+  ol.classList.remove('visible', 'selecting-mode');
+  document.getElementById('cashhunt-controls').style.display = 'none';
+  document.getElementById('cashhunt-hint').textContent = '';
+  document.getElementById('cashhunt-progress-overlay').textContent = '';
+  document.getElementById('cashhunt-grid').innerHTML = '';
+  if (phase !== 'idle') { phase = 'idle'; resetGameUI(); }
 }
 
 function renderGame(game) {
@@ -1863,19 +3014,24 @@ function renderGame(game) {
   selected = new Set();
   phase = 'selecting';
 
-  const box = document.getElementById('main-box');
-  box.innerHTML = '<div class="grid" id="grid"></div>';
-  box.className = 'box selecting';
-  const grid = document.getElementById('grid');
+  // Відкриваємо оверлей
+  const overlay = document.getElementById('cashhunt-overlay');
+  overlay.classList.add('visible', 'selecting-mode');
+  document.getElementById('cashhunt-controls').style.display = 'none';
+  document.getElementById('cashhunt-progress-overlay').textContent = '';
 
-  // Динамічна авто-сітка, що підлаштовується під будь-яку кількість елементів без обрізання
-  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(45px, 1fr))';
+  const grid = document.getElementById('cashhunt-grid');
+  grid.innerHTML = '';
 
-  document.getElementById('game-controls').style.display = 'flex';
-  document.getElementById('btn-go').style.display = '';
-  document.getElementById('btn-go').disabled = true;
+  // fitGridColumns після двох rAF щоб overlay вже був видимий і мав розміри
+  const wrap = document.getElementById('cashhunt-grid-wrap');
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fitGridColumns(grid, wrap, game.cells.length);
+  }));
+
+  // Прибираємо old main-box UI
+  document.getElementById('game-controls').style.display = 'none';
   updateHint();
-  document.getElementById('progress').textContent = '';
 
   game.cells.forEach((name, i) => {
     const cell = document.createElement('div');
@@ -1896,21 +3052,36 @@ function onCellClick(idx, cellEl) {
   if (phase !== 'selecting') return;
 
   if (selected.has(idx)) {
+    // Деселект
     selected.delete(idx);
     cellEl.classList.remove('selected');
+  } else if (selected.size >= currentGame.winnersNeeded) {
+    // Ліміт досягнуто — знімаємо першу вибрану і ставимо нову (instant replace)
+    const oldIdx = [...selected][0];
+    selected.delete(oldIdx);
+    const oldCell = document.querySelector('#cashhunt-grid .cell[data-idx="' + oldIdx + '"]');
+    if (oldCell) oldCell.classList.remove('selected');
+    selected.add(idx);
+    cellEl.classList.add('selected');
   } else {
-    if (selected.size >= currentGame.winnersNeeded) return;
     selected.add(idx);
     cellEl.classList.add('selected');
   }
 
   updateHint();
-  document.getElementById('btn-go').disabled = selected.size !== currentGame.winnersNeeded;
+  const ctrl = document.getElementById('cashhunt-controls');
+  if (selected.size === currentGame.winnersNeeded) {
+    ctrl.style.display = 'flex';
+    ctrl.innerHTML = '<button class="btn-gold" onclick="startReveal()">🚀 Начать раскрытие</button>' +
+      '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
+  } else {
+    ctrl.style.display = 'none';
+  }
 }
 
 function updateHint() {
-  const n = currentGame.winnersNeeded;
-  const hint = document.getElementById('hint');
+  const n = currentGame ? currentGame.winnersNeeded : 0;
+  const hint = document.getElementById('cashhunt-hint');
   if (phase === 'selecting') {
     hint.innerHTML = 'Выберите <b>' + n + '</b> ' + (n === 1 ? 'ячейку' : 'ячеек') +
       ' — выбрано: <b>' + selected.size + ' / ' + n + '</b>';
@@ -1920,22 +3091,31 @@ function updateHint() {
 async function startReveal() {
   if (selected.size !== currentGame.winnersNeeded) return;
   phase = 'revealing';
-  document.getElementById('main-box').className = 'box revealing';
-  document.getElementById('hint').textContent = 'Раскрытие...';
-  document.getElementById('btn-go').disabled = true;
+  document.getElementById('cashhunt-overlay').classList.remove('selecting-mode');
+
+  const hint = document.getElementById('cashhunt-hint');
+  const progressEl = document.getElementById('cashhunt-progress-overlay');
+  const ctrl = document.getElementById('cashhunt-controls');
+  ctrl.style.display = 'none';
+  hint.textContent = 'Раскрытие...';
 
   const allIdx = currentGame.cells.map((_, i) => i);
   const others = allIdx.filter(i => !selected.has(i)).sort(() => Math.random() - 0.5);
   const winnersOrder = [...selected].sort(() => Math.random() - 0.5);
 
-  const cells = document.querySelectorAll('.cell');
+  const cells = document.querySelectorAll('#cashhunt-grid .cell');
+
+  const REFERENCE_COUNT = 20;
+  const BASE_DELAY = 65;
+  const MIN_DELAY = 8;
+  const flipDelay = Math.max(MIN_DELAY, Math.min(BASE_DELAY, BASE_DELAY * REFERENCE_COUNT / Math.max(others.length, 1)));
 
   for (const idx of others) {
     cells[idx].classList.add('flipped', 'revealed');
-    await sleep(35);
+    await sleep(flipDelay);
   }
 
-  await sleep(600);
+  await sleep(900);
 
   const winners = [];
   for (let k = 0; k < winnersOrder.length; k++) {
@@ -1944,16 +3124,16 @@ async function startReveal() {
     cell.classList.add('flipped', 'revealed', 'winner');
     const name = currentGame.cells[idx];
     winners.push(name);
-    document.getElementById('progress').innerHTML =
-      'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
+    progressEl.innerHTML = 'Найдено победителей: <b>' + winners.length + ' / ' + winnersOrder.length + '</b>';
     addWinner(name);
-    await sleep(900);
+    await sleep(1400);
   }
 
   phase = 'done';
-  document.getElementById('main-box').className = 'box done';
-  document.getElementById('hint').innerHTML = 'Готово!';
-  document.getElementById('btn-go').textContent = '🚀 Начать раскрытие';
+  hint.innerHTML = '🏆 Готово!';
+  ctrl.style.display = 'flex';
+  ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()">🔄 Рерол</button>' +
+    '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
 }
 
 let announceTimer = null;
@@ -1964,19 +3144,26 @@ function playTimeoutSound() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const now = audioCtx.currentTime;
-    [0, 0.25, 0.5].forEach(offset => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.25);
-    });
+
+    // Старий звук (3 короткі піпи 880Hz), відтворений двічі з паузою
+    function tripleBeep(startOffset) {
+      [0, 0.25, 0.5].forEach(offset => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, now + startOffset + offset);
+        gain.gain.exponentialRampToValueAtTime(0.3, now + startOffset + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + offset + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + startOffset + offset);
+        osc.stop(now + startOffset + offset + 0.25);
+      });
+    }
+
+    tripleBeep(0);    // перший раз
+    tripleBeep(1.0);  // другий раз через 1 секунду
   } catch (e) {}
 }
 
@@ -2021,7 +3208,8 @@ function showAnnounce(name, seconds, confirmOn) {
 function updateAnnounceMsg(name, message) {
   const ann = document.getElementById('winner-announce');
   if (!ann.classList.contains('visible')) return;
-  if (document.getElementById('wa-name').textContent !== name) return;
+  const waName = document.getElementById('wa-name').textContent;
+  if (waName.toLowerCase() !== name.toLowerCase()) return;
 
   if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
   const timerEl = document.getElementById('wa-timer');
@@ -2081,6 +3269,12 @@ function addWinner(name) {
     if (checkTimerInterval) clearInterval(checkTimerInterval);
     checkTimerInterval = setInterval(pollCheckState, 1000);
     pollCheckState();
+  } else {
+    // Без підтвердження — просто повідомляємо в чат
+    fetch('/api/chat/announce', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner: name })
+    });
   }
 }
 
@@ -2137,10 +3331,12 @@ async function pollCheckState() {
 
   winnersHistory.forEach(w => {
     if (w.status !== 'pending') return;
-    const c = data.checks[w.name];
+    const c = data.checks[w.name] ||
+      Object.entries(data.checks).find(([k]) => k.toLowerCase() === w.name.toLowerCase())?.[1];
     if (!c) return;
 
     if (c.message !== null) {
+      console.log('[CLIENT] Winner replied:', w.name, 'message:', c.message, 'updating announce...');
       w.status = 'ok';
       w.message = c.message;
       updateAnnounceMsg(w.name, c.message);
@@ -2184,17 +3380,6 @@ async function retryWinner(name) {
   pollCheckState();
 }
 
-async function finishRaffle() {
-  if (!confirm('Завершить розыгрыш? Регистрация будет закрыта, список победителей очищен.')) return;
-  if (checkTimerInterval) clearInterval(checkTimerInterval);
-  await fetch('/api/raffle/finish', { method: 'POST' });
-  winnersHistory = [];
-  renderWinners();
-  closeAnnounce();
-  resetGameUI();
-  loadState();
-}
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function escapeHtml(s) {
@@ -2203,7 +3388,25 @@ function escapeHtml(s) {
 
 renderWinners();
 loadState();
+setGameMode('roulette'); // ховає поле переможців в дефолтному режимі
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
+
+// Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
+// гри натискання пробілу повторно запускало startGame() з нуля)
+window.addEventListener('keydown', (e) => {
+  if ((e.code === 'Space' || e.key === ' ') && document.activeElement && document.activeElement.tagName === 'BUTTON') {
+    e.preventDefault();
+  }
+});
+
+// Перерахувати сітку Cash Hunt при зміні розміру вікна
+window.addEventListener('resize', () => {
+  if (phase === 'selecting' || phase === 'revealing' || phase === 'done') {
+    const grid = document.getElementById('grid');
+    const box = document.getElementById('main-box');
+    if (grid && box && currentGame) fitGridColumns(grid, box, currentGame.cells.length);
+  }
+});
 
 function toggleConfirmField() {
   const on = document.getElementById('toggle-confirm').checked;
@@ -2273,14 +3476,23 @@ function toggleConfirmField() {
     if (animId) { cancelAnimationFrame(animId); animId = null; }
   }
 
+  const overlayEl = document.getElementById('cashhunt-overlay');
+
   document.addEventListener('mousemove', e => {
     mouseX = e.clientX;
     mouseY = e.clientY;
     canvas.style.left = (mouseX - 24) + 'px';
     canvas.style.top  = (mouseY - 24) + 'px';
-    if (phase === 'selecting') { if (!visible) show(); }
-    else { if (visible) hide(); }
+    // Показуємо курсор лише всередині cashhunt-overlay під час вибору
+    if (phase === 'selecting' && overlayEl.classList.contains('visible') && e.target.closest('#cashhunt-overlay')) {
+      if (!visible) show();
+    } else {
+      if (visible) hide();
+    }
   });
+
+  // Коли виходимо з оверлею — ховаємо курсор
+  overlayEl.addEventListener('mouseleave', () => { if (visible) hide(); });
 
   const boxEl = document.getElementById('main-box');
   const boxObs = new MutationObserver(() => {
@@ -2461,6 +3673,30 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url === '/api/raffle/addcsv' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { names } = JSON.parse(body);
+        if (!Array.isArray(names)) { res.writeHead(400); res.end(JSON.stringify({ error: 'invalid' })); return; }
+        let added = 0;
+        names.forEach(name => {
+          const n = String(name).trim().slice(0, 64);
+          if (n && !rafflePlayers.includes(n)) {
+            rafflePlayers.push(n);
+            added++;
+          }
+        });
+        saveState();
+        console.log(`[РОЗІГРАШ CSV] завантажено ${added} учасників (всього: ${rafflePlayers.length})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, added, count: rafflePlayers.length }));
+      } catch { res.writeHead(400); res.end(JSON.stringify({ error: 'parse error' })); }
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/check/start' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
@@ -2472,6 +3708,10 @@ const server = http.createServer((req, res) => {
         if (!w) { res.writeHead(400); res.end(); return; }
         raffleChecks[w] = { seconds: sec, startedAt: Date.now(), active: true, message: null, messageAt: null };
         console.log(`[РОЗІГРАШ] Таймер запущен для ${w} (${sec}с)`);
+
+        // Відправляємо повідомлення в чат Kick
+        sendChatAnnounce(`🏆 ПОБЕДИТЕЛЬ: @${w} | ⏳ У тебя ${sec} сек на ответ в чат!`);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch { res.writeHead(400); res.end(); }
@@ -2499,6 +3739,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Відправка повідомлення в чат без підтвердження (коли toggle вимкнено)
+  if (req.url === '/api/chat/announce' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winner } = JSON.parse(body);
+        const w = (winner || '').trim();
+        if (w) sendChatAnnounce(`🏆 ПОБЕДИТЕЛЬ: @${w} — поздравляем!`);
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/finish' && req.method === 'POST') {
     raffleGame = null;
     raffleChecks = {};
@@ -2517,8 +3772,7 @@ const server = http.createServer((req, res) => {
         const { winners } = JSON.parse(body);
         const n = parseInt(winners);
         if (!rafflePlayers.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
-        // Розширили ліміт для сітки
-        const gridSize = Math.min(rafflePlayers.length, 200);
+        const gridSize = rafflePlayers.length;
         if (!n || n < 1 || n > gridSize) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців (макс ' + gridSize + ')' })); return;
         }
@@ -2569,11 +3823,11 @@ const server = http.createServer((req, res) => {
   res.end(RAFFLE_HTML());
 });
 
-// Генерує сітку: ліміт розширено до 200
+// Генерує сітку: кількість клітинок = кількості учасників, без обмежень
 function buildRaffleGame(n) {
   const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
-  const gridSize = Math.min(shuffled.length, 200);
-  const cells = shuffled.slice(0, gridSize); 
+  const gridSize = shuffled.length;
+  const cells = shuffled.slice(0, gridSize);
 
   return {
     winnersNeeded: n,
@@ -2635,12 +3889,20 @@ function connect() {
 
       const lower = content.toLowerCase();
 
-      const check = raffleChecks[username];
-      if (check && check.active) {
-        check.active = false;
-        check.message = content;
-        check.messageAt = Date.now();
+      // Шукаємо переможця case-insensitive
+      const checkKey = Object.keys(raffleChecks).find(
+        k => k.toLowerCase() === username.toLowerCase()
+      );
+      console.log(`[CHAT] ${username}: "${content}" | keys: ${JSON.stringify(Object.keys(raffleChecks))} | found key: ${checkKey} | active: ${raffleChecks[checkKey]?.active}`);
+
+      if (checkKey && raffleChecks[checkKey].active) {
+        raffleChecks[checkKey].active = false;
+        raffleChecks[checkKey].message = content;
+        raffleChecks[checkKey].messageAt = Date.now();
         console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
+        // Push до клієнта — не чекаємо наступного poll
+        const pushMsg = JSON.stringify({ type: 'winner_reply', name: checkKey, message: content });
+        chatClients.forEach(c => c.write(`data: ${pushMsg}\n\n`));
       }
 
       if (raffleAccepting && raffleJoinCmd && lower === raffleJoinCmd) {
