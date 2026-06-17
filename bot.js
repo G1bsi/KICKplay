@@ -2277,6 +2277,90 @@ async function runRace(qualifiers, totalLaps) {
   const cd = document.getElementById('race-countdown');
   overlayHint.textContent = '';
 
+  // ── Прольотка вздовж стартової лінії ──
+  {
+    const startPos = curve.getPointAt(0);
+    const startTan = curve.getTangentAt(0);
+    const UP2 = new THREE.Vector3(0, 1, 0);
+    const right2 = new THREE.Vector3().crossVectors(startTan, UP2).normalize();
+
+    // Кінцева позиція камери (огляд)
+    const finalPos = new THREE.Vector3(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
+    const finalTarget = new THREE.Vector3(0, 0, 0);
+
+    // Траєкторія: починаємо збоку від старту, летимо вздовж машинок, потім вгору до огляду
+    const flyDist = 55; // ширина прольотки вздовж лінії
+    const flyHeight = 8;
+    const flyPts = [
+      // Старт збоку (з правого боку)
+      new THREE.Vector3(
+        startPos.x + right2.x * flyDist + startTan.x * 20,
+        flyHeight,
+        startPos.z + right2.z * flyDist + startTan.z * 20
+      ),
+      // Центр лінії (низько, між машинок)
+      new THREE.Vector3(startPos.x, flyHeight * 0.6, startPos.z),
+      // Виліт з лівого боку
+      new THREE.Vector3(
+        startPos.x - right2.x * flyDist + startTan.x * (-15),
+        flyHeight,
+        startPos.z - right2.z * flyDist + startTan.z * (-15)
+      ),
+      // Підйом до огляду
+      new THREE.Vector3(finalPos.x * 0.4, finalPos.y * 0.5, finalPos.z * 0.4),
+      finalPos.clone(),
+    ];
+    const flyCurve = new THREE.CatmullRomCurve3(flyPts);
+
+    // Точки куди дивиться камера (завжди на стартову лінію спочатку, потім на центр)
+    const lookPts = [
+      startPos.clone(),
+      startPos.clone(),
+      startPos.clone(),
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, 0),
+    ];
+    const lookCurve = new THREE.CatmullRomCurve3(lookPts);
+
+    const FLYBY_MS = 3500;
+    const flyStart = performance.now();
+
+    await new Promise(resolve => {
+      function flyFrame(now) {
+        const t = Math.min((now - flyStart) / FLYBY_MS, 1);
+        // easeInOut
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+        const pos = flyCurve.getPointAt(ease);
+        const look = lookCurve.getPointAt(ease);
+
+        camera3D.position.copy(pos);
+        camera3D.lookAt(look);
+        camera3D.updateMatrixWorld(true);
+        if (orbitControls3D) {
+          orbitControls3D.target.copy(look);
+          orbitControls3D.update();
+        }
+
+        renderFrame();
+        if (t < 1) requestAnimationFrame(flyFrame);
+        else {
+          // Повертаємо камеру точно на фінальну позицію
+          camera3D.position.copy(finalPos);
+          camera3D.lookAt(finalTarget);
+          camera3D.updateMatrixWorld(true);
+          if (orbitControls3D) {
+            orbitControls3D.target.copy(finalTarget);
+            orbitControls3D.update();
+          }
+          renderFrame();
+          resolve();
+        }
+      }
+      requestAnimationFrame(flyFrame);
+    });
+  }
+
   // ── Пауза перед стартом — чекаємо кнопку ──
   await new Promise(resolve => {
     const startBtn = document.createElement('button');
