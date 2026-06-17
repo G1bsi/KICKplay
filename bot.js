@@ -2484,7 +2484,7 @@ async function runRevolver(qualifiers) {
   let currentRot = 0;
 
   // ── Пауза — чекаємо кнопку СТАРТ ──
-  hint.textContent = 'Готовий до старту';
+  hint.textContent = '';
   await new Promise(resolve => {
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
