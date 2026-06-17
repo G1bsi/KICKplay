@@ -2027,7 +2027,7 @@ function makeTractor(colorHex) {
 
   body.rotation.y = 0;
   group.add(body);
-  group.scale.set(0.42, 0.42, 0.42);
+  group.scale.set(0.65, 0.65, 0.65);
   return group;
 }
 
