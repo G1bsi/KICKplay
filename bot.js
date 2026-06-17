@@ -792,7 +792,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .chatgame-delete-btn {
     flex-shrink: 0; background: transparent; border: 1px solid #333;
     color: #666; border-radius: 6px; width: 30px; height: 30px;
-    font-size: 14px; cursor: pointer; transition: all 0.2s;
+    font-size: 16px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1; padding: 0;
   }
   .chatgame-delete-btn:hover { border-color: var(--red); color: var(--red); background: rgba(255,74,74,0.1); }
   #chatgame-controls {
@@ -1349,7 +1351,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
 <!-- Оверлей режима ЧАТ -->
 <div id="chatgame-overlay">
-  <!-- Левая панель: победитель + его сообщения -->
+  <!-- Ліва панель: список переможців -->
+  <div id="chatgame-right">
+    <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
+    <div id="chatgame-winners-list">
+      <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">
+        Победителей пока нет
+      </div>
+    </div>
+    <div id="chatgame-controls">
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
+      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
+    </div>
+  </div>
+  <!-- Права панель: поточний переможець + його повідомлення -->
   <div id="chatgame-left">
     <div id="chatgame-winner-name">—</div>
     <div id="chatgame-timer-block">
@@ -1359,19 +1374,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div id="chatgame-msgs-label">Сообщения в чат:</div>
     <div id="chatgame-msgs">
       <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
-    </div>
-  </div>
-  <!-- Правая панель: список всех победителей -->
-  <div id="chatgame-right">
-    <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
-    <div id="chatgame-winners-list">
-      <div style="color:var(--text-muted);font-family:'Roboto Mono',monospace;font-size:12px;text-align:center;padding:20px;">
-        Победителей пока нет
-      </div>
-    </div>
-    <div id="chatgame-controls">
-      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
-      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
     </div>
   </div>
 </div>
