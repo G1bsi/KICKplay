@@ -699,6 +699,105 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
 
   /* ── 🔫 Режим Револьвер ─────────────────── */
+  /* ── 💬 Режим Чат ──────────────────────────── */
+  #chatgame-overlay {
+    position: fixed; inset: 0; z-index: 9992;
+    background: rgba(4,6,4,0.96);
+    display: none; flex-direction: row; gap: 0;
+    backdrop-filter: blur(6px);
+  }
+  #chatgame-overlay.visible { display: flex; }
+
+  /* Левая панель — победитель + его сообщения */
+  #chatgame-left {
+    width: 400px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    padding: 24px 20px;
+    border-right: 1px solid var(--panel-border);
+    gap: 12px;
+    background: rgba(0,0,0,0.3);
+  }
+  #chatgame-winner-name {
+    font-family: 'Inter', sans-serif;
+    font-size: 36px; font-weight: 900; color: #fff;
+    text-align: center; word-break: break-word;
+  }
+  #chatgame-timer-block { text-align: center; }
+  #chatgame-timer {
+    font-family: 'Inter', sans-serif; font-size: 52px; font-weight: 900;
+    color: var(--gold); line-height: 1;
+  }
+  #chatgame-timer.expiring { color: var(--red); animation: timerBlink 0.5s infinite alternate; }
+  #chatgame-sub {
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+    color: var(--text-muted); letter-spacing: 4px; text-transform: uppercase; margin-top: 4px;
+  }
+  #chatgame-msgs-label {
+    font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 2px; font-family: 'Roboto Mono', monospace;
+    border-top: 1px solid var(--panel-border); padding-top: 10px;
+  }
+  #chatgame-msgs {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+  }
+  .chatgame-msg-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--panel-border);
+    border-radius: 8px; padding: 8px 10px;
+    font-family: 'Roboto Mono', monospace; font-size: 12px; color: #ddd;
+  }
+  .chatgame-msg-text { flex: 1; word-break: break-word; }
+  .chatgame-msg-save {
+    flex-shrink: 0; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--kick); color: #000; border: none; cursor: pointer;
+    white-space: nowrap;
+  }
+  .chatgame-msg-save:hover { filter: brightness(1.2); }
+  #chatgame-no-msgs {
+    color: var(--text-muted); font-family: 'Roboto Mono', monospace;
+    font-size: 12px; text-align: center; padding: 20px;
+  }
+
+  /* Правая панель — список победителей */
+  #chatgame-right {
+    flex: 1; display: flex; flex-direction: column;
+    padding: 24px 20px; gap: 12px; overflow: hidden;
+  }
+  #chatgame-right-title {
+    font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900;
+    color: var(--kick); text-transform: uppercase; letter-spacing: 2px;
+  }
+  #chatgame-winners-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  }
+  .chatgame-winner-row {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .chatgame-winner-row .cg-num {
+    font-size: 13px; color: var(--text-muted); font-family: 'Roboto Mono', monospace;
+    width: 22px; flex-shrink: 0; padding-top: 2px;
+  }
+  .chatgame-winner-info { flex: 1; min-width: 0; }
+  .chatgame-winner-info .cg-nick {
+    font-size: 16px; font-weight: 900; color: #fff; font-family: 'Inter', sans-serif;
+  }
+  .chatgame-winner-info .cg-slot {
+    font-size: 13px; color: var(--kick); font-family: 'Roboto Mono', monospace;
+    margin-top: 3px; word-break: break-word;
+  }
+  .chatgame-winner-info .cg-slot.empty { color: var(--text-muted); font-style: italic; }
+  .chatgame-delete-btn {
+    flex-shrink: 0; background: transparent; border: 1px solid #333;
+    color: #666; border-radius: 6px; width: 30px; height: 30px;
+    font-size: 14px; cursor: pointer; transition: all 0.2s;
+  }
+  .chatgame-delete-btn:hover { border-color: var(--red); color: var(--red); background: rgba(255,74,74,0.1); }
+  #chatgame-controls {
+    display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+  }
   #revolver-overlay {
     position: fixed; inset: 0; z-index: 9991;
     background: rgba(4,6,4,0.95);
@@ -1103,6 +1202,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
         <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
         <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
+        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')">💬 Чат</button>
       </div>
     </div>
 
@@ -1247,6 +1347,35 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- Оверлей режима ЧАТ -->
+<div id="chatgame-overlay">
+  <!-- Левая панель: победитель + его сообщения -->
+  <div id="chatgame-left">
+    <div id="chatgame-winner-name">—</div>
+    <div id="chatgame-timer-block">
+      <div id="chatgame-timer">—</div>
+      <div id="chatgame-sub">ВРЕМЯ НА ОТВЕТ</div>
+    </div>
+    <div id="chatgame-msgs-label">Сообщения в чат:</div>
+    <div id="chatgame-msgs">
+      <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
+    </div>
+  </div>
+  <!-- Правая панель: список всех победителей -->
+  <div id="chatgame-right">
+    <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
+    <div id="chatgame-winners-list">
+      <div style="color:var(--text-muted);font-family:'Roboto Mono',monospace;font-size:12px;text-align:center;padding:20px;">
+        Победителей пока нет
+      </div>
+    </div>
+    <div id="chatgame-controls">
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
+      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <!-- Оверлей Револьвера -->
 <div id="revolver-overlay">
   <div id="revolver-overlay-hint">Заряжаем барабан...</div>
@@ -1330,6 +1459,9 @@ chatEvtSource.onmessage = (e) => {
   if (chatBox.children.length > 150) {
     chatBox.removeChild(chatBox.firstChild);
   }
+
+  // Перехватываем сообщения победителя в режиме ЧАТ
+  if (gameMode === 'chatgame') handleChatgameMessage(username, content);
 };
 
 async function loadState() {
@@ -1516,11 +1648,13 @@ function setGameMode(mode) {
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
   document.getElementById('mode-btn-roulette').classList.toggle('active', mode === 'roulette');
   document.getElementById('mode-btn-revolver').classList.toggle('active', mode === 'revolver');
+  document.getElementById('mode-btn-chatgame').classList.toggle('active', mode === 'chatgame');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
   hideRaceOverlay();
   hideRouletteOverlay();
   closeRevolverOverlay();
+  closeChatgameOverlay();
 }
 
 function hideRaceOverlay() {
@@ -1561,6 +1695,7 @@ async function startGame() {
   if (gameMode === 'race') return startRaceGame();
   if (gameMode === 'roulette') return startRoulette();
   if (gameMode === 'revolver') return startRevolverGame();
+  if (gameMode === 'chatgame') return startChatgame();
 
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
@@ -2484,7 +2619,7 @@ async function runRevolver(qualifiers) {
   let currentRot = 0;
 
   // ── Пауза — чекаємо кнопку СТАРТ ──
-  hint.textContent = '';
+  hint.textContent = 'Готовий до старту';
   await new Promise(resolve => {
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
@@ -2662,6 +2797,166 @@ function playRevolverSpin() {
       osc.start(t); osc.stop(t + 0.07);
     }
   } catch(e) {}
+}
+
+// ── Режим «Чат» ──────────────────────────────────────────────────────────────
+// Рулетка выбирает победителя, бот перехватывает его сообщения,
+// стример нажимает «Сохранить» на нужном, список победителей справа.
+
+let chatgameWinners = [];       // [{nick, slot, time}]
+let chatgameCurrentNick = '';   // кто сейчас отвечает
+let chatgameMsgBuffer = [];     // сообщения текущего победителя
+let chatgameTimer = null;
+let chatgameTimerSeconds = 0;
+
+function startChatgame() {
+  if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
+  const winner = pickRandom(state.participants, 1)[0];
+  openChatgameOverlay(winner);
+}
+
+function openChatgameOverlay(nick) {
+  chatgameCurrentNick = nick;
+  chatgameMsgBuffer = [];
+  phase = 'racing';
+
+  const overlay = document.getElementById('chatgame-overlay');
+  overlay.classList.add('visible');
+
+  document.getElementById('chatgame-winner-name').textContent = nick;
+  document.getElementById('chatgame-msgs').innerHTML =
+    '<div id="chatgame-no-msgs">Ожидаем сообщение...</div>';
+
+  // Запускаем таймер
+  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  chatgameTimerSeconds = seconds;
+  renderChatgameTimer(seconds);
+
+  if (chatgameTimer) clearInterval(chatgameTimer);
+  chatgameTimer = setInterval(() => {
+    chatgameTimerSeconds--;
+    renderChatgameTimer(chatgameTimerSeconds);
+    if (chatgameTimerSeconds <= 0) {
+      clearInterval(chatgameTimer);
+      chatgameTimer = null;
+      // Время вышло — добавляем без слота
+      if (!chatgameWinners.find(w => w.nick === chatgameCurrentNick)) {
+        addChatgameWinner(chatgameCurrentNick, '— время вышло, нет ответа —');
+      }
+    }
+  }, 1000);
+
+  renderChatgameWinners();
+}
+
+function renderChatgameTimer(sec) {
+  const el = document.getElementById('chatgame-timer');
+  el.textContent = sec + 'с';
+  el.className = sec <= 10 ? 'expiring' : '';
+  document.getElementById('chatgame-sub').style.display = sec > 0 ? '' : 'none';
+}
+
+// Вызывается из SSE-обработчика при каждом сообщении чата
+function handleChatgameMessage(username, content) {
+  if (!chatgameCurrentNick) return;
+  if (username.toLowerCase() !== chatgameCurrentNick.toLowerCase()) return;
+
+  chatgameMsgBuffer.push(content);
+
+  const box = document.getElementById('chatgame-msgs');
+  const noMsg = document.getElementById('chatgame-no-msgs');
+  if (noMsg) noMsg.remove();
+
+  const row = document.createElement('div');
+  row.className = 'chatgame-msg-row';
+
+  const txt = document.createElement('div');
+  txt.className = 'chatgame-msg-text';
+  txt.textContent = content;
+
+  const btn = document.createElement('button');
+  btn.className = 'chatgame-msg-save';
+  btn.textContent = '✓ Сохранить';
+  const captured = content;
+  const capturedNick = chatgameCurrentNick;
+  btn.onclick = () => {
+    addChatgameWinner(capturedNick, captured);
+    stopChatgameTimer();
+  };
+
+  row.appendChild(txt);
+  row.appendChild(btn);
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addChatgameWinner(nick, slot) {
+  // Не дублировать
+  const existing = chatgameWinners.find(w => w.nick === nick);
+  if (existing) {
+    existing.slot = slot;
+    existing.time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+  } else {
+    chatgameWinners.push({
+      nick,
+      slot,
+      time: new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+    });
+  }
+  renderChatgameWinners();
+  document.getElementById('chatgame-winner-name').textContent = nick;
+}
+
+function deleteChatgameWinner(idx) {
+  chatgameWinners.splice(idx, 1);
+  renderChatgameWinners();
+}
+
+function renderChatgameWinners() {
+  const list = document.getElementById('chatgame-winners-list');
+  document.getElementById('chatgame-count').textContent = chatgameWinners.length;
+  if (!chatgameWinners.length) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:12px;text-align:center;padding:20px;">Победителей пока нет</div>';
+    return;
+  }
+  list.innerHTML = chatgameWinners.map((w, i) =>
+    '<div class="chatgame-winner-row">' +
+      '<div class="cg-num">' + (i+1) + '</div>' +
+      '<div class="chatgame-winner-info">' +
+        '<div class="cg-nick">' + escapeHtml(w.nick) + '</div>' +
+        '<div class="cg-slot' + (w.slot ? '' : ' empty') + '">' +
+          escapeHtml(w.slot || 'ожидаем сообщение...') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + w.time + '</div>' +
+      '</div>' +
+      '<button class="chatgame-delete-btn" onclick="deleteChatgameWinner(' + i + ')" title="Удалить">🗑</button>' +
+    '</div>'
+  ).join('');
+}
+
+function stopChatgameTimer() {
+  if (chatgameTimer) { clearInterval(chatgameTimer); chatgameTimer = null; }
+  chatgameCurrentNick = '';
+  document.getElementById('chatgame-timer').textContent = '—';
+  document.getElementById('chatgame-sub').style.display = 'none';
+}
+
+function chatgameNextWinner() {
+  // Выбираем следующего случайного из участников (не из уже победивших)
+  stopChatgameTimer();
+  const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
+  const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
+  if (!pool.length) { alert('Все участники уже победили!'); return; }
+  const next = pickRandom(pool, 1)[0];
+  openChatgameOverlay(next);
+}
+
+function closeChatgameOverlay() {
+  stopChatgameTimer();
+  chatgameCurrentNick = '';
+  chatgameMsgBuffer = [];
+  document.getElementById('chatgame-overlay').classList.remove('visible');
+  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
 }
 
 function closeRaceOverlay() {
