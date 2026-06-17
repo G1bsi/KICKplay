@@ -2277,99 +2277,62 @@ async function runRace(qualifiers, totalLaps) {
   const cd = document.getElementById('race-countdown');
   overlayHint.textContent = '';
 
-  // ── Прольотка вздовж стартової лінії ──
-  {
-    const startPos = curve.getPointAt(0);
-    const startTan = curve.getTangentAt(0);
-    const UP2 = new THREE.Vector3(0, 1, 0);
-    const right2 = new THREE.Vector3().crossVectors(startTan, UP2).normalize();
-
-    // Кінцева позиція камери (огляд)
-    const finalPos = new THREE.Vector3(0, camDist * Math.sin(elevation), camDist * Math.cos(elevation));
-    const finalTarget = new THREE.Vector3(0, 0, 0);
-
-    // Траєкторія: починаємо збоку від старту, летимо вздовж машинок, потім вгору до огляду
-    const flyDist = 55; // ширина прольотки вздовж лінії
-    const flyHeight = 8;
-    const flyPts = [
-      // Старт збоку (з правого боку)
-      new THREE.Vector3(
-        startPos.x + right2.x * flyDist + startTan.x * 20,
-        flyHeight,
-        startPos.z + right2.z * flyDist + startTan.z * 20
-      ),
-      // Центр лінії (низько, між машинок)
-      new THREE.Vector3(startPos.x, flyHeight * 0.6, startPos.z),
-      // Виліт з лівого боку
-      new THREE.Vector3(
-        startPos.x - right2.x * flyDist + startTan.x * (-15),
-        flyHeight,
-        startPos.z - right2.z * flyDist + startTan.z * (-15)
-      ),
-      // Підйом до огляду
-      new THREE.Vector3(finalPos.x * 0.4, finalPos.y * 0.5, finalPos.z * 0.4),
-      finalPos.clone(),
-    ];
-    const flyCurve = new THREE.CatmullRomCurve3(flyPts);
-
-    // Точки куди дивиться камера (завжди на стартову лінію спочатку, потім на центр)
-    const lookPts = [
-      startPos.clone(),
-      startPos.clone(),
-      startPos.clone(),
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, 0),
-    ];
-    const lookCurve = new THREE.CatmullRomCurve3(lookPts);
-
-    const FLYBY_MS = 3500;
-    const flyStart = performance.now();
-
-    await new Promise(resolve => {
-      function flyFrame(now) {
-        const t = Math.min((now - flyStart) / FLYBY_MS, 1);
-        // easeInOut
-        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-
-        const pos = flyCurve.getPointAt(ease);
-        const look = lookCurve.getPointAt(ease);
-
-        camera3D.position.copy(pos);
-        camera3D.lookAt(look);
-        camera3D.updateMatrixWorld(true);
-        if (orbitControls3D) {
-          orbitControls3D.target.copy(look);
-          orbitControls3D.update();
-        }
-
-        renderFrame();
-        if (t < 1) requestAnimationFrame(flyFrame);
-        else {
-          // Повертаємо камеру точно на фінальну позицію
-          camera3D.position.copy(finalPos);
-          camera3D.lookAt(finalTarget);
-          camera3D.updateMatrixWorld(true);
-          if (orbitControls3D) {
-            orbitControls3D.target.copy(finalTarget);
-            orbitControls3D.update();
-          }
-          renderFrame();
-          resolve();
-        }
-      }
-      requestAnimationFrame(flyFrame);
-    });
-  }
-
-  // ── Пауза перед стартом — чекаємо кнопку ──
+  // ── Оверлей з гравцями перед стартом ──
   await new Promise(resolve => {
-    const startBtn = document.createElement('button');
-    startBtn.className = 'btn-primary';
-    startBtn.style.cssText = 'font-size:28px;padding:16px 48px;margin:0;letter-spacing:3px;';
-    startBtn.textContent = '🚀 СТАРТ';
-    cd.innerHTML = '';
-    cd.appendChild(startBtn);
-    startBtn.onclick = () => { cd.innerHTML = ''; resolve(); };
+    const preRace = document.createElement('div');
+    preRace.id = 'pre-race-overlay';
+    preRace.style.cssText = [
+      'position:absolute;inset:0;z-index:10',
+      'background:rgba(4,8,4,0.92)',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px',
+      'padding:24px',
+    ].join(';');
+
+    // Сітка гравців
+    const grid = document.createElement('div');
+    grid.style.cssText = [
+      'display:grid',
+      'grid-template-columns:repeat(auto-fill,minmax(140px,1fr))',
+      'gap:8px',
+      'max-width:min(95%,900px)',
+      'max-height:70%',
+      'overflow-y:auto',
+      'width:100%',
+    ].join(';');
+
+    qualifiers.forEach((name, i) => {
+      const colorHex = '#' + new THREE.Color().setHSL(i / n, 0.65, 0.5).getHexString();
+      const isTractor = name.toLowerCase() === 'crystalyne7';
+      const row = document.createElement('div');
+      row.style.cssText = [
+        'display:flex;align-items:center;gap:8px',
+        'padding:7px 12px;border-radius:8px',
+        'background:rgba(255,255,255,0.05)',
+        'border:1px solid ' + colorHex + '55',
+        'font-size:13px;font-weight:700;color:#eee',
+        'overflow:hidden',
+      ].join(';');
+      const dot = document.createElement('div');
+      dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:' + colorHex + ';flex-shrink:0';
+      const label = document.createElement('span');
+      label.textContent = (isTractor ? '🚜 ' : '') + name;
+      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      row.appendChild(dot);
+      row.appendChild(label);
+      grid.appendChild(row);
+    });
+
+    // Кнопка старт
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.style.cssText = 'font-size:24px;padding:14px 60px;margin:0;letter-spacing:3px;flex-shrink:0;';
+    btn.textContent = '🚀 СТАРТ';
+    btn.onclick = () => { area.removeChild(preRace); resolve(); };
+
+    preRace.appendChild(grid);
+    preRace.appendChild(btn);
+    area.appendChild(preRace);
+    renderFrame();
   });
 
   for (const txt of ['3', '2', '1', 'GO!']) {
