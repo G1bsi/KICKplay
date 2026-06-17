@@ -710,10 +710,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* Левая панель — победитель + его сообщения */
   #chatgame-left {
-    width: 400px; flex-shrink: 0;
+    width: 800px; flex-shrink: 0;
     display: flex; flex-direction: column;
     padding: 24px 20px;
-    border-right: 1px solid var(--panel-border);
+    border-left: 1px solid var(--panel-border);
     gap: 12px;
     background: rgba(0,0,0,0.3);
   }
@@ -798,8 +798,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   }
   .chatgame-delete-btn:hover { border-color: var(--red); color: var(--red); background: rgba(255,74,74,0.1); }
   #chatgame-controls {
-    display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+    display: flex; gap: 12px; flex-shrink: 0; flex-wrap: wrap;
+    justify-content: center; padding-top: 8px;
   }
+  #chatgame-controls button { font-size: 16px; padding: 12px 28px; min-width: 200px; }
   #revolver-overlay {
     position: fixed; inset: 0; z-index: 9991;
     background: rgba(4,6,4,0.95);
@@ -2841,10 +2843,17 @@ function openChatgameOverlay(nick) {
     if (chatgameTimerSeconds <= 0) {
       clearInterval(chatgameTimer);
       chatgameTimer = null;
-      // Время вышло — добавляем без слота
-      if (!chatgameWinners.find(w => w.nick === chatgameCurrentNick)) {
-        addChatgameWinner(chatgameCurrentNick, '— время вышло, нет ответа —');
-      }
+      // Показываем что время вышло — НЕ добавляем автоматически в победители
+      // Стример сам нажмёт "Следующий победитель" когда захочет
+      document.getElementById('chatgame-timer').textContent = '⏰';
+      document.getElementById('chatgame-timer').className = '';
+      document.getElementById('chatgame-sub').textContent = 'ВРЕМЯ ВЫШЛО — НЕТ ОТВЕТА';
+      document.getElementById('chatgame-sub').style.color = 'var(--red)';
+      document.getElementById('chatgame-sub').style.display = '';
+      // Блокируем кнопки сохранения — отвечать уже нельзя
+      document.querySelectorAll('.chatgame-msg-save').forEach(b => {
+        if (!b.disabled) { b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'default'; }
+      });
     }
   }, 1000);
 
@@ -2853,9 +2862,12 @@ function openChatgameOverlay(nick) {
 
 function renderChatgameTimer(sec) {
   const el = document.getElementById('chatgame-timer');
+  const sub = document.getElementById('chatgame-sub');
   el.textContent = sec + 'с';
   el.className = sec <= 10 ? 'expiring' : '';
-  document.getElementById('chatgame-sub').style.display = sec > 0 ? '' : 'none';
+  sub.textContent = 'ВРЕМЯ НА ОТВЕТ';
+  sub.style.color = '';
+  sub.style.display = sec > 0 ? '' : 'none';
 }
 
 // Вызывается из SSE-обработчика при каждом сообщении чата
@@ -2882,6 +2894,16 @@ function handleChatgameMessage(username, content) {
   const captured = content;
   const capturedNick = chatgameCurrentNick;
   btn.onclick = () => {
+    // Помечаем все остальные кнопки как неактивные
+    document.querySelectorAll('.chatgame-msg-save').forEach(b => {
+      b.textContent = '✓ Сохранить';
+      b.style.background = '';
+      b.disabled = false;
+    });
+    // Эта кнопка — "Сохранено"
+    btn.textContent = '✅ Сохранено';
+    btn.style.background = '#1a5c1a';
+    btn.disabled = true;
     addChatgameWinner(capturedNick, captured);
     stopChatgameTimer();
   };
