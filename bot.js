@@ -585,10 +585,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     margin-right: 2px; display: inline-block;
   }
   #chatgame-chat-panel {
-    width: 300px; flex-shrink: 0;
     display: flex; flex-direction: column;
     border-left: 1px solid var(--panel-border);
     background: rgba(0,0,0,0.25);
+    overflow: hidden;
   }
   #chatgame-chat-title {
     font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
@@ -724,20 +724,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #chatgame-overlay {
     position: fixed; inset: 0; z-index: 9992;
     background: rgba(4,6,4,0.96);
-    display: none; flex-direction: row; gap: 0;
+    display: none; grid-template-columns: 1fr 1fr 1fr; gap: 0;
     backdrop-filter: blur(6px);
   }
-  #chatgame-overlay.visible { display: flex; }
+  #chatgame-overlay.visible { display: grid; }
 
-  /* Левая панель — победитель + его сообщения */
+  /* Колонка переможця (центр) */
   #chatgame-left {
-    flex: 1;
     display: flex; flex-direction: column;
     padding: 24px 20px;
     border-left: 1px solid var(--panel-border);
     border-right: 1px solid var(--panel-border);
     gap: 12px;
     background: rgba(0,0,0,0.3);
+    overflow: hidden;
   }
   #chatgame-winner-name {
     font-family: 'Inter', sans-serif;
@@ -781,9 +781,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     font-size: 12px; text-align: center; padding: 20px;
   }
 
-  /* Правая панель — список победителей */
+  /* Ліва панель — список переможців */
   #chatgame-right {
-    flex: 1; display: flex; flex-direction: column;
+    display: flex; flex-direction: column;
     padding: 24px 20px; gap: 12px; overflow: hidden;
   }
   #chatgame-right-title {
@@ -805,10 +805,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .chatgame-winner-info { flex: 1; min-width: 0; }
   .chatgame-winner-info .cg-nick {
     font-size: 16px; font-weight: 900; color: #fff; font-family: 'Inter', sans-serif;
+    user-select: text; -webkit-user-select: text; cursor: text;
   }
   .chatgame-winner-info .cg-slot {
     font-size: 13px; color: var(--kick); font-family: 'Roboto Mono', monospace;
     margin-top: 3px; word-break: break-word;
+    user-select: text; -webkit-user-select: text; cursor: text;
   }
   .chatgame-winner-info .cg-slot.empty { color: var(--text-muted); font-style: italic; }
   .chatgame-delete-btn {
@@ -1228,7 +1230,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
         <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
         <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
-        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')">💬 Чат</button>
+        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')" style="grid-column:1/-1;">💬 Чат</button>
       </div>
     </div>
 
@@ -1375,7 +1377,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
 <!-- Оверлей режима ЧАТ -->
 <div id="chatgame-overlay">
-  <!-- Ліва панель: список переможців -->
+  <!-- Ліва колонка: список переможців -->
   <div id="chatgame-right">
     <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
     <div id="chatgame-winners-list">
@@ -1383,12 +1385,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         Победителей пока нет
       </div>
     </div>
-    <div id="chatgame-controls">
-      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
-      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
-    </div>
   </div>
-  <!-- Центральна панель: поточний переможець + його повідомлення -->
+  <!-- Центральна колонка: поточний переможець + його повідомлення + кнопки -->
   <div id="chatgame-left">
     <div id="chatgame-winner-name">—</div>
     <div id="chatgame-timer-block">
@@ -1399,10 +1397,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div id="chatgame-msgs">
       <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
     </div>
+    <div id="chatgame-controls">
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
+      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
+    </div>
   </div>
-  <!-- Права панель: живий чат стріму -->
+  <!-- Права колонка: живий чат стріму -->
   <div id="chatgame-chat-panel">
-    <div id="chatgame-chat-title">💬 Чат стрима</div>
+    <div id="chatgame-chat-title">💬 Чат</div>
     <div id="chatgame-chat-box">
       <div class="empty-box">Ожидание сообщений...</div>
     </div>
@@ -2888,6 +2890,8 @@ function openChatgameOverlay(nick) {
   document.getElementById('chatgame-winner-name').textContent = nick;
   document.getElementById('chatgame-msgs').innerHTML =
     '<div id="chatgame-no-msgs">Ожидаем сообщение...</div>';
+  const oldBadge = document.getElementById('chatgame-replied-badge');
+  if (oldBadge) oldBadge.remove();
 
   // Запускаем таймер
   const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
@@ -2908,10 +2912,7 @@ function openChatgameOverlay(nick) {
       document.getElementById('chatgame-sub').textContent = 'ВРЕМЯ ВЫШЛО — НЕТ ОТВЕТА';
       document.getElementById('chatgame-sub').style.color = 'var(--red)';
       document.getElementById('chatgame-sub').style.display = '';
-      // Блокируем кнопки сохранения — отвечать уже нельзя
-      document.querySelectorAll('.chatgame-msg-save').forEach(b => {
-        if (!b.disabled) { b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'default'; }
-      });
+      // НЕ блокируем кнопки — стример может сохранить ответ позже
     }
   }, 1000);
 
@@ -2933,18 +2934,32 @@ function handleChatgameMessage(username, content) {
   if (!chatgameCurrentNick) return;
   if (username.toLowerCase() !== chatgameCurrentNick.toLowerCase()) return;
 
+  const isFirst = chatgameMsgBuffer.length === 0;
   chatgameMsgBuffer.push(content);
 
   const box = document.getElementById('chatgame-msgs');
   const noMsg = document.getElementById('chatgame-no-msgs');
   if (noMsg) noMsg.remove();
 
+  // Якщо перше повідомлення — показуємо індикатор "Ответил"
+  if (isFirst) {
+    const replied = document.getElementById('chatgame-replied-badge');
+    if (!replied) {
+      const badge = document.createElement('div');
+      badge.id = 'chatgame-replied-badge';
+      badge.style.cssText = 'font-size:12px;font-weight:700;color:var(--kick);letter-spacing:2px;text-transform:uppercase;padding:4px 0;';
+      badge.textContent = '✓ ОТВЕТИЛ';
+      box.before(badge);
+    }
+  }
+
   const row = document.createElement('div');
   row.className = 'chatgame-msg-row';
 
+  // Відображаємо емодзі через parseChatContent
   const txt = document.createElement('div');
   txt.className = 'chatgame-msg-text';
-  txt.textContent = content;
+  txt.innerHTML = parseChatContent(content);
 
   const btn = document.createElement('button');
   btn.className = 'chatgame-msg-save';
@@ -2952,13 +2967,13 @@ function handleChatgameMessage(username, content) {
   const captured = content;
   const capturedNick = chatgameCurrentNick;
   btn.onclick = () => {
-    // Помечаем все остальные кнопки как неактивные
     document.querySelectorAll('.chatgame-msg-save').forEach(b => {
       b.textContent = '✓ Сохранить';
       b.style.background = '';
       b.disabled = false;
+      b.style.opacity = '1';
+      b.style.cursor = 'pointer';
     });
-    // Эта кнопка — "Сохранено"
     btn.textContent = '✅ Сохранено';
     btn.style.background = '#1a5c1a';
     btn.disabled = true;
