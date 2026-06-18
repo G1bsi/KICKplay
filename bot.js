@@ -85,11 +85,12 @@ function isValidSession(token) {
 
 // ── Збереження стану ────────────────────────────────────────
 let savedWinners = []; // переможці що зберігаються між сесіями
+let savedChatgameWinners = []; // переможці режиму "Бонусбуря с чатом"
 
 function saveState() {
   const state = {
     rafflePlayers, raffleAccepting, raffleJoinCmd,
-    savedWinners,
+    savedWinners, savedChatgameWinners,
     savedAt: new Date().toISOString()
   };
   try {
@@ -108,7 +109,8 @@ function loadState() {
     raffleAccepting = typeof state.raffleAccepting === 'boolean' ? state.raffleAccepting : false;
     raffleJoinCmd   = state.raffleJoinCmd || '';
     savedWinners    = Array.isArray(state.savedWinners) ? state.savedWinners : [];
-    console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей`);
+    savedChatgameWinners = Array.isArray(state.savedChatgameWinners) ? state.savedChatgameWinners : [];
+    console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей, ${savedChatgameWinners.length} в чат-режиме`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
   }
@@ -1411,6 +1413,15 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="hideCGAddForm()">Отмена</button>
       </div>
     </div>
+    <div id="cg-edit-form" style="display:none;flex-direction:column;gap:6px;margin-top:8px;background:rgba(83,252,24,0.06);border:1px solid #2a5a1a;border-radius:8px;padding:10px;flex-shrink:0;">
+      <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">✎ Редактирование</div>
+      <input type="text" id="cg-edit-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
+      <input type="text" id="cg-edit-msg" placeholder="Сообщение" style="width:100%;box-sizing:border-box;">
+      <div style="display:flex;gap:6px;">
+        <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="submitCGEdit()">Сохранить</button>
+        <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="hideCGEditForm()">Отмена</button>
+      </div>
+    </div>
   </div>
   <!-- Центральна колонка: поточний переможець + його повідомлення + кнопки -->
   <div id="chatgame-left">
@@ -1583,6 +1594,10 @@ async function loadState() {
   if (winnersHistory.length === 0 && Array.isArray(state.savedWinners) && state.savedWinners.length > 0) {
     winnersHistory = state.savedWinners;
     renderWinners();
+  }
+  if (chatgameWinners.length === 0 && Array.isArray(state.savedChatgameWinners) && state.savedChatgameWinners.length > 0) {
+    chatgameWinners = state.savedChatgameWinners;
+    renderChatgameWinners();
   }
 
   if (phase === 'idle') renderParticipants(state.participants);
@@ -2997,6 +3012,13 @@ function handleChatgameMessage(username, content) {
   box.scrollTop = box.scrollHeight;
 }
 
+function saveChatgameWinnersToServer() {
+  fetch('/api/chatgame-winners/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winners: chatgameWinners })
+  });
+}
+
 function addChatgameWinner(nick, slot) {
   // Не дублировать
   const existing = chatgameWinners.find(w => w.nick === nick);
@@ -3011,12 +3033,14 @@ function addChatgameWinner(nick, slot) {
     });
   }
   renderChatgameWinners();
+  saveChatgameWinnersToServer();
   document.getElementById('chatgame-winner-name').textContent = nick;
 }
 
 function deleteChatgameWinner(idx) {
   chatgameWinners.splice(idx, 1);
   renderChatgameWinners();
+  saveChatgameWinnersToServer();
 }
 
 function renderChatgameWinners() {
@@ -3042,18 +3066,38 @@ function renderChatgameWinners() {
   ).join('');
 }
 
+let cgEditingIdx = -1;
+
 function editChatgameWinner(i) {
+  cgEditingIdx = i;
   const w = chatgameWinners[i];
-  const newNick = prompt('Никнейм:', w.nick);
-  if (newNick === null) return;
-  const newSlot = prompt('Сообщение:', w.slot || '');
-  if (newSlot === null) return;
-  w.nick = newNick.trim() || w.nick;
-  w.slot = newSlot.trim() || null;
+  hideCGAddForm();
+  const f = document.getElementById('cg-edit-form');
+  f.style.display = 'flex';
+  document.getElementById('cg-edit-nick').value = w.nick;
+  document.getElementById('cg-edit-msg').value = w.slot || '';
+  document.getElementById('cg-edit-nick').focus();
+  // Прокручуємо форму редагування у видиму область
+  f.scrollIntoView({ block: 'nearest' });
+}
+function hideCGEditForm() {
+  document.getElementById('cg-edit-form').style.display = 'none';
+  cgEditingIdx = -1;
+}
+function submitCGEdit() {
+  if (cgEditingIdx < 0) return;
+  const w = chatgameWinners[cgEditingIdx];
+  const newNick = document.getElementById('cg-edit-nick').value.trim();
+  const newMsg = document.getElementById('cg-edit-msg').value.trim();
+  w.nick = newNick || w.nick;
+  w.slot = newMsg || null;
   renderChatgameWinners();
+  saveChatgameWinnersToServer();
+  hideCGEditForm();
 }
 
 function showCGAddForm() {
+  hideCGEditForm();
   const f = document.getElementById('cg-add-form');
   f.style.display = 'flex';
   document.getElementById('cg-add-nick').value = '';
@@ -3070,6 +3114,7 @@ function submitCGAdd() {
   const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
   chatgameWinners.push({ nick, slot: msg || null, time });
   renderChatgameWinners();
+  saveChatgameWinnersToServer();
   hideCGAddForm();
 }
 
@@ -3732,6 +3777,7 @@ const server = http.createServer((req, res) => {
       count: rafflePlayers.length,
       game: raffleGame,
       savedWinners,
+      savedChatgameWinners,
     }));
     return;
   }
@@ -3745,6 +3791,23 @@ const server = http.createServer((req, res) => {
         const { winners } = JSON.parse(body);
         if (Array.isArray(winners)) {
           savedWinners = winners;
+          saveState();
+        }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  // Зберегти список переможців режиму "Бонусбуря с чатом"
+  if (req.url === '/api/chatgame-winners/save' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winners } = JSON.parse(body);
+        if (Array.isArray(winners)) {
+          savedChatgameWinners = winners;
           saveState();
         }
         res.writeHead(200); res.end(JSON.stringify({ ok: true }));
