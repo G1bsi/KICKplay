@@ -1247,18 +1247,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="toggle-row" style="margin-top:8px;">
-      <span class="toggle-label">Ожидание ответа в чат</span>
-      <label class="switch">
-        <input type="checkbox" id="toggle-confirm" checked onchange="toggleConfirmField()">
-        <span class="slider"></span>
-      </label>
     </div>
-    <div id="confirm-time-field" style="display: block; margin-bottom: 12px;">
-      <div class="field">
-        <label class="field-label">Время на ответ (сек)</label>
-        <input type="number" id="confirm-seconds" value="60" min="5" max="600">
-      </div>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <span style="font-size:18px;">⏱</span>
+      <label class="field-label" style="margin:0; white-space:nowrap;">Время на ответ</label>
+      <input type="number" id="confirm-seconds" value="60" min="5" max="600"
+        style="width:70px; padding:6px 8px; font-size:13px; flex-shrink:0;">
+      <input type="checkbox" id="toggle-confirm" checked style="display:none;">
     </div>
 
     <!-- Кнопки відразу під час на відповідь -->
