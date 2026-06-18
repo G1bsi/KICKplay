@@ -2864,6 +2864,7 @@ function playRevolverSpin() {
 let chatgameWinners = [];       // [{nick, slot, time}]
 let chatgameCurrentNick = '';   // кто сейчас отвечает
 let chatgameMsgBuffer = [];     // сообщения текущего победителя
+let chatgameTimedOut = false;   // время вышло — не принимаем новые сообщения
 let chatgameTimer = null;
 let chatgameTimerSeconds = 0;
 
@@ -2876,6 +2877,7 @@ function startChatgame() {
 function openChatgameOverlay(nick) {
   chatgameCurrentNick = nick;
   chatgameMsgBuffer = [];
+  chatgameTimedOut = false;
   phase = 'racing';
 
   const overlay = document.getElementById('chatgame-overlay');
@@ -2899,14 +2901,12 @@ function openChatgameOverlay(nick) {
     if (chatgameTimerSeconds <= 0) {
       clearInterval(chatgameTimer);
       chatgameTimer = null;
-      // Показываем что время вышло — НЕ добавляем автоматически в победители
-      // Стример сам нажмёт "Следующий победитель" когда захочет
+      chatgameTimedOut = true;
       document.getElementById('chatgame-timer').textContent = '⏰';
       document.getElementById('chatgame-timer').className = '';
       document.getElementById('chatgame-sub').textContent = 'ВРЕМЯ ВЫШЛО — НЕТ ОТВЕТА';
       document.getElementById('chatgame-sub').style.color = 'var(--red)';
       document.getElementById('chatgame-sub').style.display = '';
-      // НЕ блокируем кнопки — стример может сохранить ответ позже
     }
   }, 1000);
 
@@ -2927,6 +2927,7 @@ function renderChatgameTimer(sec) {
 function handleChatgameMessage(username, content) {
   if (!chatgameCurrentNick) return;
   if (username.toLowerCase() !== chatgameCurrentNick.toLowerCase()) return;
+  if (chatgameTimedOut) return; // час вийшов — не приймаємо
 
   const isFirst = chatgameMsgBuffer.length === 0;
   chatgameMsgBuffer.push(content);
