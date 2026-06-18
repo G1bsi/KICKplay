@@ -1249,9 +1249,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="field" style="margin-bottom:10px;">
-      <label class="field-label">⏱ Время на ответ (сек)</label>
-      <input type="number" id="confirm-seconds" value="60" min="5" max="600">
+    </div>
+
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+      <span style="font-size:12px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">⏱ ВРЕМЯ НА ОТВЕТ</span>
+      <input type="number" id="confirm-seconds" value="60" min="5" max="600"
+        style="width:56px;padding:4px 6px;font-size:13px;font-weight:700;text-align:center;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.15);color:#fff;">
       <input type="checkbox" id="toggle-confirm" checked style="display:none;">
     </div>
 
@@ -1746,6 +1749,9 @@ function resetGameUI() {
   document.getElementById('hint').textContent = '';
   const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
   document.getElementById('main-box').className = 'box';
+  // Скидаємо таймери щоб не було багів при реролі
+  if (typeof announceTimer !== 'undefined' && announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+  if (typeof checkTimerInterval !== 'undefined' && checkTimerInterval) { clearInterval(checkTimerInterval); checkTimerInterval = null; }
   renderParticipants(state.participants || []);
 }
 
@@ -2677,7 +2683,7 @@ async function runRevolver(qualifiers) {
   let currentRot = 0;
 
   // ── Пауза — чекаємо кнопку СТАРТ ──
-  hint.textContent = 'Готовий до старту';
+  hint.textContent = '';
   await new Promise(resolve => {
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
