@@ -3965,7 +3965,7 @@ function connect() {
       if (!username || !content) return;
 
       // Відправляємо повідомлення у кастомний чат на фронтенді
-      const chatMsg = JSON.stringify({ username, content, color, badges }));
+      const chatMsg = JSON.stringify({ username, content, color, badges });
       chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
 
       const lower = content.toLowerCase();
