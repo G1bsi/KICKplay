@@ -1346,7 +1346,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
     <div id="cashhunt-controls" style="display:none;">
       <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
-      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
       <button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>
     </div>
   </div>
@@ -1362,7 +1361,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
   <div id="race-overlay-controls" style="display:none;">
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
-    <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRaceOverlay()">Завершить</button>
   </div>
 </div>
@@ -1378,7 +1376,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
   <div id="roulette-overlay-controls" style="display:none;">
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
-    <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
   </div>
 </div>
@@ -1429,7 +1426,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
   <div id="revolver-overlay-controls" style="display:none; margin-top:20px;">
     <button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>
-    <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>
   </div>
 </div>
@@ -1802,26 +1798,6 @@ async function reroll() {
   renderGame(data.game);
 }
 
-async function fastReroll() {
-  if (!state.participants.length) return alert('Нет участников');
-
-  // Закриваємо оверлеї напряму без side-effects (reset/phase change)
-  document.getElementById('race-overlay').classList.remove('visible');
-  document.getElementById('roulette-overlay').classList.remove('visible');
-  document.getElementById('cashhunt-overlay').classList.remove('visible');
-  document.getElementById('revolver-overlay').classList.remove('visible');
-  if (typeof raceAnimId !== 'undefined' && raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
-  if (typeof rouletteTimeout !== 'undefined' && rouletteTimeout) { clearTimeout(rouletteTimeout); rouletteTimeout = null; }
-
-  resetGameUIKeepMode();
-
-  if (gameMode === 'cashhunt') {
-    const n = parseInt(document.getElementById('winners-count').value) || 1;
-    pickRandom(state.participants, Math.min(n, state.participants.length)).forEach(name => addWinner(name));
-  } else {
-    addWinner(state.participants[Math.floor(Math.random() * state.participants.length)]);
-  }
-}
 
 function resetGameUIKeepMode() {
   selected = new Set();
@@ -2410,7 +2386,7 @@ async function runRace(qualifiers, totalLaps) {
           '<span class="standing-pos">' + (pos + 1) + '</span>' +
           '<span class="standing-swatch" style="background:' + carColors[idx] + '"></span>' +
           '<span class="standing-name">' + escapeHtml(qualifiers[idx]) + '</span>' +
-          '<span class="standing-lap">L' + Math.min(lapsArr[idx] + 1, totalLaps) + '/' + totalLaps + '</span>' +
+          '<span class="standing-lap">' + Math.min(lapsArr[idx] + 1, totalLaps) + '/' + totalLaps + '</span>' +
         '</div>';
       }).join('');
   }
