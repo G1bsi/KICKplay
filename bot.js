@@ -1289,9 +1289,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <button class="btn-dark" style="margin:0; flex: 1; font-size: 12px;" onclick="resetRaffle()">🗑 Сброс</button>
     </div>
 
-    <div class="col-title" style="margin-top:16px;">
-      <span>Победители</span>
-      <span class="count" id="winners-count-title">0</span>
+    <div class="col-title" style="margin-top:16px; justify-content:space-between;">
+      <span>Победители <span class="count" id="winners-count-title">0</span></span>
+      <button class="btn-dark btn-small" style="margin:0;padding:4px 10px;font-size:11px;" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑 Удалить всех</button>
     </div>
     <div class="box" id="winners-box" style="flex:1; min-height:220px;">
       <div class="empty-box">Победителей пока нет</div>
@@ -1407,7 +1407,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" style="margin-top:8px;width:100%;font-size:13px;flex-shrink:0;" onclick="showCGAddForm()">＋ Добавить вручную</button>
     <div id="cg-add-form" style="display:none;flex-direction:column;gap:6px;margin-top:8px;background:rgba(0,0,0,0.3);border:1px solid var(--panel-border);border-radius:8px;padding:10px;flex-shrink:0;">
       <input type="text" id="cg-add-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
-      <input type="text" id="cg-add-msg" placeholder="Сообщение (необязательно)" style="width:100%;box-sizing:border-box;">
+      <input type="text" id="cg-add-msg" placeholder="Колл" style="width:100%;box-sizing:border-box;">
       <div style="display:flex;gap:6px;">
         <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="submitCGAdd()">Добавить</button>
         <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="hideCGAddForm()">Отмена</button>
@@ -1432,10 +1432,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
     <div id="chatgame-msgs-label">Сообщения в чат:</div>
     <div id="chatgame-msgs">
-      <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
+      <div id="chatgame-no-msgs"></div>
     </div>
     <div id="chatgame-controls">
-      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий победитель</button>
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 НЕКСТ</button>
       <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
     </div>
   </div>
@@ -2910,7 +2910,7 @@ function openChatgameOverlay(nick) {
 
   document.getElementById('chatgame-winner-name').textContent = nick;
   document.getElementById('chatgame-msgs').innerHTML =
-    '<div id="chatgame-no-msgs">Ожидаем сообщение...</div>';
+    '<div id="chatgame-no-msgs"></div>';
   const oldBadge = document.getElementById('chatgame-replied-badge');
   if (oldBadge) oldBadge.remove();
 
@@ -3434,6 +3434,14 @@ function spawnParticles() {
     document.body.appendChild(p);
     setTimeout(() => p.remove(), 2500);
   }
+}
+
+function deleteAllWinners() {
+  if (!winnersHistory.length) return;
+  if (!confirm('Удалить всех победителей (' + winnersHistory.length + ')? Это действие нельзя отменить.')) return;
+  winnersHistory = [];
+  renderWinners();
+  saveWinnersToServer();
 }
 
 function saveWinnersToServer() {
