@@ -1805,19 +1805,21 @@ async function reroll() {
 async function fastReroll() {
   if (!state.participants.length) return alert('Нет участников');
 
-  hideRaceOverlay();
-  hideRouletteOverlay();
-  closeCashhuntOverlay();
-  closeRevolverOverlay();
+  // Закриваємо оверлеї напряму без side-effects (reset/phase change)
+  document.getElementById('race-overlay').classList.remove('visible');
+  document.getElementById('roulette-overlay').classList.remove('visible');
+  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  document.getElementById('revolver-overlay').classList.remove('visible');
+  if (typeof raceAnimId !== 'undefined' && raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
+  if (typeof rouletteTimeout !== 'undefined' && rouletteTimeout) { clearTimeout(rouletteTimeout); rouletteTimeout = null; }
+
   resetGameUIKeepMode();
 
   if (gameMode === 'cashhunt') {
-    const n = currentGame ? currentGame.winnersNeeded : parseInt(document.getElementById('winners-count').value) || 1;
-    const winners = pickRandom(state.participants, Math.min(n, state.participants.length));
-    winners.forEach(name => addWinner(name));
+    const n = parseInt(document.getElementById('winners-count').value) || 1;
+    pickRandom(state.participants, Math.min(n, state.participants.length)).forEach(name => addWinner(name));
   } else {
-    const winner = state.participants[Math.floor(Math.random() * state.participants.length)];
-    addWinner(winner);
+    addWinner(state.participants[Math.floor(Math.random() * state.participants.length)]);
   }
 }
 
