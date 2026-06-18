@@ -809,6 +809,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #chatgame-right-title {
     font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900;
     color: var(--kick); text-transform: uppercase; letter-spacing: 2px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
   #chatgame-winners-list {
     flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
@@ -1291,7 +1292,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
     <div class="col-title" style="margin-top:16px; justify-content:space-between;">
       <span>Победители <span class="count" id="winners-count-title">0</span></span>
-      <button class="btn-dark btn-small" style="margin:0;padding:4px 10px;font-size:11px;" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑 Удалить всех</button>
+      <button class="btn-dark" style="margin:0;padding:0;width:26px;height:26px;font-size:13px;display:flex;align-items:center;justify-content:center;" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
     </div>
     <div class="box" id="winners-box" style="flex:1; min-height:220px;">
       <div class="empty-box">Победителей пока нет</div>
@@ -1398,7 +1399,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div id="chatgame-overlay">
   <!-- Ліва колонка: список переможців -->
   <div id="chatgame-right">
-    <div id="chatgame-right-title">🏆 Победители (<span id="chatgame-count">0</span>)</div>
+    <div id="chatgame-right-title">
+      <span>🏆 Победители (<span id="chatgame-count">0</span>)</span>
+      <button class="btn-dark" style="margin:0;padding:5px 10px;font-size:11px;text-transform:none;letter-spacing:0;flex-shrink:0;white-space:nowrap;" onclick="deleteAllChatgameWinners()" title="Удалить всех победителей">🗑 Удалить всех</button>
+    </div>
     <div id="chatgame-winners-list">
       <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">
         Победителей пока нет
@@ -1435,7 +1439,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <div id="chatgame-no-msgs"></div>
     </div>
     <div id="chatgame-controls">
-      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 НЕКСТ</button>
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий</button>
       <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
     </div>
   </div>
@@ -3010,6 +3014,14 @@ function handleChatgameMessage(username, content) {
   row.appendChild(btn);
   box.appendChild(row);
   box.scrollTop = box.scrollHeight;
+}
+
+function deleteAllChatgameWinners() {
+  if (!chatgameWinners.length) return;
+  if (!confirm('Удалить всех победителей (' + chatgameWinners.length + ')? Это действие нельзя отменить.')) return;
+  chatgameWinners = [];
+  renderChatgameWinners();
+  saveChatgameWinnersToServer();
 }
 
 function saveChatgameWinnersToServer() {
