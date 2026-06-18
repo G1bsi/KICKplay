@@ -198,8 +198,8 @@ const LOGIN_HTML = () => `<!DOCTYPE html>
   <div class="err" id="err"></div>
 </div>
 <script>
-async function login() {
-  const pw = document.getElementById('pw').value;
+async function login(pw) {
+  if (!pw) pw = document.getElementById('pw').value;
   if (!pw) return;
   const res = await fetch('/api/login', {
     method: 'POST',
@@ -209,16 +209,28 @@ async function login() {
   if (res.ok) {
     const { token } = await res.json();
     document.cookie = 'session=' + token + '; path=/; max-age=86400; SameSite=Strict';
+    localStorage.setItem('botpw', pw);
     location.reload();
   } else {
+    localStorage.removeItem('botpw');
     const err = document.getElementById('err');
     err.textContent = 'Доступ запрещен. Неверный пароль.';
     setTimeout(() => err.textContent = '', 3000);
-    document.getElementById('pw').value = '';
-    document.getElementById('pw').focus();
+    const pwEl = document.getElementById('pw');
+    if (pwEl) { pwEl.value = ''; pwEl.focus(); }
   }
 }
-document.getElementById('pw').focus();
+
+// Автологін при відкритті сторінки
+(async () => {
+  const saved = localStorage.getItem('botpw');
+  if (saved) {
+    document.getElementById('err').textContent = 'Вхід...';
+    await login(saved);
+  } else {
+    document.getElementById('pw').focus();
+  }
+})();
 </script>
 </body>
 </html>`;
@@ -1334,6 +1346,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
     <div id="cashhunt-controls" style="display:none;">
       <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+      <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
       <button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>
     </div>
   </div>
@@ -1416,6 +1429,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
   <div id="revolver-overlay-controls" style="display:none; margin-top:20px;">
     <button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>
+    <button class="btn-dark" onclick="fastReroll()">⚡ Быстрый рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>
   </div>
 </div>
@@ -1789,45 +1803,32 @@ async function reroll() {
 }
 
 async function fastReroll() {
-  if (gameMode === 'race') {
-    let qualifiers = raceQualifiers;
-    if (!qualifiers.length) {
-      const n = Math.min(parseInt(document.getElementById('race-count').value) || 10, state.participants.length);
-      if (n < 2) return alert('Нужно минимум 2 участника');
-      qualifiers = pickRandom(state.participants, Math.min(n, 300));
-    }
-    hideRaceOverlay();
-    resetGameUIKeepMode();
-    const winner = qualifiers[Math.floor(Math.random() * qualifiers.length)];
-    addWinner(winner);
-    return;
-  }
-  if (gameMode === 'roulette') {
-    if (!state.participants.length) return alert('Нет участников');
-    hideRouletteOverlay();
-    resetGameUIKeepMode();
+  if (!state.participants.length) return alert('Нет участников');
+
+  hideRaceOverlay();
+  hideRouletteOverlay();
+  closeCashhuntOverlay();
+  closeRevolverOverlay();
+  resetGameUIKeepMode();
+
+  if (gameMode === 'cashhunt') {
+    const n = currentGame ? currentGame.winnersNeeded : parseInt(document.getElementById('winners-count').value) || 1;
+    const winners = pickRandom(state.participants, Math.min(n, state.participants.length));
+    winners.forEach(name => addWinner(name));
+  } else {
     const winner = state.participants[Math.floor(Math.random() * state.participants.length)];
     addWinner(winner);
-    return;
   }
-
-  const n = currentGame ? currentGame.winnersNeeded : parseInt(document.getElementById('winners-count').value);
-  if (!n || n < 1) return alert('Укажите количество победителей');
-  const res = await fetch('/api/raffle/fastreroll', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ winners: n })
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error || 'Ошибка');
-
-  resetGameUI();
-  data.winners.forEach(name => addWinner(name));
 }
 
 function resetGameUIKeepMode() {
   selected = new Set();
   phase = 'idle';
   raceQualifiers = [];
+  hideRaceOverlay();
+  hideRouletteOverlay();
+  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
   const _prog = document.getElementById('progress'); if(_prog) _prog.textContent = '';
