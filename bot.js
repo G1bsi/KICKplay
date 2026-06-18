@@ -1247,13 +1247,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    </div>
-
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-      <span style="font-size:18px;">⏱</span>
-      <label class="field-label" style="margin:0; white-space:nowrap;">Время на ответ</label>
-      <input type="number" id="confirm-seconds" value="60" min="5" max="600"
-        style="width:70px; padding:6px 8px; font-size:13px; flex-shrink:0;">
+    <div class="field" style="margin-bottom:10px;">
+      <label class="field-label">⏱ Время на ответ (сек)</label>
+      <input type="number" id="confirm-seconds" value="60" min="5" max="600">
       <input type="checkbox" id="toggle-confirm" checked style="display:none;">
     </div>
 
