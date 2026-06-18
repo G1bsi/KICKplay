@@ -1249,8 +1249,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    </div>
-
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
       <span style="font-size:12px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">⏱ ВРЕМЯ НА ОТВЕТ</span>
       <input type="number" id="confirm-seconds" value="60" min="5" max="600"
