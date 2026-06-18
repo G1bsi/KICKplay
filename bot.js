@@ -84,9 +84,12 @@ function isValidSession(token) {
 }
 
 // ── Збереження стану ────────────────────────────────────────
+let savedWinners = []; // переможці що зберігаються між сесіями
+
 function saveState() {
   const state = {
     rafflePlayers, raffleAccepting, raffleJoinCmd,
+    savedWinners,
     savedAt: new Date().toISOString()
   };
   try {
@@ -104,7 +107,8 @@ function loadState() {
     rafflePlayers   = Array.isArray(state.rafflePlayers) ? state.rafflePlayers : [];
     raffleAccepting = typeof state.raffleAccepting === 'boolean' ? state.raffleAccepting : false;
     raffleJoinCmd   = state.raffleJoinCmd || '';
-    console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, регистрация: ${raffleAccepting ? 'открыта' : 'закрыта'}`);
+    savedWinners    = Array.isArray(state.savedWinners) ? state.savedWinners : [];
+    console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
   }
@@ -1043,6 +1047,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border: 1px dashed rgba(83,252,24,0.2);
   }
   .w-msg.empty { color: var(--text-muted); font-style: italic; background: rgba(0,0,0,0.2); border-color: transparent; }
+  .w-edit-btn, .w-del-btn {
+    background: transparent; border: 1px solid #333; color: #666;
+    border-radius: 5px; width: 26px; height: 26px; font-size: 13px;
+    cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; padding: 0; margin-left: 3px;
+  }
+  .w-edit-btn:hover { border-color: #53fc18; color: #53fc18; }
+  .w-del-btn:hover  { border-color: var(--red); color: var(--red); }
 
   /* ── Оголошення переможця (кінематографічний оверлей) ──────── */
   #winner-announce {
@@ -1390,6 +1402,15 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         Победителей пока нет
       </div>
     </div>
+    <button class="btn-dark" style="margin-top:8px;width:100%;font-size:13px;flex-shrink:0;" onclick="showCGAddForm()">＋ Добавить вручную</button>
+    <div id="cg-add-form" style="display:none;flex-direction:column;gap:6px;margin-top:8px;background:rgba(0,0,0,0.3);border:1px solid var(--panel-border);border-radius:8px;padding:10px;flex-shrink:0;">
+      <input type="text" id="cg-add-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
+      <input type="text" id="cg-add-msg" placeholder="Сообщение (необязательно)" style="width:100%;box-sizing:border-box;">
+      <div style="display:flex;gap:6px;">
+        <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="submitCGAdd()">Добавить</button>
+        <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="hideCGAddForm()">Отмена</button>
+      </div>
+    </div>
   </div>
   <!-- Центральна колонка: поточний переможець + його повідомлення + кнопки -->
   <div id="chatgame-left">
@@ -1544,7 +1565,6 @@ async function loadState() {
   }
   raffleOpen = state.accepting;
 
-  // participant-count видалено (показується через participants-count-title)
   document.getElementById('participants-count-title').textContent = state.count;
   document.getElementById('conn-dot').className = 'dot ' + (state.accepting ? 'open' : 'closed');
 
@@ -1557,6 +1577,12 @@ async function loadState() {
     regBtn.textContent = '▶ Начать регистрацию';
     regBtn.className = 'btn-green';
     cmdInput.disabled = false;
+  }
+
+  // Відновлюємо переможців з сервера (лише при першому завантаженні)
+  if (winnersHistory.length === 0 && Array.isArray(state.savedWinners) && state.savedWinners.length > 0) {
+    winnersHistory = state.savedWinners;
+    renderWinners();
   }
 
   if (phase === 'idle') renderParticipants(state.participants);
@@ -1616,6 +1642,7 @@ async function resetRaffle() {
   await fetch('/api/raffle/reset', { method: 'POST' });
   winnersHistory = [];
   renderWinners();
+  saveWinnersToServer();
   closeAnnounce();
   resetGameUI();
   loadState();
@@ -2996,7 +3023,7 @@ function renderChatgameWinners() {
   const list = document.getElementById('chatgame-winners-list');
   document.getElementById('chatgame-count').textContent = chatgameWinners.length;
   if (!chatgameWinners.length) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-family:var(--font-mono);font-size:12px;text-align:center;padding:20px;">Победителей пока нет</div>';
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">Победителей пока нет</div>';
     return;
   }
   list.innerHTML = chatgameWinners.map((w, i) =>
@@ -3009,9 +3036,41 @@ function renderChatgameWinners() {
         '</div>' +
         '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + w.time + '</div>' +
       '</div>' +
+      '<button class="chatgame-delete-btn" onclick="editChatgameWinner(' + i + ')" title="Редактировать" style="color:#53fc18;border-color:#1a3a1a;margin-right:4px;">✎</button>' +
       '<button class="chatgame-delete-btn" onclick="deleteChatgameWinner(' + i + ')" title="Удалить">🗑</button>' +
     '</div>'
   ).join('');
+}
+
+function editChatgameWinner(i) {
+  const w = chatgameWinners[i];
+  const newNick = prompt('Никнейм:', w.nick);
+  if (newNick === null) return;
+  const newSlot = prompt('Сообщение:', w.slot || '');
+  if (newSlot === null) return;
+  w.nick = newNick.trim() || w.nick;
+  w.slot = newSlot.trim() || null;
+  renderChatgameWinners();
+}
+
+function showCGAddForm() {
+  const f = document.getElementById('cg-add-form');
+  f.style.display = 'flex';
+  document.getElementById('cg-add-nick').value = '';
+  document.getElementById('cg-add-msg').value = '';
+  document.getElementById('cg-add-nick').focus();
+}
+function hideCGAddForm() {
+  document.getElementById('cg-add-form').style.display = 'none';
+}
+function submitCGAdd() {
+  const nick = document.getElementById('cg-add-nick').value.trim();
+  if (!nick) return;
+  const msg = document.getElementById('cg-add-msg').value.trim();
+  const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+  chatgameWinners.push({ nick, slot: msg || null, time });
+  renderChatgameWinners();
+  hideCGAddForm();
 }
 
 function stopChatgameTimer() {
@@ -3332,6 +3391,13 @@ function spawnParticles() {
   }
 }
 
+function saveWinnersToServer() {
+  fetch('/api/winners/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winners: winnersHistory })
+  });
+}
+
 function addWinner(name) {
   const confirmOn = document.getElementById('toggle-confirm').checked;
   const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
@@ -3340,6 +3406,7 @@ function addWinner(name) {
   const entry = { name, time, status: confirmOn ? 'pending' : 'ok', message: null };
   winnersHistory.unshift(entry);
   renderWinners();
+  saveWinnersToServer();
 
   showAnnounce(name, seconds, confirmOn);
 
@@ -3359,6 +3426,8 @@ function addWinner(name) {
     });
   }
 }
+
+// ── Ручне додавання / редагування / видалення переможців ──
 
 function renderWinners() {
   document.getElementById('winners-count-title').textContent = winnersHistory.length;
@@ -3393,7 +3462,8 @@ function renderWinners() {
     return '<div class="winner-row ' + rowClass + '">' +
       '<div class="winner-top">' + statusHtml +
       '<span class="w-name">' + escapeHtml(w.name) + '</span>' +
-      '<span class="w-time">' + w.time + '</span></div>' +
+      '<span class="w-time">' + w.time + '</span>' +
+      '</div>' +
       msgHtml +
     '</div>';
   }).join('');
@@ -3661,7 +3731,33 @@ const server = http.createServer((req, res) => {
       participants: rafflePlayers,
       count: rafflePlayers.length,
       game: raffleGame,
+      savedWinners,
     }));
+    return;
+  }
+
+  // Зберегти список переможців (викликається з клієнта)
+  if (req.url === '/api/winners/save' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { winners } = JSON.parse(body);
+        if (Array.isArray(winners)) {
+          savedWinners = winners;
+          saveState();
+        }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
+  // Очистити збережених переможців
+  if (req.url === '/api/winners/clear' && req.method === 'POST') {
+    savedWinners = [];
+    saveState();
+    res.writeHead(200); res.end(JSON.stringify({ ok: true }));
     return;
   }
 
