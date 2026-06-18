@@ -589,6 +589,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     border-left: 1px solid var(--panel-border);
     background: rgba(0,0,0,0.25);
     overflow: hidden;
+    border-radius: 0 16px 16px 0;
   }
   #chatgame-chat-title {
     font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
@@ -785,6 +786,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #chatgame-right {
     display: flex; flex-direction: column;
     padding: 24px 20px; gap: 12px; overflow: hidden;
+    border-radius: 16px 0 0 16px;
   }
   #chatgame-right-title {
     font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900;
@@ -1230,7 +1232,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
         <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
         <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
-        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')" style="grid-column:1/-1;">💬 Чат</button>
+        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')" style="grid-column:1/-1;">💬 БОНУСБУРЯ С ЧАТОМ</button>
       </div>
     </div>
 
@@ -3030,14 +3032,18 @@ function renderChatgameWinners() {
 
 function stopChatgameTimer() {
   if (chatgameTimer) { clearInterval(chatgameTimer); chatgameTimer = null; }
-  chatgameCurrentNick = '';
+  // НЕ очищаємо chatgameCurrentNick — щоб нові повідомлення продовжували надходити
   document.getElementById('chatgame-timer').textContent = '—';
   document.getElementById('chatgame-sub').style.display = 'none';
 }
 
+function clearChatgameWinner() {
+  chatgameCurrentNick = '';
+}
+
 function chatgameNextWinner() {
-  // Выбираем следующего случайного из участников (не из уже победивших)
   stopChatgameTimer();
+  clearChatgameWinner();
   const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
   const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
   if (!pool.length) { alert('Все участники уже победили!'); return; }
@@ -3047,7 +3053,7 @@ function chatgameNextWinner() {
 
 function closeChatgameOverlay() {
   stopChatgameTimer();
-  chatgameCurrentNick = '';
+  clearChatgameWinner();
   chatgameMsgBuffer = [];
   document.getElementById('chatgame-overlay').classList.remove('visible');
   if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
