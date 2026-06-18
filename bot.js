@@ -580,6 +580,27 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     height: 1.6em; width: auto; vertical-align: middle;
     margin: 0 1px; display: inline-block;
   }
+  .kick-badge {
+    height: 1.2em; width: auto; vertical-align: middle;
+    margin-right: 2px; display: inline-block;
+  }
+  #chatgame-chat-panel {
+    width: 300px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--panel-border);
+    background: rgba(0,0,0,0.25);
+  }
+  #chatgame-chat-title {
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+    color: var(--kick); letter-spacing: 2px; text-transform: uppercase;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--panel-border);
+    flex-shrink: 0;
+  }
+  #chatgame-chat-box {
+    flex: 1; overflow-y: auto; padding: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  #chatgame-chat-box .chat-msg { font-size: 12px; }
   .chat-msg:hover {
     background: rgba(255,255,255,0.05);
   }
@@ -710,10 +731,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* Левая панель — победитель + его сообщения */
   #chatgame-left {
-    width: 800px; flex-shrink: 0;
+    flex: 1;
     display: flex; flex-direction: column;
     padding: 24px 20px;
     border-left: 1px solid var(--panel-border);
+    border-right: 1px solid var(--panel-border);
     gap: 12px;
     background: rgba(0,0,0,0.3);
   }
@@ -1366,7 +1388,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
     </div>
   </div>
-  <!-- Права панель: поточний переможець + його повідомлення -->
+  <!-- Центральна панель: поточний переможець + його повідомлення -->
   <div id="chatgame-left">
     <div id="chatgame-winner-name">—</div>
     <div id="chatgame-timer-block">
@@ -1376,6 +1398,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <div id="chatgame-msgs-label">Сообщения в чат:</div>
     <div id="chatgame-msgs">
       <div id="chatgame-no-msgs">Ожидаем сообщение...</div>
+    </div>
+  </div>
+  <!-- Права панель: живий чат стріму -->
+  <div id="chatgame-chat-panel">
+    <div id="chatgame-chat-title">💬 Чат стрима</div>
+    <div id="chatgame-chat-box">
+      <div class="empty-box">Ожидание сообщений...</div>
     </div>
   </div>
 </div>
@@ -1414,6 +1443,32 @@ const chatBox = document.getElementById('chat-box');
 let msgCount = 0;
 
 // Розпарсити [emote:ID:NAME] у повідомленнях Kick і вивести як <img>
+// Рендеримо значки Kick (модератор, OG, підписник тощо)
+function renderBadges(badges) {
+  if (!badges || !badges.length) return '';
+  return badges.map(b => {
+    const url = b.badge_image?.src || b.src || '';
+    const label = b.text || b.type || '';
+    if (!url) return '';
+    return '<img class="kick-badge" src="' + escapeAttr(url) + '" alt="' + escapeAttr(label) + '" title="' + escapeAttr(label) + '">';
+  }).join('');
+}
+
+// Додаємо повідомлення в боковий чат оверлею ЧАТ
+function appendChatgameChatMsg(username, content, color, badges) {
+  const box = document.getElementById('chatgame-chat-box');
+  if (!box) return;
+  const empty = box.querySelector('.empty-box');
+  if (empty) empty.remove();
+
+  const el = document.createElement('div');
+  el.className = 'chat-msg';
+  el.innerHTML = renderBadges(badges || []) + '<b style="color:' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + parseChatContent(content) + '</span>';
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  if (box.children.length > 200) box.removeChild(box.firstChild);
+}
+
 function parseChatContent(content) {
   const re = /\\[emote:(\\d+):([^\\]]+)\\]/g;
   let result = '';
@@ -1446,14 +1501,14 @@ chatEvtSource.onmessage = (e) => {
     return;
   }
 
-  const { username, content, color } = parsed;
+  const { username, content, color, badges = [] } = parsed;
   
   const empty = chatBox.querySelector('.empty-box');
   if (empty) empty.remove();
 
   const msgEl = document.createElement('div');
   msgEl.className = 'chat-msg';
-  msgEl.innerHTML = '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + parseChatContent(content) + '</span>';
+  msgEl.innerHTML = renderBadges(badges) + '<b style="color: ' + escapeHtml(color) + '">' + escapeHtml(username) + '</b>: <span>' + parseChatContent(content) + '</span>';
   
   chatBox.appendChild(msgEl);
   msgCount++;
@@ -1464,8 +1519,11 @@ chatEvtSource.onmessage = (e) => {
     chatBox.removeChild(chatBox.firstChild);
   }
 
-  // Перехватываем сообщения победителя в режиме ЧАТ
-  if (gameMode === 'chatgame') handleChatgameMessage(username, content);
+  // В режиме ЧАТ — добавляем в панель переможця И в боковой чат оверлея
+  if (gameMode === 'chatgame') {
+    handleChatgameMessage(username, content);
+    appendChatgameChatMsg(username, content, color, badges);
+  }
 };
 
 async function loadState() {
@@ -3902,11 +3960,12 @@ function connect() {
       const username = data?.sender?.username;
       const content  = data?.content?.trim();
       const color = data?.sender?.identity?.color || '#53fc18';
+      const badges = data?.sender?.identity?.badges || [];
       
       if (!username || !content) return;
 
       // Відправляємо повідомлення у кастомний чат на фронтенді
-      const chatMsg = JSON.stringify({ username, content, color });
+      const chatMsg = JSON.stringify({ username, content, color, badges }));
       chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
 
       const lower = content.toLowerCase();
