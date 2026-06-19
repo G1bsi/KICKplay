@@ -1757,7 +1757,14 @@ let raceQualifiers = [];
 let raceAnimId = null;
 
 function setGameMode(mode) {
-  if (phase !== 'idle') return;
+  // Примусово закриваємо всі оверлеї та скидаємо стан перед перемиканням режиму
+  hideRaceOverlay();
+  hideRouletteOverlay();
+  closeRevolverOverlay();
+  closeChatgameOverlay();
+  closeCashhuntOverlay();
+  phase = 'idle';
+
   gameMode = mode;
   document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
   document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
@@ -1766,10 +1773,6 @@ function setGameMode(mode) {
   document.getElementById('mode-btn-chatgame').classList.toggle('active', mode === 'chatgame');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
-  hideRaceOverlay();
-  hideRouletteOverlay();
-  closeRevolverOverlay();
-  closeChatgameOverlay();
 }
 
 function hideRaceOverlay() {
@@ -2660,7 +2663,7 @@ async function startRevolverGame() {
 
 function closeRevolverOverlay() {
   document.getElementById('revolver-overlay').classList.remove('visible');
-  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
+  if (phase !== 'idle') { phase = 'idle'; resetGameUI(); }
 }
 
 async function runRevolver(qualifiers) {
@@ -3156,7 +3159,7 @@ function closeChatgameOverlay() {
   clearChatgameWinner();
   chatgameMsgBuffer = [];
   document.getElementById('chatgame-overlay').classList.remove('visible');
-  if (phase === 'racing') { phase = 'idle'; resetGameUI(); }
+  if (phase !== 'idle') { phase = 'idle'; resetGameUI(); }
 }
 
 function closeRaceOverlay() {
