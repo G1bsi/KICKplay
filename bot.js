@@ -1878,7 +1878,7 @@ async function startRoulette() {
   controls.style.display = 'none';
   overlayHint.textContent = 'Крутим барабан...';
 
-  const winner = state.participants[Math.floor(Math.random() * state.participants.length)];
+  const winner = state.participants[secureRandomInt(state.participants.length)];
 
   const STRIP_LEN = 60;
   const WINNER_IDX = 52;
@@ -1923,14 +1923,32 @@ function closeRouletteOverlay() {
   resetGameUI();
 }
 
-function pickRandom(arr, n) {
-  const copy = [...arr];
-  const result = [];
-  for (let i = 0; i < n && copy.length; i++) {
-    const idx = Math.floor(Math.random() * copy.length);
-    result.push(copy.splice(idx, 1)[0]);
+// Криптографічно стійкий випадковий цілий [0, max) — без зміщення (rejection sampling)
+function secureRandomInt(max) {
+  if (max <= 0) return 0;
+  const limit = Math.floor(0xFFFFFFFF / max) * max;
+  const buf = new Uint32Array(1);
+  let x;
+  do {
+    crypto.getRandomValues(buf);
+    x = buf[0];
+  } while (x >= limit);
+  return x % max;
+}
+
+// Перемішування Фішера-Йейтса на крипто-рандомі
+function secureShuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = secureRandomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return result;
+  return a;
+}
+
+function pickRandom(arr, n) {
+  // Чесний вибір n унікальних елементів через крипто-перемішування
+  return secureShuffle(arr).slice(0, n);
 }
 
 async function startRaceGame() {
@@ -2731,7 +2749,7 @@ async function runRevolver(qualifiers) {
   while (remaining.length > 1) {
     hint.textContent = 'Крутим барабан...';
 
-    const killIdx = Math.floor(Math.random() * remaining.length);
+    const killIdx = secureRandomInt(remaining.length);
     const target = remaining[killIdx];
 
     const targetPos = 270;
@@ -4072,7 +4090,7 @@ const server = http.createServer((req, res) => {
         if (!count || count < 1 || count > rafflePlayers.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців' })); return;
         }
-        const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
+        const shuffled = secureShuffleServer(rafflePlayers);
         const winnersList = shuffled.slice(0, count);
         raffleGame = { winnersNeeded: count, cells: null, winners: winnersList, fast: true };
         console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')}`);
@@ -4088,7 +4106,20 @@ const server = http.createServer((req, res) => {
 });
 
 // Генерує сітку: кількість клітинок = кількості учасників, без обмежень
+// Криптографічно стійке перемішування (Фішер-Йейтс) на сервері
+function secureShuffleServer(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    // crypto.randomInt — рівномірний розподіл без зміщення
+    const j = crypto.randomInt(0, i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function buildRaffleGame(n) {
+  // Cash Hunt — звичайне перемішування для розкидання по клітинках,
+  // переможця вибирає сам стрімер кліком, тому крипто тут не потрібне
   const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
   const gridSize = shuffled.length;
   const cells = shuffled.slice(0, gridSize);
