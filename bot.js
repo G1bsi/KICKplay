@@ -3282,7 +3282,7 @@ let rsoFighters = [], rsoBullets = [], rsoFloats = [], rsoCovers = [], rsoTracer
 let rsoW = 1000, rsoH = 440, rsoPending = null;
 const RSO_EMOJI = ['😎','🤠','👽','🤖','😈','🥷','🧛','🦹','🧟','👹'];
 const RSO_COLORS = ['#ff5a5a','#5a9bff','#5aff8a','#ffd24a','#c77dff','#ff8a4a','#4affd2','#ff5ad2','#aaff4a','#4a9bff'];
-const RAK = { fireRate: 100, magSize: 30, reloadTime: 2500, baseSpread: 0.015, maxSpread: 0.22, spreadPerShot: 0.022, spreadRecover: 0.06, bulletSpeed: 16, baseDmg: 26, headMult: 2.4, headChance: 0.18, range: 620 };
+const RAK = { fireRate: 165, magSize: 30, reloadTime: 2500, baseSpread: 0.02, maxSpread: 0.26, spreadPerShot: 0.026, spreadRecover: 0.05, bulletSpeed: 15, baseDmg: 22, headMult: 2.3, headChance: 0.16, range: 620 };
 
 function rsoStart(finalists) {
   royPhase = 'shootout';
@@ -3295,16 +3295,20 @@ function rsoStart(finalists) {
   rsoCanvas.width = rsoW; rsoCanvas.height = rsoH;
   rsoCtx = rsoCanvas.getContext('2d');
   rsoGenCovers();
+  const total = finalists.length;
+  // визначаємо точки спавну рівномірно по периметру карти, максимально розкидані
+  const spawnPts = rsoSpawnPoints(total);
   rsoFighters = finalists.map((p, i) => {
-    let x, y, tries = 0;
-    do {
-      const edge = i % 4, m = 60;
-      if (edge === 0) { x = m + royFloat()*(rsoW-2*m); y = m + royFloat()*60; }
-      else if (edge === 1) { x = rsoW-m - royFloat()*60; y = m + royFloat()*(rsoH-2*m); }
-      else if (edge === 2) { x = m + royFloat()*(rsoW-2*m); y = rsoH-m - royFloat()*60; }
-      else { x = m + royFloat()*60; y = m + royFloat()*(rsoH-2*m); }
+    let pt = spawnPts[i], tries = 0;
+    let x = pt.x, y = pt.y;
+    // якщо точка в укритті — трохи зміщуємо
+    while (tries < 20 && rsoCoverAt(x, y, 20)) {
+      x = pt.x + (royFloat()*2-1) * 30;
+      y = pt.y + (royFloat()*2-1) * 30;
+      x = Math.max(40, Math.min(rsoW-40, x));
+      y = Math.max(40, Math.min(rsoH-40, y));
       tries++;
-    } while (tries < 25 && rsoCoverAt(x, y, 20));
+    }
     const hp = p.startHP || 100;
     return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], emoji: RSO_EMOJI[i%RSO_EMOJI.length], target: null, radius: 14, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1 };
   });
@@ -3352,6 +3356,40 @@ function rsoBegin() {
     if (rsoRunning) rsoRAF = requestAnimationFrame(loop);
   }
   rsoRAF = requestAnimationFrame(loop);
+}
+
+// Генерує N точок спавну максимально розкиданих по краях карти
+function rsoSpawnPoints(n) {
+  const m = 55; // відступ від краю
+  const W = rsoW, H = rsoH;
+  const pts = [];
+
+  if (n === 1) return [{ x: W/2, y: H/2 }];
+  if (n === 2) {
+    // по діагоналі — протилежні кути
+    return [{ x: m, y: m }, { x: W-m, y: H-m }];
+  }
+  if (n === 3) {
+    return [{ x: m, y: m }, { x: W-m, y: m }, { x: W/2, y: H-m }];
+  }
+  if (n === 4) {
+    // всі 4 кути
+    return [{ x: m, y: m }, { x: W-m, y: m }, { x: W-m, y: H-m }, { x: m, y: H-m }];
+  }
+
+  // 5+ — рівномірно по периметру прямокутника
+  const perim = 2 * (W - 2*m) + 2 * (H - 2*m);
+  for (let i = 0; i < n; i++) {
+    let d = (i / n) * perim;
+    const wSide = W - 2*m, hSide = H - 2*m;
+    let x, y;
+    if (d < wSide) { x = m + d; y = m; }
+    else if (d < wSide + hSide) { x = W - m; y = m + (d - wSide); }
+    else if (d < 2*wSide + hSide) { x = W - m - (d - wSide - hSide); y = H - m; }
+    else { x = m; y = H - m - (d - 2*wSide - hSide); }
+    pts.push({ x, y });
+  }
+  return pts;
 }
 
 function rsoGenCovers() {
