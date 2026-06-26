@@ -751,11 +751,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
   #royale-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: var(--kick); }
   #royale-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
-  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: center; }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: center; align-items: stretch; }
   .royale-side {
-    width: 180px; flex-shrink: 0; background: rgba(0,0,0,0.3);
+    width: clamp(120px, 16vw, 200px); flex-shrink: 1; min-width: 0; background: rgba(0,0,0,0.3);
     border: 1px solid var(--panel-border); border-radius: 10px;
     padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  }
+  @media (max-width: 760px) {
+    .royale-side { width: clamp(90px, 22vw, 140px); padding: 6px; }
+    #royale-top h2 { font-size: 14px; }
+    #royale-status { font-size: 11px; }
   }
   .royale-side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--kick); margin: 0 0 6px; }
   .royale-pill { font-size: 12px; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); display: flex; justify-content: space-between; gap: 6px; }
@@ -766,7 +771,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
   #royale-grid { position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.015); }
   .rcell { position: relative; background: rgba(83,252,24,0.03); border: 1px solid rgba(83,252,24,0.08); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #cfe; overflow: hidden; transition: background 0.5s, opacity 0.5s, border-color 0.5s; }
-  .rcell .rcoord { position: absolute; top: 1px; left: 2px; font-size: 7px; color: rgba(255,255,255,0.3); pointer-events: none; }
+  .rcell .rcoord { position: absolute; top: 2px; left: 3px; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.75); pointer-events: none; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .rcell .rocc { font-size: 9px; line-height: 1.1; text-align: center; padding: 1px; word-break: break-all; }
   .rcell .rbadge { background: var(--kick); color: #000; border-radius: 6px; padding: 0 4px; font-size: 9px; margin-top: 1px; }
   .rcell.danger { background: rgba(43,140,255,0.22); border-color: rgba(43,140,255,0.45); }
@@ -1475,6 +1480,20 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-orange" onclick="royaleShrinkZone()">🌀 Зона</button>
     <button class="btn-dark" style="background:var(--red);color:#fff;" onclick="royaleRedZone()">💥 Красная зона</button>
     <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
+  </div>
+  <!-- Тестова кнопка-олівець (ручне заповнення) -->
+  <button id="roy-test-btn" onclick="royToggleTestForm()" title="Тест: добавить игрока вручную"
+    style="position:absolute;left:14px;bottom:14px;width:42px;height:42px;border-radius:50%;font-size:18px;
+    background:rgba(255,255,255,0.08);border:1px solid var(--panel-border);color:#ccc;cursor:pointer;z-index:5;">✏️</button>
+  <div id="roy-test-form" style="position:absolute;left:14px;bottom:64px;z-index:6;display:none;flex-direction:column;gap:6px;
+    background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:200px;">
+    <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Тест без стрима</div>
+    <input type="text" id="roy-test-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
+    <input type="text" id="roy-test-coord" placeholder="Клетка (напр. C5)" style="width:100%;box-sizing:border-box;">
+    <div style="display:flex;gap:6px;">
+      <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd()">Добавить</button>
+      <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd10()">+10 рандом</button>
+    </div>
   </div>
 </div>
 <!-- Екран перестрілки БР -->
@@ -3049,9 +3068,11 @@ function startRoyale() {
 function royBuildGrid() {
   const grid = document.getElementById('royale-grid');
   // розмір клітинки — максимально великий під доступний простір (ширина і висота)
-  const availW = Math.min(window.innerWidth - 420, 1100);
-  const availH = window.innerHeight - 230;
-  const cellSize = Math.max(40, Math.min(82, Math.floor(Math.min(availW, availH) / ROY_N)));
+  // динамічна ширина бокових панелей (clamp 120-200px по 16vw, ×2 + відступи)
+  const sideW = Math.min(200, Math.max(120, window.innerWidth * 0.16)) * 2 + 60;
+  const availW = window.innerWidth - sideW;
+  const availH = window.innerHeight - 200;
+  const cellSize = Math.max(26, Math.min(80, Math.floor(Math.min(availW, availH) / ROY_N)));
   grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
   grid.innerHTML = '';
   for (let r = 0; r < ROY_ROWS; r++) {
@@ -3087,6 +3108,33 @@ function royHandleMessage(nick, text) {
   if (!coord) return;
   if (royPlayers[nick] && !royPlayers[nick].alive) return; // вибулі не повертаються
   royPlayers[nick] = { nick, col: coord.col, row: coord.row, alive: true, dying: false, removed: false };
+  royRender();
+}
+
+// ── Тестове заповнення без стріма ──
+function royToggleTestForm() {
+  const f = document.getElementById('roy-test-form');
+  f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
+  if (f.style.display === 'flex') document.getElementById('roy-test-nick').focus();
+}
+function royTestAdd() {
+  const nick = document.getElementById('roy-test-nick').value.trim();
+  const coord = document.getElementById('roy-test-coord').value.trim();
+  if (!nick || !coord) return;
+  const c = royParseCoord(coord);
+  if (!c) { alert('Неверная клетка (пример: C5)'); return; }
+  royPlayers[nick] = { nick, col: c.col, row: c.row, alive: true, dying: false, removed: false };
+  royRender();
+  document.getElementById('roy-test-nick').value = '';
+  document.getElementById('roy-test-coord').value = '';
+  document.getElementById('roy-test-nick').focus();
+}
+function royTestAdd10() {
+  const names = ['Тест','Бот','Игрок','Чел','Нуб','Про','Лудик','Ставка','Слот','Спин','Краш','Бонус','Депо','Кеш','Вин'];
+  for (let i = 0; i < 10; i++) {
+    const nick = names[secureRandomInt(names.length)] + (Math.floor(royFloat()*9000)+1000);
+    royPlayers[nick] = { nick, col: secureRandomInt(ROY_N), row: secureRandomInt(ROY_ROWS), alive: true, dying: false, removed: false };
+  }
   royRender();
 }
 
