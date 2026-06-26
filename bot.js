@@ -3198,12 +3198,26 @@ function royaleShrinkZone() {
   if (alive.length <= 1) { royCheckWinner(); return; }
   Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
   if (!royZone) royZone = { cx: (ROY_N-1)/2, cy: (ROY_ROWS-1)/2, radius: ROY_N };
-  const newRadius = Math.max(0, royZone.radius * 0.62 - 0.3);
-  const maxShift = Math.max(0, royZone.radius - newRadius);
-  let ncx = royZone.cx + (royFloat()*2-1) * maxShift * 0.6;
-  let ncy = royZone.cy + (royFloat()*2-1) * maxShift * 0.6;
-  ncx = Math.max(0, Math.min(ROY_N-1, ncx));
-  ncy = Math.max(0, Math.min(ROY_ROWS-1, ncy));
+
+  // мінімальний радіус 0.5 — гарантує що клітинка-центр завжди в зоні (зона ніколи не зникає)
+  const MIN_RADIUS = 0.5;
+  const newRadius = Math.max(MIN_RADIUS, royZone.radius * 0.62 - 0.3);
+
+  let ncx, ncy;
+  // якщо зона вже мала (фінальна стадія) — центруємо на клітинці одного з живих гравців,
+  // щоб завжди лишалась хоч одна безпечна клітинка з людиною
+  if (newRadius <= 1.2 && alive.length >= 2) {
+    // вибираємо випадкового живого як "центр" фінальної зони
+    const anchor = alive[secureRandomInt(alive.length)];
+    ncx = anchor.col;
+    ncy = anchor.row;
+  } else {
+    const maxShift = Math.max(0, royZone.radius - newRadius);
+    ncx = royZone.cx + (royFloat()*2-1) * maxShift * 0.6;
+    ncy = royZone.cy + (royFloat()*2-1) * maxShift * 0.6;
+    ncx = Math.max(0, Math.min(ROY_N-1, ncx));
+    ncy = Math.max(0, Math.min(ROY_ROWS-1, ncy));
+  }
   royZone = { cx: ncx, cy: ncy, radius: newRadius };
 
   const outside = alive.filter(p => !royInZone(p.col, p.row));
