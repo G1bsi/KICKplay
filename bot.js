@@ -762,8 +762,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .royale-pill .pos { color: var(--text-muted); font-family: monospace; font-size: 11px; }
   .royale-pill.dead { opacity: 0.5; text-decoration: line-through; }
   #royale-stage { position: relative; display: flex; align-items: center; }
-  #royale-map-bg { position: absolute; inset: 8px; border-radius: 6px; overflow: hidden; opacity: 0.28; pointer-events: none; z-index: 0; }
-  #royale-map-bg svg { width: 100%; height: 100%; display: block; }
+  #royale-map-bg { position: absolute; inset: 8px; border-radius: 6px; overflow: hidden; opacity: 0.55; pointer-events: none; z-index: 0; }
+  #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
   #royale-grid { position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.015); }
   .rcell { position: relative; background: rgba(83,252,24,0.03); border: 1px solid rgba(83,252,24,0.08); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #cfe; overflow: hidden; transition: background 0.5s, opacity 0.5s, border-color 0.5s; }
   .rcell .rcoord { position: absolute; top: 1px; left: 2px; font-size: 7px; color: rgba(255,255,255,0.3); pointer-events: none; }
@@ -3025,18 +3025,8 @@ let royPhase = 'idle'; // idle | playing | shootout | finished
 function royFloat() { return secureRandomInt(1000000) / 1000000; }
 
 function royMapSVG() {
-  return '<svg viewBox="0 0 400 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">' +
-    '<rect width="400" height="400" fill="#1c3a4a"/>' +
-    '<path d="M40,60 Q120,20 220,50 T380,90 L390,300 Q300,380 180,360 T30,300 Z" fill="#3a5f3a"/>' +
-    '<path d="M60,90 Q130,70 200,85 L210,160 L150,210 L80,180 Z" fill="#4a7050"/>' +
-    '<circle cx="280" cy="140" r="45" fill="#5a6a4a"/>' +
-    '<rect x="100" y="240" width="70" height="55" rx="4" fill="#6a6a5a"/>' +
-    '<rect x="240" y="250" width="50" height="40" rx="3" fill="#6a6a5a"/>' +
-    '<path d="M150,100 Q200,180 240,260 T300,350" stroke="#2c5a78" stroke-width="14" fill="none" opacity="0.7"/>' +
-    '<circle cx="330" cy="300" r="22" fill="#5a6a4a"/>' +
-    '<text x="105" y="235" fill="#fff" font-size="11" opacity="0.6" font-family="monospace">SCHOOL</text>' +
-    '<text x="245" y="245" fill="#fff" font-size="11" opacity="0.6" font-family="monospace">MILITARY</text>' +
-    '</svg>';
+  return '<img src="https://github.com/G1bsi/DORNOD/blob/main/Map1.webp?raw=true" ' +
+    'style="width:100%;height:100%;object-fit:cover;display:block;" alt="map">';
 }
 
 function startRoyale() {
@@ -3047,11 +3037,21 @@ function startRoyale() {
   royBuildGrid();
   royRender();
   royStatus('Зрители пишут координаты (A1, G4...) чтобы занять клетку');
+  // перебудова сітки при зміні розміру вікна
+  if (!window._royResizeHooked) {
+    window._royResizeHooked = true;
+    window.addEventListener('resize', () => {
+      if (royPhase === 'playing' || royPhase === 'finished') { royBuildGrid(); royRender(); }
+    });
+  }
 }
 
 function royBuildGrid() {
   const grid = document.getElementById('royale-grid');
-  const cellSize = Math.min(48, Math.floor((Math.min(window.innerWidth, 1000) - 440) / ROY_N));
+  // розмір клітинки — максимально великий під доступний простір (ширина і висота)
+  const availW = Math.min(window.innerWidth - 420, 1100);
+  const availH = window.innerHeight - 230;
+  const cellSize = Math.max(40, Math.min(82, Math.floor(Math.min(availW, availH) / ROY_N)));
   grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
   grid.innerHTML = '';
   for (let r = 0; r < ROY_ROWS; r++) {
