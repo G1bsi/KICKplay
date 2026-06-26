@@ -790,9 +790,18 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #rso-canvas { display: block; width: 100%; height: 100%; }
   #rso-log { width: 100%; max-width: 1100px; height: 70px; overflow-y: auto; margin-top: 10px; font-size: 12px; font-family: monospace; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px; display: flex; flex-direction: column-reverse; gap: 2px; }
   #rso-log div { color: #bbb; }
-  #rso-winner { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); z-index: 5; gap: 10px; }
+  #rso-winner { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); backdrop-filter: blur(3px); z-index: 5; gap: 4px; }
   #rso-winner.show { display: flex; }
-  #rso-winner .big { font-size: 36px; font-weight: 900; color: var(--kick); animation: winnerGlow 0.8s infinite alternate; }
+  #rso-winner .crown { font-size: 56px; margin-bottom: 4px; animation: winnerGlow 0.8s infinite alternate; }
+  #rso-winner .label { font-size: 15px; font-weight: 700; letter-spacing: 6px; text-transform: uppercase; color: var(--text-muted); }
+  #rso-winner .big {
+    font-size: 44px; font-weight: 900; color: #fff; letter-spacing: 1px;
+    padding: 10px 36px; margin-top: 6px; border-radius: 14px;
+    background: linear-gradient(145deg, var(--kick), #28a708);
+    color: #000; box-shadow: 0 0 30px rgba(83,252,24,0.5);
+    max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #rso-winner .big.draw { background: #333; color: #aaa; box-shadow: none; font-size: 28px; }
 
   #chatgame-overlay {
     position: fixed; inset: 0; z-index: 9992;
@@ -1479,6 +1488,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="royale-controls">
     <button class="btn-orange" onclick="royaleShrinkZone()">🌀 Зона</button>
     <button class="btn-dark" style="background:var(--red);color:#fff;" onclick="royaleRedZone()">💥 Красная зона</button>
+    <button class="btn-primary" id="roy-fight-btn" style="display:none;background:var(--gold);color:#000;" onclick="royLaunchFight()">⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ</button>
     <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
   </div>
   <!-- Тестова кнопка-олівець (ручне заповнення) -->
@@ -1499,7 +1509,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <!-- Екран перестрілки БР -->
 <div id="royale-shootout">
   <h2>⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА</h2>
-  <div id="rso-arena"><canvas id="rso-canvas"></canvas><div id="rso-winner"><div class="big" id="rso-winner-name"></div></div></div>
+  <div id="rso-arena"><canvas id="rso-canvas"></canvas><div id="rso-winner"><div class="crown">👑</div><div class="label">Победитель</div><div class="big" id="rso-winner-name"></div></div></div>
   <div id="rso-log"></div>
 </div>
 
@@ -3201,11 +3211,10 @@ function royaleShrinkZone() {
 
   if (inside.length === 0 && outside.length >= 2) {
     royRender();
-    royStatus('⚠️ Все за зоной! Кто ближе — больше HP. ФАЙТ!');
     const withDist = outside.map(p => ({ p, dist: royZoneDist(p.col, p.row, royZone.cx, royZone.cy) - royZone.radius }));
     const maxD = Math.max(...withDist.map(w => w.dist), 0.01);
     const finalists = withDist.map(w => ({ nick: w.p.nick, startHP: Math.round(45 + (1 - w.dist/maxD) * 55) }));
-    setTimeout(() => rsoStart(finalists), 700);
+    royPrepareFight(finalists, '⚠️ Все за зоной! Кто ближе — больше HP. Готовы к перестрелке (' + finalists.length + ')');
     return;
   }
 
@@ -3232,8 +3241,8 @@ function royaleRedZone() {
     if (survivors.length === 0 && hit.length >= 2) {
       setTimeout(() => {
         redCells.forEach(([c, r]) => { const el = document.getElementById('rcell-' + c + '-' + r); if (el) el.classList.remove('redzone-blast'); });
-        royRender(); royStatus('⚠️ Все в красной зоне! ФАЙТ!');
-        setTimeout(() => rsoStart(hit.map(p => ({ nick: p.nick, startHP: 100 }))), 700);
+        royRender();
+        royPrepareFight(hit.map(p => ({ nick: p.nick, startHP: 100 })), '⚠️ Все в красной зоне! Готовы к перестрелке (' + hit.length + ')');
       }, 600);
       return;
     }
@@ -3251,11 +3260,32 @@ function royCheckWinner() {
   const alive = Object.values(royPlayers).filter(p => p.alive);
   if (alive.length > 1) {
     const cells = new Set(alive.map(p => p.col + ',' + p.row));
-    if (cells.size === 1 && alive.length >= 2) rsoStart(alive.map(p => ({ nick: p.nick, startHP: 100 })));
+    if (cells.size === 1 && alive.length >= 2) {
+      royPrepareFight(alive.map(p => ({ nick: p.nick, startHP: 100 })), '⚔️ Все в одной клетке! Готовы к перестрелке (' + alive.length + ')');
+    }
     return;
   }
   if (alive.length === 0) { royStatus('Все выбыли! Закройте и начните заново'); royPhase = 'finished'; return; }
   royDeclareWinner(alive[0]);
+}
+
+let royPendingFight = null;
+
+function royPrepareFight(finalists, statusMsg) {
+  royPendingFight = finalists;
+  royStatus(statusMsg);
+  // показуємо кнопку, ховаємо зону/червону зону
+  const fb = document.getElementById('roy-fight-btn');
+  fb.style.display = '';
+  fb.textContent = '⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ (' + finalists.length + ')';
+}
+
+function royLaunchFight() {
+  if (!royPendingFight) return;
+  document.getElementById('roy-fight-btn').style.display = 'none';
+  const f = royPendingFight;
+  royPendingFight = null;
+  rsoStart(f);
 }
 
 function royDeclareWinner(winner) {
@@ -3269,6 +3299,8 @@ function royDeclareWinner(winner) {
 
 function closeRoyaleOverlay() {
   royPhase = 'idle';
+  royPendingFight = null;
+  const fb = document.getElementById('roy-fight-btn'); if (fb) fb.style.display = 'none';
   document.getElementById('royale-overlay').classList.remove('visible');
   document.getElementById('royale-shootout').classList.remove('visible');
   rsoRunning = false;
@@ -3577,8 +3609,21 @@ function rsoLog(msg) {
 }
 function rsoEnd(winner) {
   const wEl = document.getElementById('rso-winner');
-  if (winner) { document.getElementById('rso-winner-name').textContent = '👑 ' + winner.nick; rsoLog('🏆 ПОБЕДИТЕЛЬ: ' + winner.nick); }
-  else document.getElementById('rso-winner-name').textContent = 'Ничья — все погибли';
+  const nameEl = document.getElementById('rso-winner-name');
+  const labelEl = wEl.querySelector('.label');
+  const crownEl = wEl.querySelector('.crown');
+  if (winner) {
+    nameEl.textContent = winner.nick;
+    nameEl.classList.remove('draw');
+    labelEl.textContent = 'Победитель';
+    crownEl.textContent = '👑';
+    rsoLog('🏆 ПОБЕДИТЕЛЬ: ' + winner.nick);
+  } else {
+    nameEl.textContent = 'Все погибли';
+    nameEl.classList.add('draw');
+    labelEl.textContent = 'Ничья';
+    crownEl.textContent = '💀';
+  }
   wEl.classList.add('show');
   setTimeout(() => {
     document.getElementById('royale-shootout').classList.remove('visible');
