@@ -788,8 +788,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-shootout h2 { font-size: 20px; letter-spacing: 3px; margin: 4px 0 10px; color: var(--red); }
   #rso-arena { position: relative; flex: 1; width: 100%; max-width: 1100px; background: linear-gradient(180deg,#1a2418,#0e150d); border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
   #rso-canvas { display: block; width: 100%; height: 100%; }
-  #rso-log { width: 100%; max-width: 1100px; height: 70px; overflow-y: auto; margin-top: 10px; font-size: 12px; font-family: monospace; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px; display: flex; flex-direction: column-reverse; gap: 2px; }
-  #rso-log div { color: #bbb; }
   #rso-winner { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); backdrop-filter: blur(3px); z-index: 5; gap: 4px; }
   #rso-winner.show { display: flex; }
   #rso-winner .crown { font-size: 56px; margin-bottom: 4px; animation: winnerGlow 0.8s infinite alternate; }
@@ -3345,7 +3343,6 @@ function rsoStart(finalists) {
   royPhase = 'shootout';
   document.getElementById('royale-shootout').classList.add('visible');
   document.getElementById('rso-winner').classList.remove('show');
-  document.getElementById('rso-log').innerHTML = '';
   rsoCanvas = document.getElementById('rso-canvas');
   const rect = document.getElementById('rso-arena').getBoundingClientRect();
   rsoW = Math.max(600, rect.width); rsoH = Math.max(340, rect.height);
