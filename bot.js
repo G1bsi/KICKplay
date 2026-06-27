@@ -3045,6 +3045,7 @@ const ROY_COLS = 'ABCDEFGHIJ'.split('');
 const ROY_ROWS = 10, ROY_N = ROY_COLS.length;
 let royPlayers = {};   // nick -> {nick, col, row, alive, dying, removed}
 let royZone = null;
+let royJoinLocked = false; // після першого звуження зони — новачки не приймаються
 let royPhase = 'idle'; // idle | playing | shootout | finished
 
 function royFloat() { return secureRandomInt(1000000) / 1000000; }
@@ -3055,7 +3056,7 @@ function royMapSVG() {
 }
 
 function startRoyale() {
-  royPlayers = {}; royZone = null; royPhase = 'playing';
+  royPlayers = {}; royZone = null; royPhase = 'playing'; royJoinLocked = false;
   phase = 'racing';
   // переносимо всіх учасників — вони ще без клітинок, чекаємо координати з чату
   document.getElementById('royale-overlay').classList.add('visible');
@@ -3136,7 +3137,10 @@ function royHandleMessage(nick, text) {
   if (royPhase !== 'playing') return;
   const coord = royParseCoord(text);
   if (!coord) return;
-  if (royPlayers[nick] && !royPlayers[nick].alive) return; // вибулі не повертаються
+  const existing = royPlayers[nick];
+  if (existing && !existing.alive) return; // вибулі не повертаються
+  // після першого звуження зони новачки не приймаються — хто не зайняв клетку, той далі не участвует
+  if (royJoinLocked && !existing) return;
   royPlayers[nick] = { nick, col: coord.col, row: coord.row, alive: true, dying: false, removed: false };
   royRender();
 }
@@ -3216,6 +3220,7 @@ function royStatus(msg) { document.getElementById('royale-status').textContent =
 function royaleShrinkZone() {
   const alive = Object.values(royPlayers).filter(p => p.alive);
   if (alive.length <= 1) { royCheckWinner(); return; }
+  royJoinLocked = true; // вхід закрито — після першого звуження новачки не приймаються
   Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
   if (!royZone) royZone = { cx: (ROY_N-1)/2, cy: (ROY_ROWS-1)/2, radius: ROY_N };
 
