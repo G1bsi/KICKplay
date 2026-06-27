@@ -3394,6 +3394,7 @@ function rsoStart(finalists) {
   rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
   rsoGrenades = []; rsoEffects = []; rsoKillFeed = []; rsoOverview = true;
   rsoCircle = null; rsoLastKillAt = performance.now(); rsoFightStart = performance.now();
+  rsoEndedAt = 0; rsoWinner = null;
   const ovBtn = document.getElementById('rso-overview-btn'); if (ovBtn) ovBtn.textContent = '🔍 К бою';
 
   rsoRunning = false;
@@ -3432,6 +3433,7 @@ function rsoPrepClick(e) {
 
 let rsoCamManual = false, rsoCamManualUntil = 0;
 let rsoFightStart = 0, rsoLastKillAt = 0, rsoCircle = null;
+let rsoEndedAt = 0, rsoWinner = null;
 function rsoFocusNext(dir) {
   const alive = rsoFighters.filter(f => f.alive);
   if (!alive.length) return;
@@ -3576,7 +3578,21 @@ function rsoLerpAng(a,b,t){return a+rsoAngleDiff(b,a)*t;}
 // ── Оновлення логіки (Ваш код) ──
 function rsoUpdate(dt) {
   const alive = rsoFighters.filter(f => f.alive);
-  if (alive.length <= 1) { rsoRunning = false; if (rsoRAF) cancelAnimationFrame(rsoRAF); rsoEnd(alive.length===1?alive[0]:null); return; }
+  if (alive.length <= 1) {
+    // Останній ворог щойно загинув — переможець ще трохи бігає, потім головний екран
+    if (!rsoEndedAt) {
+      rsoEndedAt = performance.now();
+      rsoWinner = alive.length === 1 ? alive[0] : null;
+    }
+    // продовжуємо крутити анімацію (переможець рухається) ще 3 секунди
+    if (performance.now() - rsoEndedAt >= 3000) {
+      rsoRunning = false;
+      if (rsoRAF) cancelAnimationFrame(rsoRAF);
+      rsoEnd(rsoWinner);
+      return;
+    }
+    // НЕ виходимо — даємо update йти далі щоб переможець міг рухатись
+  }
   
   const now = performance.now();
 
@@ -3647,7 +3663,22 @@ function rsoUpdate(dt) {
       for (const e of alive) { if (e !== f) { const d = Math.hypot(f.x-e.x, f.y-e.y); if (d < bd) { bd = d; enemy = e; } } }
       f.target = enemy;
     }
-    if (!enemy) continue;
+    if (!enemy) {
+      // ворогів не лишилось — переможець: легка хода/озирання, не стоїть стовпом
+      if (!f.victoryTarget || Math.hypot(f.x-f.victoryTarget.x, f.y-f.victoryTarget.y) < 20) {
+        const a = royFloat() * 6.28, r = 60 + royFloat()*100;
+        f.victoryTarget = { x: Math.max(40, Math.min(rsoWorldW-40, f.x+Math.cos(a)*r)), y: Math.max(40, Math.min(rsoWorldH-40, f.y+Math.sin(a)*r)) };
+      }
+      const vt = f.victoryTarget;
+      const vd = Math.hypot(vt.x-f.x, vt.y-f.y) || 1;
+      f.aimAng = rsoLerpAng(f.aimAng, Math.atan2(vt.y-f.y, vt.x-f.x), 0.08);
+      f.facing = f.aimAng;
+      const vstep = 1.0 * (dt/16);
+      const nvx = f.x + (vt.x-f.x)/vd*vstep, nvy = f.y + (vt.y-f.y)/vd*vstep;
+      if (!rsoCoverAt(nvx, nvy, f.radius)) { f.x = nvx; f.y = nvy; f.walkPhase += vstep*0.15; }
+      else f.victoryTarget = null;
+      continue;
+    }
     
     const dx = enemy.x - f.x, dy = enemy.y - f.y;
     const nd = Math.hypot(dx, dy);
@@ -4182,31 +4213,17 @@ function rsoDrawHUD(ctx) {
 }
 
 function rsoEnd(winner) {
-  setTimeout(() => {
-    const scr = document.getElementById('rso-winner');
-    const nameEl = document.getElementById('rso-winner-name');
-    const labelEl = scr.querySelector('.label');
-    const crownEl = scr.querySelector('.crown');
-    scr.classList.add('show');
-    if (winner) {
-      nameEl.textContent = winner.nick;
-      nameEl.className = 'big';
-      if (labelEl) labelEl.textContent = 'Победитель';
-      if (crownEl) crownEl.textContent = '👑';
-    } else {
-      nameEl.textContent = 'Все погибли';
-      nameEl.className = 'big draw';
-      if (crownEl) crownEl.textContent = '💀';
-      if (labelEl) labelEl.textContent = 'Ничья';
-    }
-    // повертаємо переможця в основну гру бота
-    setTimeout(() => {
-      document.getElementById('royale-shootout').classList.remove('visible');
-      Object.values(royPlayers).forEach(p => { if (winner && p.nick !== winner.nick) { p.alive = false; p.dying = false; p.removed = true; } });
-      if (winner) { const wp = royPlayers[winner.nick]; if (wp) { wp.alive = true; wp.dying = false; wp.removed = false; if (typeof royRender === 'function') royRender(); royDeclareWinner(wp); } }
-      else { royPhase = 'finished'; if (typeof royStatus === 'function') royStatus('Ничья!'); if (typeof royRender === 'function') royRender(); }
-    }, 3500);
-  }, 2000);
+  // Без внутрішнього банера — одразу закриваємо перестрілку і показуємо головний екран переможця
+  document.getElementById('royale-shootout').classList.remove('visible');
+  Object.values(royPlayers).forEach(p => { if (winner && p.nick !== winner.nick) { p.alive = false; p.dying = false; p.removed = true; } });
+  if (winner) {
+    const wp = royPlayers[winner.nick];
+    if (wp) { wp.alive = true; wp.dying = false; wp.removed = false; if (typeof royRender === 'function') royRender(); royDeclareWinner(wp); }
+  } else {
+    royPhase = 'finished';
+    if (typeof royStatus === 'function') royStatus('Ничья!');
+    if (typeof royRender === 'function') royRender();
+  }
 }
 function rsoToggleOverview() {
   rsoOverview = !rsoOverview;
