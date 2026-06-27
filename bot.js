@@ -1514,8 +1514,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" onclick="rsoFocusNext(-1)" style="font-size:16px;padding:6px 18px;">◀</button>
     <span style="font-size:12px;color:var(--text-muted);">камера по бойцам</span>
     <button class="btn-dark" onclick="rsoFocusNext(1)" style="font-size:16px;padding:6px 18px;">▶</button>
+    <button class="btn-dark" id="rso-overview-btn" onclick="rsoToggleOverview()" style="font-size:13px;padding:6px 18px;">🗺 Вся карта</button>
   </div>
-  <div id="rso-log"></div>
 </div>
 
 <div id="chatgame-overlay">
@@ -3337,7 +3337,9 @@ let rsoCam = { x: 0, y: 0, zoom: 1.6, focusIdx: 0 };
 let rsoGrassPattern = null;
 const RSO_EMOJI = ['😎','🤠','👽','🤖','😈','🥷','🧛','🦹','🧟','👹'];
 const RSO_COLORS = ['#ff5a5a','#5a9bff','#5aff8a','#ffd24a','#c77dff','#ff8a4a','#4affd2','#ff5ad2','#aaff4a','#4a9bff'];
-const RAK = { fireRate: 165, magSize: 30, reloadTime: 2500, baseSpread: 0.02, maxSpread: 0.26, spreadPerShot: 0.026, spreadRecover: 0.05, bulletSpeed: 15, baseDmg: 22, headMult: 2.3, headChance: 0.16, range: 620 };
+const RAK = { fireRate: 165, magSize: 30, reloadTime: 2500, baseSpread: 0.02, maxSpread: 0.26, spreadPerShot: 0.026, spreadRecover: 0.05, bulletSpeed: 15, baseDmg: 22, headMult: 2.3, headChance: 0.16, range: 300 };
+let rsoGrenades = [], rsoEffects = [], rsoKillFeed = [];
+let rsoOverview = false; // режим огляду всієї карти
 
 function rsoStart(finalists) {
   royPhase = 'shootout';
@@ -3370,9 +3372,11 @@ function rsoStart(finalists) {
       tries++;
     }
     const hp = p.startHP || 100;
-    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], emoji: RSO_EMOJI[i%RSO_EMOJI.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28 };
+    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], emoji: RSO_EMOJI[i%RSO_EMOJI.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28,
+      nades: { frag: 1, smoke: 1, flash: 1, molotov: 1 }, nadeCooldown: 2000 + royFloat()*2000, flashedUntil: 0, blockedSince: 0, lastSawEnemy: 0 };
   });
   rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
+  rsoGrenades = []; rsoEffects = []; rsoKillFeed = []; rsoOverview = false;
 
   rsoRunning = false;
   rsoDrawPrep();
@@ -3422,6 +3426,7 @@ function rsoKeyHandler(e) {
   if (royPhase !== 'shootout' || !rsoRunning) return;
   if (e.key === 'ArrowLeft') { rsoFocusNext(-1); e.preventDefault(); }
   else if (e.key === 'ArrowRight') { rsoFocusNext(1); e.preventDefault(); }
+  else if (e.key === ' ' || e.key === 'm' || e.key === 'M' || e.key === 'ь') { rsoToggleOverview(); e.preventDefault(); }
 }
 
 function rsoBegin() {
@@ -3517,8 +3522,13 @@ function rsoCoverAt(x, y, pad) {
 }
 function rsoLineBlocked(x1,y1,x2,y2) {
   for (const c of rsoCovers) {
+    if (c.type === 'bush') continue;
     if (c.type === 'tree' || c.type === 'rock') { if (rsoSegCircle(x1,y1,x2,y2,c.x,c.y,c.r)) return true; }
     else { if (rsoSegRect(x1,y1,x2,y2,c.x-c.w/2,c.y-c.h/2,c.w,c.h)) return true; }
+  }
+  // дим блокує видимість
+  for (const sm of rsoSmoke) {
+    if (sm.block && sm.life > 400 && rsoSegCircle(x1,y1,x2,y2,sm.x,sm.y,sm.r*0.8)) return true;
   }
   return false;
 }
@@ -3547,7 +3557,7 @@ function rsoUpdate(dt) {
           f.hp -= dmg;
           rsoFloats.push({x:f.x,y:f.y-20,text:(head?'★':'')+'-'+dmg,color:head?'#ffd24a':'#ff4a4a',life:850,head});
           if (head) rsoLog('💥 ' + b.owner.nick + ' ХЕДШОТ по ' + f.nick + ' (-' + dmg + ')');
-          if (f.hp <= 0) { f.hp = 0; f.alive = false; rsoLog('💀 ' + f.nick + ' убит игроком ' + b.owner.nick); }
+          if (f.hp <= 0) { f.hp = 0; f.alive = false; rsoKill(b.owner.nick, f.nick); }
           break;
         }
       }
@@ -3570,7 +3580,40 @@ function rsoUpdate(dt) {
     f.aimAng = rsoLerpAng(f.aimAng, wantAng, hasLOS?0.22:0.08);
     f.facing = f.aimAng;
     if (f.reloading) { if (now >= f.reloadEnd) { f.reloading = false; f.ammo = RAK.magSize; f.spread = RAK.baseSpread; } }
-    else if (f.ammo <= 0) { f.reloading = true; f.reloadEnd = now + RAK.reloadTime; rsoLog('🔄 ' + f.nick + ' перезаряжает'); }
+    else if (f.ammo <= 0) { f.reloading = true; f.reloadEnd = now + RAK.reloadTime; }
+
+    // чи засліплений (флешка) — не може стріляти точно
+    const flashed = now < f.flashedUntil;
+
+    // ── відстеження "ворог за укриттям" для фрагу ──
+    if (!hasLOS) { if (!f.blockedSince) f.blockedSince = now; }
+    else { f.blockedSince = 0; f.lastSawEnemy = now; }
+
+    // ── ТАКТИЧНІ ГРАНАТИ ──
+    if (now > f.nadeCooldown && !flashed) {
+      const hpPct = f.hp / f.maxHP;
+      // 1) ФРАГ — ворог довго (>1.6с) стоїть за укриттям близько → вибити його звідти
+      if (f.nades.frag > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 1600 && nd < 360) {
+        rsoThrowGrenade(f, enemy, 'frag');
+        f.nades.frag--; f.nadeCooldown = now + 3500 + royFloat()*2000;
+      }
+      // 2) СМОК — відступаємо при низькому HP → ставимо дим між собою і ворогом
+      else if (f.nades.smoke > 0 && hpPct < 0.4 && hasLOS && royFloat() < 0.5) {
+        const mx = (f.x + enemy.x)/2, my = (f.y + enemy.y)/2;
+        rsoThrowGrenade(f, { x: mx, y: my }, 'smoke');
+        f.nades.smoke--; f.nadeCooldown = now + 4000 + royFloat()*2000;
+      }
+      // 3) ФЛЕШКА — перед пушем, якщо ворог близько і ми здорові
+      else if (f.nades.flash > 0 && hasLOS && nd < 280 && hpPct > 0.5 && royFloat() < 0.4) {
+        rsoThrowGrenade(f, enemy, 'flash');
+        f.nades.flash--; f.nadeCooldown = now + 4000 + royFloat()*2500;
+      }
+      // 4) МОЛОТОВ — ворог за укриттям далеко, підпалити підхід
+      else if (f.nades.molotov > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 2200 && nd < 400) {
+        rsoThrowGrenade(f, enemy, 'molotov');
+        f.nades.molotov--; f.nadeCooldown = now + 4500 + royFloat()*2000;
+      }
+    }
 
     if (now > f.decisionAt) {
       const hpPct = f.hp / f.maxHP;
@@ -3587,7 +3630,8 @@ function rsoUpdate(dt) {
     }
     f.shotTimer -= dt;
     const aimErr = Math.abs(rsoAngleDiff(f.aimAng, wantAng));
-    if (hasLOS && !f.reloading && nd < RAK.range && aimErr < 0.25) {
+    // якщо засліплений — стріляти не може
+    if (!flashed && hasLOS && !f.reloading && nd < RAK.range && aimErr < 0.25) {
       if (f.burstLeft <= 0 && f.burstCooldown <= 0) f.burstLeft = 3 + secureRandomInt(7);
       if (f.burstLeft > 0 && f.shotTimer <= 0 && f.ammo > 0) {
         rsoFire(f, enemy); f.ammo--; f.burstLeft--; f.shotTimer = RAK.fireRate;
@@ -3616,16 +3660,125 @@ function rsoUpdate(dt) {
   // гільзи затухають
   for (const cs of rsoCasings) { cs.life -= dt; cs.x += cs.vx*dt/16; cs.y += cs.vy*dt/16; cs.vx *= 0.9; cs.vy *= 0.9; }
   rsoCasings = rsoCasings.filter(cs => cs.life > 0);
-  // дим піднімається й розсіюється
-  for (const sm of rsoSmoke) { sm.life -= dt; sm.y -= dt*0.01; sm.r += dt*0.01; }
+  // дим розсіюється
+  for (const sm of rsoSmoke) { sm.life -= dt; if (sm.r < sm.maxR) sm.r += dt*0.04; }
   rsoSmoke = rsoSmoke.filter(sm => sm.life > 0);
+
+  // ── гранати в польоті ──
+  rsoUpdateGrenades(dt, now);
+  // ефекти (вогонь молотова, спалах флешки) діють на бійців
+  rsoUpdateEffects(dt, now);
+  // кіл-фід згасає
+  for (const k of rsoKillFeed) k.life -= dt;
+  rsoKillFeed = rsoKillFeed.filter(k => k.life > 0);
+}
+
+// ── Кидок гранати ──
+function rsoThrowGrenade(thrower, target, type) {
+  const dx = target.x - thrower.x, dy = target.y - thrower.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const ang = Math.atan2(dy, dx);
+  // граната летить ~0.8с до цілі
+  const flightTime = 800;
+  rsoGrenades.push({
+    x: thrower.x, y: thrower.y,
+    tx: target.x, ty: target.y,
+    sx: thrower.x, sy: thrower.y,
+    type, owner: thrower, t: 0, flightTime,
+    arc: Math.min(dist * 0.15, 60), // висота дуги для тіні
+  });
+}
+
+function rsoUpdateGrenades(dt, now) {
+  for (const g of rsoGrenades) {
+    g.t += dt;
+    const p = Math.min(1, g.t / g.flightTime);
+    g.x = g.sx + (g.tx - g.sx) * p;
+    g.y = g.sy + (g.ty - g.sy) * p;
+    if (p >= 1 && !g.landed) {
+      g.landed = true;
+      rsoDetonate(g, now);
+    }
+  }
+  rsoGrenades = rsoGrenades.filter(g => !g.landed);
+}
+
+function rsoDetonate(g, now) {
+  const alive = rsoFighters.filter(f => f.alive);
+  if (g.type === 'frag') {
+    // вибух з уроном по площі
+    const R = 75;
+    rsoEffects.push({ type: 'blast', x: g.x, y: g.y, life: 350, maxLife: 350, r: R });
+    for (const f of alive) {
+      const d = Math.hypot(f.x - g.x, f.y - g.y);
+      if (d < R) {
+        const dmg = Math.round(55 * (1 - d/R)) + 10;
+        f.hp -= dmg;
+        rsoFloats.push({ x: f.x, y: f.y-20, text: '-' + dmg, color: '#ff7a3a', life: 850 });
+        if (f.hp <= 0) { f.hp = 0; f.alive = false; rsoKill(g.owner.nick, f.nick); }
+      }
+    }
+  } else if (g.type === 'smoke') {
+    // хмара диму що блокує лінію вогню (кілька клубів)
+    for (let i = 0; i < 6; i++) {
+      const a = (i/6)*6.28;
+      rsoSmoke.push({ x: g.x + Math.cos(a)*18, y: g.y + Math.sin(a)*18, r: 10, maxR: 38, life: 6000, color: '#c8ccd0', block: true });
+    }
+    rsoSmoke.push({ x: g.x, y: g.y, r: 14, maxR: 45, life: 6000, color: '#d0d4d8', block: true });
+  } else if (g.type === 'flash') {
+    // засліплення всіх в радіусі з лінією огляду
+    rsoEffects.push({ type: 'flashbang', x: g.x, y: g.y, life: 200, maxLife: 200 });
+    for (const f of alive) {
+      const d = Math.hypot(f.x - g.x, f.y - g.y);
+      if (d < 200 && !rsoLineBlocked(f.x, f.y, g.x, g.y)) {
+        f.flashedUntil = now + 1800 + (1 - d/200) * 1200; // ближче — довше сліпне
+        rsoFloats.push({ x: f.x, y: f.y-20, text: '😵', color: '#fff', life: 700 });
+      }
+    }
+  } else if (g.type === 'molotov') {
+    // калюжа вогню що горить кілька секунд
+    rsoEffects.push({ type: 'fire', x: g.x, y: g.y, life: 5000, maxLife: 5000, r: 50, lastTick: now });
+  }
+}
+
+function rsoUpdateEffects(dt, now) {
+  const alive = rsoFighters.filter(f => f.alive);
+  for (const e of rsoEffects) {
+    e.life -= dt;
+    if (e.type === 'fire') {
+      // дамаг тим хто стоїть у вогні (кожні 400мс)
+      if (now - e.lastTick > 400) {
+        e.lastTick = now;
+        for (const f of alive) {
+          if (Math.hypot(f.x - e.x, f.y - e.y) < e.r) {
+            const dmg = 8 + secureRandomInt(6);
+            f.hp -= dmg;
+            rsoFloats.push({ x: f.x, y: f.y-20, text: '-' + dmg, color: '#ff5a2a', life: 700 });
+            if (f.hp <= 0) { f.hp = 0; f.alive = false; rsoKill('🔥', f.nick); }
+          }
+        }
+      }
+    }
+  }
+  rsoEffects = rsoEffects.filter(e => e.life > 0);
 }
 
 function rsoUpdateCamera(dt) {
   const alive = rsoFighters.filter(f => f.alive);
   if (!alive.length) return;
+
+  // режим огляду — віддаляємо камеру на всю карту
+  if (rsoOverview) {
+    const targetZoom = Math.min(rsoW / rsoWorldW, rsoH / rsoWorldH) * 0.95;
+    rsoCam.zoom += (targetZoom - rsoCam.zoom) * Math.min(1, dt/250);
+    rsoCam.x += (rsoWorldW/2 - rsoCam.x) * Math.min(1, dt/250);
+    rsoCam.y += (rsoWorldH/2 - rsoCam.y) * Math.min(1, dt/250);
+    return;
+  }
+  // повертаємось до бойового зуму
+  if (Math.abs(rsoCam.zoom - 1.55) > 0.01) rsoCam.zoom += (1.55 - rsoCam.zoom) * Math.min(1, dt/250);
+
   let tx, ty;
-  // ручний режим — слідкуємо за обраним бійцем
   if (rsoCamManual && performance.now() < rsoCamManualUntil) {
     const idx = Math.min(rsoCam.focusIdx, alive.length - 1);
     tx = alive[idx].x; ty = alive[idx].y;
@@ -3633,7 +3786,6 @@ function rsoUpdateCamera(dt) {
     rsoCamManual = false;
     if (alive.length === 1) { tx = alive[0].x; ty = alive[0].y; }
     else {
-      // автослідкування за "гарячою точкою" — двома найближчими
       let bestA = alive[0], bestB = alive[1], bd = Infinity;
       for (let i = 0; i < alive.length; i++)
         for (let j = i+1; j < alive.length; j++) {
@@ -3646,6 +3798,12 @@ function rsoUpdateCamera(dt) {
   }
   rsoCam.x += (tx - rsoCam.x) * Math.min(1, dt/300);
   rsoCam.y += (ty - rsoCam.y) * Math.min(1, dt/300);
+}
+
+function rsoToggleOverview() {
+  rsoOverview = !rsoOverview;
+  const btn = document.getElementById('rso-overview-btn');
+  if (btn) btn.textContent = rsoOverview ? '🔍 К бою' : '🗺 Вся карта';
 }
 function rsoFire(shooter, enemy) {
   const ang = shooter.aimAng + shooter.spread*(royFloat()*2-1);
@@ -3725,11 +3883,60 @@ function rsoDraw() {
   // ── бійці ──
   for (const f of rsoFighters) rsoDrawFighter(ctx, f);
 
+  // ── вогонь молотова (під бійцями) ──
+  for (const e of rsoEffects) {
+    if (e.type !== 'fire') continue;
+    const a = Math.max(0, e.life/e.maxLife);
+    for (let i = 0; i < 14; i++) {
+      const ang = (i/14)*6.28 + e.life*0.001;
+      const rr = e.r * (0.5 + 0.5*Math.abs(Math.sin(e.life*0.003 + i)));
+      const fx = e.x + Math.cos(ang)*rr*royFloat(), fy = e.y + Math.sin(ang)*rr*royFloat();
+      ctx.globalAlpha = a * (0.4 + royFloat()*0.5);
+      ctx.fillStyle = royFloat() < 0.5 ? '#ff6a1a' : '#ffb030';
+      ctx.beginPath(); ctx.arc(fx, fy, 4 + royFloat()*5, 0, 7); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
   // ── дим ──
   for (const sm of rsoSmoke) {
-    ctx.globalAlpha = Math.max(0, sm.life/(sm.maxLife||1)) * 0.5;
+    ctx.globalAlpha = Math.max(0, sm.life/(sm.maxLife||6000)) * 0.7;
     ctx.fillStyle = sm.color;
     ctx.beginPath(); ctx.arc(sm.x, sm.y, sm.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── гранати в польоті ──
+  for (const g of rsoGrenades) {
+    const p = Math.min(1, g.t/g.flightTime);
+    const lift = Math.sin(p * Math.PI) * g.arc; // дуга
+    // тінь на землі
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(g.x, g.y, 4, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    // сама граната (піднята на lift)
+    const gy = g.y - lift;
+    const gc = g.type === 'frag' ? '#3a4a2a' : g.type === 'smoke' ? '#8a8a8a' : g.type === 'flash' ? '#d0d0a0' : '#5a3020';
+    ctx.fillStyle = gc;
+    ctx.beginPath(); ctx.arc(g.x, gy, 5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // ── спалахи вибухів / флешок ──
+  for (const e of rsoEffects) {
+    if (e.type === 'blast') {
+      const a = Math.max(0, e.life/e.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#ffaa40';
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (1-a) + 10, 0, 7); ctx.fill();
+      ctx.globalAlpha = a * 0.6; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(e.x, e.y, (e.r * (1-a) + 10)*0.5, 0, 7); ctx.fill();
+    } else if (e.type === 'flashbang') {
+      const a = Math.max(0, e.life/e.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(e.x, e.y, 30*(1-a)+8, 0, 7); ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 
@@ -3864,6 +4071,14 @@ function rsoDrawFighter(ctx, f) {
     ctx.fillStyle = pct>0.5?'#53fc18':pct>0.25?'#ffd700':'#ff4a4a';
     ctx.fillRect(f.x-bw/2, f.y-f.radius-9, bw*pct, bh);
     if (f.reloading) { ctx.fillStyle = '#ffd24a'; ctx.font = '10px monospace'; ctx.fillText('🔄', f.x+bw/2+8, f.y-f.radius-6); }
+    // засліплений флешкою — білий ореол
+    if (performance.now() < f.flashedUntil) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.radius+4, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.font = '12px serif'; ctx.fillText('😵', f.x, f.y - f.radius - 24);
+    }
   } else {
     ctx.font = '18px serif'; ctx.fillText('💀', f.x, f.y);
   }
@@ -3876,26 +4091,53 @@ function rsoDrawHUD(ctx) {
   ctx.textAlign = 'right';
   ctx.font = 'bold 22px Inter, sans-serif';
   ctx.fillStyle = '#fff';
-  ctx.fillText(alive + ' ALIVE', rsoW - 20, 36);
-  // легенда
+  ctx.fillText('ALIVE: ' + alive, rsoW - 20, 36);
+
+  // ── кіл-фід (під ALIVE, правий верхній кут) ──
   ctx.font = 'bold 13px Inter, sans-serif';
-  ctx.fillText('Бойцы · AK-47', rsoW - 20, 58);
+  let ky = 60;
+  for (const k of rsoKillFeed) {
+    const a = Math.min(1, k.life/1000);
+    ctx.globalAlpha = a;
+    // вимірюємо для фону
+    const killerW = ctx.measureText(k.killer).width;
+    const victimW = ctx.measureText(k.victim).width;
+    const totalW = killerW + victimW + 30;
+    const bx = rsoW - 20 - totalW;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(bx - 6, ky - 13, totalW + 12, 20);
+    // вбивця (зелений)
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#53fc18';
+    ctx.fillText(k.killer, bx, ky);
+    // стрілка
+    ctx.fillStyle = '#fff';
+    ctx.fillText('💀', bx + killerW + 6, ky);
+    // жертва (червоний)
+    ctx.fillStyle = '#ff6a6a';
+    ctx.fillText(k.victim, bx + killerW + 28, ky);
+    ky += 24;
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'right';
 
-  // перехрестя в центрі (приціл)
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
-  const cx = rsoW/2, cy = rsoH/2, g = 8, len = 7;
-  ctx.beginPath();
-  ctx.moveTo(cx-g-len, cy); ctx.lineTo(cx-g, cy);
-  ctx.moveTo(cx+g, cy); ctx.lineTo(cx+g+len, cy);
-  ctx.moveTo(cx, cy-g-len); ctx.lineTo(cx, cy-g);
-  ctx.moveTo(cx, cy+g); ctx.lineTo(cx, cy+g+len);
-  ctx.stroke();
+  if (!rsoOverview) {
+    // перехрестя в центрі (приціл)
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+    const cx = rsoW/2, cy = rsoH/2, g = 8, len = 7;
+    ctx.beginPath();
+    ctx.moveTo(cx-g-len, cy); ctx.lineTo(cx-g, cy);
+    ctx.moveTo(cx+g, cy); ctx.lineTo(cx+g+len, cy);
+    ctx.moveTo(cx, cy-g-len); ctx.lineTo(cx, cy-g);
+    ctx.moveTo(cx, cy+g); ctx.lineTo(cx, cy+g+len);
+    ctx.stroke();
+  }
 
-  // підказка про навігацію камери
+  // підказка
   ctx.textAlign = 'left';
   ctx.font = '12px Inter, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillText('◀ ▶ переключить камеру между бойцами', 20, rsoH - 18);
+  ctx.fillText(rsoOverview ? '🗺 Обзор всей карты' : '◀ ▶ камера · 🗺 вся карта', 20, rsoH - 18);
 }
 
 function rsoDrawCover(ctx, c) {
@@ -3963,10 +4205,11 @@ function rsoDrawCover(ctx, c) {
   }
 }
 
-function rsoLog(msg) {
-  const log = document.getElementById('rso-log');
-  const d = document.createElement('div'); d.textContent = msg; log.prepend(d);
-  while (log.children.length > 40) log.removeChild(log.lastChild);
+function rsoLog(msg) { /* лог прибрано — використовуємо kill-feed */ }
+// Додає запис у кіл-фід (правий верхній кут): вбивця → жертва
+function rsoKill(killer, victim) {
+  rsoKillFeed.unshift({ killer, victim, life: 5000 });
+  if (rsoKillFeed.length > 6) rsoKillFeed.pop();
 }
 function rsoEnd(winner) {
   const wEl = document.getElementById('rso-winner');
