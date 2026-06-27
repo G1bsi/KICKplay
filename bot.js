@@ -1510,6 +1510,11 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <div id="royale-shootout">
   <h2>⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА</h2>
   <div id="rso-arena"><canvas id="rso-canvas"></canvas><div id="rso-winner"><div class="crown">👑</div><div class="label">Победитель</div><div class="big" id="rso-winner-name"></div></div></div>
+  <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
+    <button class="btn-dark" onclick="rsoFocusNext(-1)" style="font-size:16px;padding:6px 18px;">◀</button>
+    <span style="font-size:12px;color:var(--text-muted);">камера по бойцам</span>
+    <button class="btn-dark" onclick="rsoFocusNext(1)" style="font-size:16px;padding:6px 18px;">▶</button>
+  </div>
   <div id="rso-log"></div>
 </div>
 
@@ -3324,8 +3329,12 @@ function closeRoyaleOverlay() {
 
 // ── Перестрілка (canvas, pro CS-стиль) ──
 let rsoCanvas, rsoCtx, rsoRAF = null, rsoRunning = false;
-let rsoFighters = [], rsoBullets = [], rsoFloats = [], rsoCovers = [], rsoTracers = [];
+let rsoFighters = [], rsoBullets = [], rsoFloats = [], rsoCovers = [], rsoTracers = [], rsoCasings = [], rsoSmoke = [];
 let rsoW = 1000, rsoH = 440, rsoPending = null;
+// світ більший за екран — камера наближена і слідкує
+let rsoWorldW = 1600, rsoWorldH = 1000;
+let rsoCam = { x: 0, y: 0, zoom: 1.6, focusIdx: 0 };
+let rsoGrassPattern = null;
 const RSO_EMOJI = ['😎','🤠','👽','🤖','😈','🥷','🧛','🦹','🧟','👹'];
 const RSO_COLORS = ['#ff5a5a','#5a9bff','#5aff8a','#ffd24a','#c77dff','#ff8a4a','#4affd2','#ff5ad2','#aaff4a','#4a9bff'];
 const RAK = { fireRate: 165, magSize: 30, reloadTime: 2500, baseSpread: 0.02, maxSpread: 0.26, spreadPerShot: 0.026, spreadRecover: 0.05, bulletSpeed: 15, baseDmg: 22, headMult: 2.3, headChance: 0.16, range: 620 };
@@ -3340,30 +3349,39 @@ function rsoStart(finalists) {
   rsoW = Math.max(600, rect.width); rsoH = Math.max(340, rect.height);
   rsoCanvas.width = rsoW; rsoCanvas.height = rsoH;
   rsoCtx = rsoCanvas.getContext('2d');
-  rsoGenCovers();
+
+  // світ масштабується під кількість бійців (більше людей — більша арена)
   const total = finalists.length;
-  // визначаємо точки спавну рівномірно по периметру карти, максимально розкидані
+  rsoWorldW = Math.max(1500, 700 + total * 110);
+  rsoWorldH = Math.max(950, 500 + total * 70);
+  rsoCam = { x: rsoWorldW/2, y: rsoWorldH/2, zoom: 1.55, focusIdx: 0, targetX: rsoWorldW/2, targetY: rsoWorldH/2 };
+
+  rsoBuildGrass();
+  rsoGenCovers();
   const spawnPts = rsoSpawnPoints(total);
   rsoFighters = finalists.map((p, i) => {
     let pt = spawnPts[i], tries = 0;
     let x = pt.x, y = pt.y;
-    // якщо точка в укритті — трохи зміщуємо
-    while (tries < 20 && rsoCoverAt(x, y, 20)) {
+    while (tries < 20 && rsoCoverAt(x, y, 24)) {
       x = pt.x + (royFloat()*2-1) * 30;
       y = pt.y + (royFloat()*2-1) * 30;
-      x = Math.max(40, Math.min(rsoW-40, x));
-      y = Math.max(40, Math.min(rsoH-40, y));
+      x = Math.max(40, Math.min(rsoWorldW-40, x));
+      y = Math.max(40, Math.min(rsoWorldH-40, y));
       tries++;
     }
     const hp = p.startHP || 100;
-    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], emoji: RSO_EMOJI[i%RSO_EMOJI.length], target: null, radius: 14, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1 };
+    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], emoji: RSO_EMOJI[i%RSO_EMOJI.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28 };
   });
-  rsoBullets = []; rsoFloats = []; rsoTracers = [];
+  rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
+
   rsoRunning = false;
   rsoDrawPrep();
 }
 
 function rsoDrawPrep() {
+  // на превʼю показуємо весь світ — зменшуємо zoom щоб вмістити арену
+  rsoCam.zoom = Math.min(rsoW / rsoWorldW, rsoH / rsoWorldH) * 0.95;
+  rsoCam.x = rsoWorldW/2; rsoCam.y = rsoWorldH/2;
   rsoDraw();
   const ctx = rsoCtx;
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, rsoW, rsoH);
@@ -3392,9 +3410,28 @@ function rsoPrepClick(e) {
 function rsoRoundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 function rsoWrap(ctx,text,cx,y,maxW,lh){const words=text.split(' ');let line='',yy=y;for(const w of words){const t=line+w+' ';if(ctx.measureText(t).width>maxW&&line){ctx.fillText(line,cx,yy);line=w+' ';yy+=lh;}else line=t;}ctx.fillText(line,cx,yy);}
 
+// Навігація камери між бійцями (◀ ▶ та клік на канвас)
+let rsoCamManual = false, rsoCamManualUntil = 0;
+function rsoFocusNext(dir) {
+  const alive = rsoFighters.filter(f => f.alive);
+  if (!alive.length) return;
+  rsoCam.focusIdx = ((rsoCam.focusIdx + dir) % alive.length + alive.length) % alive.length;
+  rsoCamManual = true; rsoCamManualUntil = performance.now() + 4000;
+}
+function rsoKeyHandler(e) {
+  if (royPhase !== 'shootout' || !rsoRunning) return;
+  if (e.key === 'ArrowLeft') { rsoFocusNext(-1); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { rsoFocusNext(1); e.preventDefault(); }
+}
+
 function rsoBegin() {
   rsoLog('🔫 Бой начался! AK-47. Бойцов: ' + rsoFighters.length);
   rsoRunning = true;
+  rsoCam.zoom = 1.55;
+  rsoCamManual = false;
+  if (!window._rsoKeyHooked) { window._rsoKeyHooked = true; window.addEventListener('keydown', rsoKeyHandler); }
+  // клік на канвас теж перемикає камеру
+  rsoCanvas.onclick = () => rsoFocusNext(1);
   let last = performance.now();
   function loop(now) {
     const dt = Math.min(50, now - last); last = now;
@@ -3406,29 +3443,16 @@ function rsoBegin() {
 
 // Генерує N точок спавну максимально розкиданих по краях карти
 function rsoSpawnPoints(n) {
-  const m = 55; // відступ від краю
-  const W = rsoW, H = rsoH;
-  const pts = [];
-
+  const m = 70;
+  const W = rsoWorldW, H = rsoWorldH;
   if (n === 1) return [{ x: W/2, y: H/2 }];
-  if (n === 2) {
-    // по діагоналі — протилежні кути
-    return [{ x: m, y: m }, { x: W-m, y: H-m }];
-  }
-  if (n === 3) {
-    return [{ x: m, y: m }, { x: W-m, y: m }, { x: W/2, y: H-m }];
-  }
-  if (n === 4) {
-    // всі 4 кути
-    return [{ x: m, y: m }, { x: W-m, y: m }, { x: W-m, y: H-m }, { x: m, y: H-m }];
-  }
-
-  // 5+ — рівномірно по периметру прямокутника
-  const perim = 2 * (W - 2*m) + 2 * (H - 2*m);
+  if (n === 2) return [{ x: m, y: m }, { x: W-m, y: H-m }];
+  if (n === 3) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W/2, y: H-m }];
+  if (n === 4) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W-m, y: H-m }, { x: m, y: H-m }];
+  const pts = [];
+  const wSide = W - 2*m, hSide = H - 2*m, perim = 2*wSide + 2*hSide;
   for (let i = 0; i < n; i++) {
-    let d = (i / n) * perim;
-    const wSide = W - 2*m, hSide = H - 2*m;
-    let x, y;
+    let d = (i / n) * perim, x, y;
     if (d < wSide) { x = m + d; y = m; }
     else if (d < wSide + hSide) { x = W - m; y = m + (d - wSide); }
     else if (d < 2*wSide + hSide) { x = W - m - (d - wSide - hSide); y = H - m; }
@@ -3438,26 +3462,55 @@ function rsoSpawnPoints(n) {
   return pts;
 }
 
+// Генеруємо трав'яну текстуру одноразово (offscreen pattern tile)
+function rsoBuildGrass() {
+  const tile = document.createElement('canvas');
+  tile.width = 128; tile.height = 128;
+  const tc = tile.getContext('2d');
+  // базовий градієнт трави
+  tc.fillStyle = '#5a6e3a'; tc.fillRect(0, 0, 128, 128);
+  // плями різних відтінків
+  const shades = ['#4f6332','#647a40','#556b36','#5f7338','#48592e','#6b8246'];
+  for (let i = 0; i < 90; i++) {
+    tc.fillStyle = shades[Math.floor(Math.random()*shades.length)];
+    tc.globalAlpha = 0.35 + Math.random()*0.4;
+    const x = Math.random()*128, y = Math.random()*128, r = 4 + Math.random()*16;
+    tc.beginPath(); tc.ellipse(x, y, r, r*0.7, Math.random()*3, 0, 7); tc.fill();
+  }
+  // дрібні травинки
+  tc.globalAlpha = 0.5;
+  for (let i = 0; i < 60; i++) {
+    tc.strokeStyle = Math.random() < 0.5 ? '#3e4f28' : '#728a4a';
+    tc.lineWidth = 1;
+    const x = Math.random()*128, y = Math.random()*128, a = Math.random()*6.28, len = 3 + Math.random()*5;
+    tc.beginPath(); tc.moveTo(x, y); tc.lineTo(x + Math.cos(a)*len, y + Math.sin(a)*len); tc.stroke();
+  }
+  tc.globalAlpha = 1;
+  rsoGrassPattern = rsoCtx.createPattern(tile, 'repeat');
+}
+
 function rsoGenCovers() {
   rsoCovers = [];
-  const types = ['tree','rock','crate','fence'];
-  const count = 10 + secureRandomInt(6);
+  const types = ['tree','tree','rock','fence','bush'];
+  const area = rsoWorldW * rsoWorldH;
+  const count = Math.round(area / 32000) + 6;
   let tries = 0;
-  while (rsoCovers.length < count && tries < 240) {
+  while (rsoCovers.length < count && tries < 500) {
     tries++;
     const type = types[secureRandomInt(types.length)];
-    const x = 90 + royFloat()*(rsoW-180), y = 70 + royFloat()*(rsoH-140);
+    const x = 80 + royFloat()*(rsoWorldW-160), y = 70 + royFloat()*(rsoWorldH-140);
     let cov;
-    if (type === 'tree') cov = { type, x, y, r: 22 + secureRandomInt(10) };
-    else if (type === 'rock') cov = { type, x, y, r: 18 + secureRandomInt(12) };
-    else if (type === 'crate') { const s = 30 + secureRandomInt(16); cov = { type, x, y, w: s, h: s }; }
-    else { const horiz = royFloat()<0.5; cov = { type, x, y, w: horiz?80+secureRandomInt(50):12, h: horiz?12:80+secureRandomInt(50) }; }
-    if (rsoCovers.some(o => Math.hypot(o.x-cov.x, o.y-cov.y) < 75)) continue;
+    if (type === 'tree') cov = { type, x, y, r: 26 + secureRandomInt(14), seed: secureRandomInt(1000) };
+    else if (type === 'bush') cov = { type, x, y, r: 16 + secureRandomInt(8), seed: secureRandomInt(1000) };
+    else if (type === 'rock') cov = { type, x, y, r: 18 + secureRandomInt(14), seed: secureRandomInt(1000) };
+    else { const horiz = royFloat()<0.5; cov = { type, x, y, w: horiz?100+secureRandomInt(70):14, h: horiz?14:100+secureRandomInt(70) }; }
+    if (rsoCovers.some(o => Math.hypot(o.x-cov.x, o.y-cov.y) < 80)) continue;
     rsoCovers.push(cov);
   }
 }
 function rsoCoverAt(x, y, pad) {
   return rsoCovers.some(c => {
+    if (c.type === 'bush') return false; // кущі не блокують рух/кулі (тільки декор)
     if (c.type === 'tree' || c.type === 'rock') return Math.hypot(c.x-x, c.y-y) < c.r + pad;
     return Math.abs(c.x-x) < c.w/2+pad && Math.abs(c.y-y) < c.h/2+pad;
   });
@@ -3549,19 +3602,62 @@ function rsoUpdate(dt) {
       const shooting = f.burstLeft > 0 && hasLOS;
       const speed = (shooting?0.7:1.7) * dt/16;
       let nx = f.x + (mdx/md)*speed, ny = f.y + (mdy/md)*speed;
-      if (!rsoCoverAt(nx, ny, f.radius)) { f.x = nx; f.y = ny; }
-      else { const px = f.x + (-mdy/md)*speed*f.strafeDir, py = f.y + (mdx/md)*speed*f.strafeDir; if (!rsoCoverAt(px,py,f.radius)) { f.x = px; f.y = py; } }
-      f.x = Math.max(20, Math.min(rsoW-20, f.x)); f.y = Math.max(20, Math.min(rsoH-20, f.y));
+      if (!rsoCoverAt(nx, ny, f.radius)) { f.x = nx; f.y = ny; f.walkPhase += speed*0.1; }
+      else { const px = f.x + (-mdy/md)*speed*f.strafeDir, py = f.y + (mdx/md)*speed*f.strafeDir; if (!rsoCoverAt(px,py,f.radius)) { f.x = px; f.y = py; f.walkPhase += speed*0.1; } }
+      f.x = Math.max(20, Math.min(rsoWorldW-20, f.x)); f.y = Math.max(20, Math.min(rsoWorldH-20, f.y));
       if (Math.hypot(f.x-f.moveTarget.x, f.y-f.moveTarget.y) < 18) f.moveTarget = null;
     }
+    if (f.muzzle > 0) f.muzzle -= dt;
   }
+
+  // ── камера: слідкує за центром бою (середнє між двома найближчими бійцями) ──
+  rsoUpdateCamera(dt);
+
+  // гільзи затухають
+  for (const cs of rsoCasings) { cs.life -= dt; cs.x += cs.vx*dt/16; cs.y += cs.vy*dt/16; cs.vx *= 0.9; cs.vy *= 0.9; }
+  rsoCasings = rsoCasings.filter(cs => cs.life > 0);
+  // дим піднімається й розсіюється
+  for (const sm of rsoSmoke) { sm.life -= dt; sm.y -= dt*0.01; sm.r += dt*0.01; }
+  rsoSmoke = rsoSmoke.filter(sm => sm.life > 0);
+}
+
+function rsoUpdateCamera(dt) {
+  const alive = rsoFighters.filter(f => f.alive);
+  if (!alive.length) return;
+  let tx, ty;
+  // ручний режим — слідкуємо за обраним бійцем
+  if (rsoCamManual && performance.now() < rsoCamManualUntil) {
+    const idx = Math.min(rsoCam.focusIdx, alive.length - 1);
+    tx = alive[idx].x; ty = alive[idx].y;
+  } else {
+    rsoCamManual = false;
+    if (alive.length === 1) { tx = alive[0].x; ty = alive[0].y; }
+    else {
+      // автослідкування за "гарячою точкою" — двома найближчими
+      let bestA = alive[0], bestB = alive[1], bd = Infinity;
+      for (let i = 0; i < alive.length; i++)
+        for (let j = i+1; j < alive.length; j++) {
+          const d = Math.hypot(alive[i].x-alive[j].x, alive[i].y-alive[j].y);
+          if (d < bd) { bd = d; bestA = alive[i]; bestB = alive[j]; }
+        }
+      tx = (bestA.x + bestB.x) / 2;
+      ty = (bestA.y + bestB.y) / 2;
+    }
+  }
+  rsoCam.x += (tx - rsoCam.x) * Math.min(1, dt/300);
+  rsoCam.y += (ty - rsoCam.y) * Math.min(1, dt/300);
 }
 function rsoFire(shooter, enemy) {
   const ang = shooter.aimAng + shooter.spread*(royFloat()*2-1);
   const precise = shooter.spread < RAK.baseSpread + 0.04;
-  rsoBullets.push({ x: shooter.x+Math.cos(ang)*18, y: shooter.y+Math.sin(ang)*18, vx: Math.cos(ang)*RAK.bulletSpeed, vy: Math.sin(ang)*RAK.bulletSpeed, owner: shooter, life: 900, dead: false, precise });
-  rsoTracers.push({ x1: shooter.x, y1: shooter.y, x2: shooter.x+Math.cos(ang)*40, y2: shooter.y+Math.sin(ang)*40, life: 80 });
-  rsoFloats.push({ x: shooter.x+Math.cos(ang)*20, y: shooter.y+Math.sin(ang)*20, flash: true, life: 60 });
+  const mx = shooter.x + Math.cos(shooter.aimAng)*(shooter.radius+16);
+  const my = shooter.y + Math.sin(shooter.aimAng)*(shooter.radius+16);
+  rsoBullets.push({ x: mx, y: my, vx: Math.cos(ang)*RAK.bulletSpeed, vy: Math.sin(ang)*RAK.bulletSpeed, owner: shooter, life: 900, dead: false, precise });
+  rsoTracers.push({ x1: mx, y1: my, x2: mx+Math.cos(ang)*45, y2: my+Math.sin(ang)*45, life: 70 });
+  shooter.muzzle = 45; // дульний спалах
+  // гільза вилітає вбік
+  const ca = shooter.aimAng + Math.PI/2 + (royFloat()*0.5-0.25);
+  rsoCasings.push({ x: shooter.x, y: shooter.y, vx: Math.cos(ca)*1.5, vy: Math.sin(ca)*1.5, life: 600 });
 }
 function rsoStrafe(f, e) { const a = Math.atan2(e.y-f.y, e.x-f.x) + (f.strafeDir>0?Math.PI/2:-Math.PI/2), d = 45+royFloat()*55; return { x: f.x+Math.cos(a)*d, y: f.y+Math.sin(a)*d }; }
 function rsoAway(f, e, d) { const a = Math.atan2(f.y-e.y, f.x-e.x); return { x: f.x+Math.cos(a)*d, y: f.y+Math.sin(a)*d }; }
@@ -3572,50 +3668,301 @@ function rsoPeek(cv, e) { const a = Math.atan2(cv.y-e.y,cv.x-e.x), cr = (cv.r||M
 
 function rsoDraw() {
   const ctx = rsoCtx; if (!ctx) return;
-  ctx.clearRect(0,0,rsoW,rsoH);
-  ctx.fillStyle = '#13201a'; ctx.fillRect(0,0,rsoW,rsoH);
-  ctx.strokeStyle = 'rgba(83,252,24,0.05)'; ctx.lineWidth = 1;
-  for (let x=0;x<rsoW;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,rsoH);ctx.stroke();}
-  for (let y=0;y<rsoH;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(rsoW,y);ctx.stroke();}
-  for (const c of rsoCovers) rsoDrawCover(ctx, c);
-  for (const t of rsoTracers) { ctx.globalAlpha = Math.max(0,t.life/80); ctx.strokeStyle = '#ffe27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(t.x1,t.y1); ctx.lineTo(t.x2,t.y2); ctx.stroke(); }
-  ctx.globalAlpha = 1;
-  for (const b of rsoBullets) { ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.arc(b.x,b.y,2.5,0,7); ctx.fill(); }
-  for (const f of rsoFighters) {
-    ctx.globalAlpha = f.alive?1:0.3;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(f.x, f.y+f.radius-2, f.radius*0.9, f.radius*0.4, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x,f.y,f.radius,0,7); ctx.fill();
-    ctx.strokeStyle = f.alive?'#fff':'#555'; ctx.lineWidth = 2; ctx.stroke();
-    if (f.alive) {
-      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(f.x+Math.cos(f.facing)*4, f.y+Math.sin(f.facing)*4); ctx.lineTo(f.x+Math.cos(f.facing)*(f.radius+14), f.y+Math.sin(f.facing)*(f.radius+14)); ctx.stroke();
-      ctx.lineCap = 'butt';
-      if (f.target && !rsoLineBlocked(f.x,f.y,f.target.x,f.target.y)) { ctx.strokeStyle = 'rgba(255,80,80,0.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(f.x+Math.cos(f.facing)*RAK.range, f.y+Math.sin(f.facing)*RAK.range); ctx.stroke(); }
-    }
-    ctx.font = '15px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(f.emoji, f.x, f.y);
-    ctx.globalAlpha = 1;
-    ctx.font = 'bold 11px Inter, sans-serif'; ctx.fillStyle = f.alive?'#fff':'#777'; ctx.fillText(f.nick, f.x, f.y-f.radius-18);
-    if (f.alive) {
-      const bw = 38, bh = 5, pct = f.hp/(f.maxHP||100);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(f.x-bw/2, f.y-f.radius-12, bw, bh);
-      ctx.fillStyle = pct>0.5?'#53fc18':pct>0.25?'#ffd700':'#ff4a4a'; ctx.fillRect(f.x-bw/2, f.y-f.radius-12, bw*pct, bh);
-      if (f.reloading) { ctx.fillStyle = '#ffd24a'; ctx.font = '9px monospace'; ctx.fillText('🔄', f.x+bw/2+8, f.y-f.radius-9); }
-    } else { ctx.font = '16px serif'; ctx.fillText('💀', f.x, f.y); }
+  ctx.clearRect(0, 0, rsoW, rsoH);
+
+  // ── трансформація камери (наближення + слідкування) ──
+  ctx.save();
+  ctx.translate(rsoW/2, rsoH/2);
+  ctx.scale(rsoCam.zoom, rsoCam.zoom);
+  ctx.translate(-rsoCam.x, -rsoCam.y);
+
+  // видима область світу (для відсікання поза екраном)
+  const viewL = rsoCam.x - rsoW/2/rsoCam.zoom - 60;
+  const viewR = rsoCam.x + rsoW/2/rsoCam.zoom + 60;
+  const viewT = rsoCam.y - rsoH/2/rsoCam.zoom - 60;
+  const viewB = rsoCam.y + rsoH/2/rsoCam.zoom + 60;
+  const inView = (x, y, m) => x > viewL-m && x < viewR+m && y > viewT-m && y < viewB+m;
+
+  // ── трав'яний фон ──
+  ctx.fillStyle = rsoGrassPattern || '#5a6e3a';
+  ctx.fillRect(viewL, viewT, viewR-viewL, viewB-viewT);
+  // легке затемнення країв світу (поза грою — темніше)
+  ctx.fillStyle = 'rgba(20,30,15,0.0)';
+
+  // ── укриття (тільки видимі) ──
+  // спершу тіні, потім об'єкти — для глибини
+  for (const c of rsoCovers) {
+    if (!inView(c.x, c.y, 60)) continue;
+    rsoDrawCoverShadow(ctx, c);
   }
+  for (const c of rsoCovers) {
+    if (!inView(c.x, c.y, 60)) continue;
+    rsoDrawCover(ctx, c);
+  }
+
+  // ── гільзи ──
+  for (const cs of rsoCasings) {
+    ctx.globalAlpha = Math.max(0, cs.life/600) * 0.8;
+    ctx.fillStyle = '#caa84a';
+    ctx.fillRect(cs.x-1.5, cs.y-1, 3, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  // ── трасери ──
+  for (const t of rsoTracers) {
+    ctx.globalAlpha = Math.max(0, t.life/70);
+    ctx.strokeStyle = '#ffe27a'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── кулі ──
+  for (const b of rsoBullets) {
+    ctx.fillStyle = '#ffe27a';
+    ctx.beginPath(); ctx.arc(b.x, b.y, 2.5, 0, 7); ctx.fill();
+  }
+
+  // ── бійці ──
+  for (const f of rsoFighters) rsoDrawFighter(ctx, f);
+
+  // ── дим ──
+  for (const sm of rsoSmoke) {
+    ctx.globalAlpha = Math.max(0, sm.life/(sm.maxLife||1)) * 0.5;
+    ctx.fillStyle = sm.color;
+    ctx.beginPath(); ctx.arc(sm.x, sm.y, sm.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── плаваючі цифри (урон) у світі ──
   ctx.textAlign = 'center';
   for (const fl of rsoFloats) {
-    if (fl.flash) { ctx.globalAlpha = Math.max(0,fl.life/60); ctx.fillStyle = '#fff5c0'; ctx.beginPath(); ctx.arc(fl.x,fl.y,4,0,7); ctx.fill(); }
-    else if (fl.impact) { ctx.globalAlpha = Math.max(0,fl.life/150); ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(fl.x,fl.y,3,0,7); ctx.stroke(); }
-    else { ctx.globalAlpha = Math.max(0,fl.life/850); ctx.fillStyle = fl.color; ctx.font = (fl.head?'bold 16px':'bold 13px')+' Inter, sans-serif'; ctx.fillText(fl.text, fl.x, fl.y); }
+    if (fl.flash || fl.impact) continue; // спалахи малюємо інакше
+    ctx.globalAlpha = Math.max(0, fl.life/850);
+    ctx.fillStyle = fl.color;
+    ctx.font = (fl.head ? 'bold 17px' : 'bold 14px') + ' Inter, sans-serif';
+    ctx.fillText(fl.text, fl.x, fl.y);
+  }
+  ctx.globalAlpha = 1;
+  // іскри від влучань у стіни
+  for (const fl of rsoFloats) {
+    if (!fl.impact) continue;
+    ctx.globalAlpha = Math.max(0, fl.life/150);
+    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(fl.x, fl.y, 3, 0, 7); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── синя електрична межа зони (по краю світу) ──
+  rsoDrawZoneBorder(ctx);
+
+  ctx.restore();
+
+  // ── HUD (поверх, без трансформації) ──
+  rsoDrawHUD(ctx);
+}
+
+function rsoWorldToScreen(x, y) {
+  return { x: (x - rsoCam.x) * rsoCam.zoom + rsoW/2, y: (y - rsoCam.y) * rsoCam.zoom + rsoH/2 };
+}
+
+function rsoDrawZoneBorder(ctx) {
+  // синя світна рамка по периметру світу (як край безпечної зони)
+  ctx.strokeStyle = 'rgba(90,170,255,0.8)';
+  ctx.lineWidth = 5;
+  ctx.shadowColor = '#5aaaff'; ctx.shadowBlur = 18;
+  ctx.strokeRect(2, 2, rsoWorldW-4, rsoWorldH-4);
+  ctx.shadowBlur = 0;
+  // електричні зазубрини
+  ctx.strokeStyle = 'rgba(170,210,255,0.5)'; ctx.lineWidth = 2;
+  const seg = 60;
+  ctx.beginPath();
+  for (let x = 0; x < rsoWorldW; x += seg) {
+    ctx.moveTo(x, 2 + (Math.random()*6-3));
+    ctx.lineTo(x+seg, 2 + (Math.random()*6-3));
+    ctx.moveTo(x, rsoWorldH-2 + (Math.random()*6-3));
+    ctx.lineTo(x+seg, rsoWorldH-2 + (Math.random()*6-3));
+  }
+  ctx.stroke();
+}
+
+function rsoDrawCoverShadow(ctx, c) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  if (c.type === 'tree' || c.type === 'bush') {
+    ctx.beginPath(); ctx.ellipse(c.x+6, c.y+8, c.r*0.95, c.r*0.7, 0, 0, 7); ctx.fill();
+  } else if (c.type === 'rock') {
+    ctx.beginPath(); ctx.ellipse(c.x+5, c.y+6, c.r, c.r*0.7, 0, 0, 7); ctx.fill();
+  } else {
+    ctx.fillRect(c.x-c.w/2+5, c.y-c.h/2+6, c.w, c.h);
+  }
+}
+
+function rsoDrawFighter(ctx, f) {
+  ctx.globalAlpha = f.alive ? 1 : 0.35;
+  // тінь
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(f.x+3, f.y+f.radius-1, f.radius*0.95, f.radius*0.45, 0, 0, 7); ctx.fill();
+
+  if (f.alive) {
+    // ноги (легка хода)
+    const legSwing = Math.sin(f.walkPhase) * 4;
+    ctx.strokeStyle = '#2a2a30'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    const perpX = Math.cos(f.facing + Math.PI/2), perpY = Math.sin(f.facing + Math.PI/2);
+    ctx.beginPath();
+    ctx.moveTo(f.x + perpX*5, f.y + perpY*5);
+    ctx.lineTo(f.x + perpX*5 + Math.cos(f.facing)*legSwing, f.y + perpY*5 + Math.sin(f.facing)*legSwing);
+    ctx.moveTo(f.x - perpX*5, f.y - perpY*5);
+    ctx.lineTo(f.x - perpX*5 - Math.cos(f.facing)*legSwing, f.y - perpY*5 - Math.sin(f.facing)*legSwing);
+    ctx.stroke();
+  }
+
+  // тіло (корпус згори)
+  ctx.fillStyle = f.color;
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, 7); ctx.fill();
+  ctx.strokeStyle = f.alive ? 'rgba(0,0,0,0.5)' : '#555'; ctx.lineWidth = 2; ctx.stroke();
+  // плече/рюкзак натяк — темне коло зміщене назад
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.arc(f.x - Math.cos(f.facing)*4, f.y - Math.sin(f.facing)*4, f.radius*0.55, 0, 7); ctx.fill();
+
+  if (f.alive) {
+    // автомат (AK) — дві лінії: цівка + приклад
+    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(f.x + Math.cos(f.facing)*2, f.y + Math.sin(f.facing)*2);
+    ctx.lineTo(f.x + Math.cos(f.facing)*(f.radius+16), f.y + Math.sin(f.facing)*(f.radius+16));
+    ctx.stroke();
+    // руки
+    ctx.strokeStyle = f.color; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(f.x, f.y);
+    ctx.lineTo(f.x + Math.cos(f.facing)*(f.radius+4), f.y + Math.sin(f.facing)*(f.radius+4));
+    ctx.stroke();
+
+    // дульний спалах
+    if (f.muzzle > 0) {
+      const mx = f.x + Math.cos(f.facing)*(f.radius+18);
+      const my = f.y + Math.sin(f.facing)*(f.radius+18);
+      ctx.globalAlpha = f.muzzle/45;
+      ctx.fillStyle = '#fff1a0';
+      ctx.beginPath(); ctx.arc(mx, my, 5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffb030';
+      ctx.beginPath(); ctx.arc(mx, my, 3, 0, 7); ctx.fill();
+      ctx.globalAlpha = f.alive ? 1 : 0.35;
+    }
+  }
+  ctx.lineCap = 'butt';
+
+  // нік над головою
+  ctx.globalAlpha = 1;
+  ctx.font = 'bold 12px Inter, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#000'; ctx.fillText(f.nick, f.x+1, f.y - f.radius - 13);
+  ctx.fillStyle = f.alive ? '#fff' : '#888'; ctx.fillText(f.nick, f.x, f.y - f.radius - 14);
+
+  // HP бар
+  if (f.alive) {
+    const bw = 40, bh = 5, pct = f.hp/(f.maxHP||100);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(f.x-bw/2, f.y-f.radius-9, bw, bh);
+    ctx.fillStyle = pct>0.5?'#53fc18':pct>0.25?'#ffd700':'#ff4a4a';
+    ctx.fillRect(f.x-bw/2, f.y-f.radius-9, bw*pct, bh);
+    if (f.reloading) { ctx.fillStyle = '#ffd24a'; ctx.font = '10px monospace'; ctx.fillText('🔄', f.x+bw/2+8, f.y-f.radius-6); }
+  } else {
+    ctx.font = '18px serif'; ctx.fillText('💀', f.x, f.y);
   }
   ctx.globalAlpha = 1;
 }
-function rsoDrawCover(ctx, c) {
-  if (c.type === 'tree') { ctx.fillStyle='#3a2a1a';ctx.beginPath();ctx.arc(c.x,c.y,c.r*0.4,0,7);ctx.fill();ctx.fillStyle='#2f5a2f';ctx.beginPath();ctx.arc(c.x,c.y,c.r,0,7);ctx.fill();ctx.fillStyle='#3a7040';ctx.beginPath();ctx.arc(c.x-c.r*0.25,c.y-c.r*0.25,c.r*0.55,0,7);ctx.fill(); }
-  else if (c.type === 'rock') { ctx.fillStyle='#6a6a72';ctx.beginPath();ctx.arc(c.x,c.y,c.r,0,7);ctx.fill();ctx.fillStyle='#80808a';ctx.beginPath();ctx.arc(c.x-c.r*0.2,c.y-c.r*0.2,c.r*0.6,0,7);ctx.fill(); }
-  else if (c.type === 'crate') { ctx.fillStyle='#7a5a30';ctx.fillRect(c.x-c.w/2,c.y-c.h/2,c.w,c.h);ctx.strokeStyle='#5a3f20';ctx.lineWidth=2;ctx.strokeRect(c.x-c.w/2,c.y-c.h/2,c.w,c.h);ctx.beginPath();ctx.moveTo(c.x-c.w/2,c.y-c.h/2);ctx.lineTo(c.x+c.w/2,c.y+c.h/2);ctx.moveTo(c.x+c.w/2,c.y-c.h/2);ctx.lineTo(c.x-c.w/2,c.y+c.h/2);ctx.stroke(); }
-  else { ctx.fillStyle='#8a6a40';ctx.fillRect(c.x-c.w/2,c.y-c.h/2,c.w,c.h);ctx.strokeStyle='#5a4020';ctx.lineWidth=1;ctx.strokeRect(c.x-c.w/2,c.y-c.h/2,c.w,c.h); }
+
+function rsoDrawHUD(ctx) {
+  const alive = rsoFighters.filter(f => f.alive).length;
+  // "N ALIVE" вгорі справа
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 22px Inter, sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(alive + ' ALIVE', rsoW - 20, 36);
+  // легенда
+  ctx.font = 'bold 13px Inter, sans-serif';
+  ctx.fillText('Бойцы · AK-47', rsoW - 20, 58);
+
+  // перехрестя в центрі (приціл)
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+  const cx = rsoW/2, cy = rsoH/2, g = 8, len = 7;
+  ctx.beginPath();
+  ctx.moveTo(cx-g-len, cy); ctx.lineTo(cx-g, cy);
+  ctx.moveTo(cx+g, cy); ctx.lineTo(cx+g+len, cy);
+  ctx.moveTo(cx, cy-g-len); ctx.lineTo(cx, cy-g);
+  ctx.moveTo(cx, cy+g); ctx.lineTo(cx, cy+g+len);
+  ctx.stroke();
+
+  // підказка про навігацію камери
+  ctx.textAlign = 'left';
+  ctx.font = '12px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText('◀ ▶ переключить камеру между бойцами', 20, rsoH - 18);
 }
+
+function rsoDrawCover(ctx, c) {
+  if (c.type === 'tree') {
+    // стовбур
+    ctx.fillStyle = '#4a3420';
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r*0.32, 0, 7); ctx.fill();
+    // крона — кілька кругів різних відтінків зеленого для об'єму
+    const greens = ['#2f4d22', '#3a6230', '#356b2e'];
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = greens[i];
+      const off = i * c.r * 0.12;
+      ctx.beginPath(); ctx.arc(c.x - off*0.5, c.y - off*0.5, c.r - off, 0, 7); ctx.fill();
+    }
+    // світла верхівка
+    ctx.fillStyle = '#4a7d3e';
+    ctx.beginPath(); ctx.arc(c.x - c.r*0.28, c.y - c.r*0.28, c.r*0.5, 0, 7); ctx.fill();
+    // дрібні листочки-крапки
+    ctx.fillStyle = 'rgba(90,140,70,0.6)';
+    for (let i = 0; i < 5; i++) {
+      const a = (c.seed + i*73) % 628 / 100, rr = c.r * 0.6;
+      ctx.beginPath(); ctx.arc(c.x + Math.cos(a)*rr*0.5, c.y + Math.sin(a)*rr*0.5, 2, 0, 7); ctx.fill();
+    }
+  } else if (c.type === 'bush') {
+    ctx.fillStyle = '#3a5526';
+    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a6b32';
+    ctx.beginPath(); ctx.arc(c.x-c.r*0.2, c.y-c.r*0.2, c.r*0.7, 0, 7); ctx.fill();
+    // ягідки/квіти інколи
+    if (c.seed % 3 === 0) {
+      ctx.fillStyle = '#c8b040';
+      for (let i = 0; i < 4; i++) { const a = i*1.6; ctx.beginPath(); ctx.arc(c.x+Math.cos(a)*c.r*0.5, c.y+Math.sin(a)*c.r*0.5, 1.5, 0, 7); ctx.fill(); }
+    }
+  } else if (c.type === 'rock') {
+    // багатогранний камінь
+    ctx.fillStyle = '#6e6e76';
+    ctx.beginPath();
+    const sides = 6;
+    for (let i = 0; i <= sides; i++) {
+      const a = (i/sides)*6.28 + (c.seed%100)/100;
+      const rr = c.r * (0.82 + ((c.seed>>i)&1)*0.18);
+      const px = c.x + Math.cos(a)*rr, py = c.y + Math.sin(a)*rr;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+    // блік
+    ctx.fillStyle = '#8a8a92';
+    ctx.beginPath(); ctx.arc(c.x-c.r*0.25, c.y-c.r*0.25, c.r*0.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#4a4a52'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(c.x-c.r*0.3, c.y); ctx.lineTo(c.x+c.r*0.4, c.y+c.r*0.2); ctx.stroke();
+  } else { // fence (паркан)
+    const horiz = c.w > c.h;
+    // дерев'яні дошки
+    ctx.fillStyle = '#7a5a32';
+    ctx.fillRect(c.x-c.w/2, c.y-c.h/2, c.w, c.h);
+    ctx.strokeStyle = '#5a4020'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(c.x-c.w/2, c.y-c.h/2, c.w, c.h);
+    // стовпчики
+    ctx.fillStyle = '#5a4226';
+    if (horiz) {
+      for (let x = c.x-c.w/2; x <= c.x+c.w/2; x += 24) ctx.fillRect(x-3, c.y-c.h/2-3, 6, c.h+6);
+    } else {
+      for (let y = c.y-c.h/2; y <= c.y+c.h/2; y += 24) ctx.fillRect(c.x-c.w/2-3, y-3, c.w+6, 6);
+    }
+  }
+}
+
 function rsoLog(msg) {
   const log = document.getElementById('rso-log');
   const d = document.createElement('div'); d.textContent = msg; log.prepend(d);
