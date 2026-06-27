@@ -740,6 +740,67 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
   /* ── 🔫 Режим Револьвер ─────────────────── */
   /* ── 💬 Режим Чат ──────────────────────────── */
+  /* ── 🪂 БАТЛ РОЯЛЬ ── */
+  #royale-overlay {
+    position: fixed; inset: 0; z-index: 9993;
+    background: rgba(4,6,4,0.97); backdrop-filter: blur(6px);
+    display: none; flex-direction: column; align-items: center;
+    padding: 16px; gap: 10px; overflow: hidden;
+  }
+  #royale-overlay.visible { display: flex; }
+  #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  #royale-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: var(--kick); }
+  #royale-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: center; align-items: stretch; }
+  .royale-side {
+    width: clamp(120px, 16vw, 200px); flex-shrink: 1; min-width: 0; background: rgba(0,0,0,0.3);
+    border: 1px solid var(--panel-border); border-radius: 10px;
+    padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  }
+  @media (max-width: 760px) {
+    .royale-side { width: clamp(90px, 22vw, 140px); padding: 6px; }
+    #royale-top h2 { font-size: 14px; }
+    #royale-status { font-size: 11px; }
+  }
+  .royale-side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--kick); margin: 0 0 6px; }
+  .royale-pill { font-size: 12px; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); display: flex; justify-content: space-between; gap: 6px; }
+  .royale-pill .pos { color: var(--text-muted); font-family: monospace; font-size: 11px; }
+  .royale-pill.dead { opacity: 0.5; text-decoration: line-through; }
+  #royale-stage { position: relative; display: flex; align-items: center; }
+  #royale-map-bg { position: absolute; inset: 8px; border-radius: 6px; overflow: hidden; opacity: 0.55; pointer-events: none; z-index: 0; }
+  #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
+  #royale-grid { position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.015); }
+  .rcell { position: relative; background: rgba(83,252,24,0.03); border: 1px solid rgba(83,252,24,0.08); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #cfe; overflow: hidden; transition: background 0.5s, opacity 0.5s, border-color 0.5s; }
+  .rcell .rcoord { position: absolute; top: 2px; left: 3px; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.75); pointer-events: none; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .rcell .rocc { font-size: 9px; line-height: 1.1; text-align: center; padding: 1px; word-break: break-all; }
+  .rcell .rbadge { background: var(--kick); color: #000; border-radius: 6px; padding: 0 4px; font-size: 9px; margin-top: 1px; }
+  .rcell.danger { background: rgba(43,140,255,0.22); border-color: rgba(43,140,255,0.45); }
+  .rcell.redzone-warn { animation: redWarn 0.5s infinite alternate; }
+  .rcell.redzone-blast { background: rgba(255,74,74,0.6) !important; border-color: #fff !important; }
+  .rcell.rwinner { background: linear-gradient(145deg, var(--kick), #28a708) !important; border-color: #fff !important; color: #000; font-weight: 900; animation: winnerGlow 0.8s ease infinite alternate; }
+  #royale-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #royale-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; justify-content: center; }
+  #royale-legend span { display: flex; align-items: center; gap: 4px; }
+  #royale-legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  /* перестрілка */
+  #royale-shootout { position: fixed; inset: 0; z-index: 9994; background: rgba(6,8,10,0.97); backdrop-filter: blur(4px); display: none; flex-direction: column; align-items: center; padding: 20px; }
+  #royale-shootout.visible { display: flex; }
+  #royale-shootout h2 { font-size: 20px; letter-spacing: 3px; margin: 4px 0 10px; color: var(--red); }
+  #rso-arena { position: relative; flex: 1; width: 100%; max-width: 1100px; background: linear-gradient(180deg,#1a2418,#0e150d); border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
+  #rso-canvas { display: block; width: 100%; height: 100%; }
+  #rso-winner { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.82); backdrop-filter: blur(3px); z-index: 5; gap: 4px; }
+  #rso-winner.show { display: flex; }
+  #rso-winner .crown { font-size: 56px; margin-bottom: 4px; animation: winnerGlow 0.8s infinite alternate; }
+  #rso-winner .label { font-size: 15px; font-weight: 700; letter-spacing: 6px; text-transform: uppercase; color: var(--text-muted); }
+  #rso-winner .big {
+    font-size: 44px; font-weight: 900; color: #fff; letter-spacing: 1px;
+    padding: 10px 36px; margin-top: 6px; border-radius: 14px;
+    background: linear-gradient(145deg, var(--kick), #28a708);
+    color: #000; box-shadow: 0 0 30px rgba(83,252,24,0.5);
+    max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #rso-winner .big.draw { background: #333; color: #aaa; box-shadow: none; font-size: 28px; }
+
   #chatgame-overlay {
     position: fixed; inset: 0; z-index: 9992;
     background: rgba(4,6,4,0.96);
@@ -1260,6 +1321,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
         <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
         <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')" style="grid-column:1/-1;">💬 БОНУСБУРЯ С ЧАТОМ</button>
+        <button type="button" class="mode-btn" id="mode-btn-royale" onclick="setGameMode('royale')" style="grid-column:1/-1;">🪂 БАТЛ РОЯЛЬ</button>
       </div>
     </div>
 
@@ -1396,6 +1458,64 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 </div>
 
 <!-- Оверлей режима ЧАТ -->
+<!-- Оверлей БАТЛ РОЯЛЬ -->
+<div id="royale-overlay">
+  <div id="royale-top">
+    <h2>🪂 БАТЛ РОЯЛЬ</h2>
+    <div id="royale-status">Зрители пишут координаты (A1, G4...) чтобы занять клетку</div>
+  </div>
+  <div id="royale-main">
+    <div class="royale-side">
+      <h3>🟢 Живые (<span id="royale-alive-count">0</span>)</h3>
+      <div id="royale-alive-list"></div>
+    </div>
+    <div id="royale-stage">
+      <div id="royale-map-bg"></div>
+      <div id="royale-grid"></div>
+    </div>
+    <div class="royale-side">
+      <h3>💀 Выбыли (<span id="royale-dead-count">0</span>)</h3>
+      <div id="royale-dead-list"></div>
+    </div>
+  </div>
+  <div id="royale-legend">
+    <span><span class="sw" style="background:rgba(83,252,24,0.3)"></span> Безопасно</span>
+    <span><span class="sw" style="background:rgba(43,140,255,0.4)"></span> Вне зоны</span>
+    <span><span class="sw" style="background:rgba(255,74,74,0.4)"></span> Красная зона</span>
+  </div>
+  <div id="royale-controls">
+    <button class="btn-orange" onclick="royaleShrinkZone()">🌀 Зона</button>
+    <button class="btn-dark" style="background:var(--red);color:#fff;" onclick="royaleRedZone()">💥 Красная зона</button>
+    <button class="btn-primary" id="roy-fight-btn" style="display:none;background:var(--gold);color:#000;" onclick="royLaunchFight()">⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ</button>
+    <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
+  </div>
+  <!-- Тестова кнопка-олівець (ручне заповнення) -->
+  <button id="roy-test-btn" onclick="royToggleTestForm()" title="Тест: добавить игрока вручную"
+    style="position:absolute;left:14px;bottom:14px;width:42px;height:42px;border-radius:50%;font-size:18px;
+    background:rgba(255,255,255,0.08);border:1px solid var(--panel-border);color:#ccc;cursor:pointer;z-index:5;">✏️</button>
+  <div id="roy-test-form" style="position:absolute;left:14px;bottom:64px;z-index:6;display:none;flex-direction:column;gap:6px;
+    background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:200px;">
+    <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Тест без стрима</div>
+    <input type="text" id="roy-test-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
+    <input type="text" id="roy-test-coord" placeholder="Клетка (напр. C5)" style="width:100%;box-sizing:border-box;">
+    <div style="display:flex;gap:6px;">
+      <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd()">Добавить</button>
+      <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd10()">+10 рандом</button>
+    </div>
+  </div>
+</div>
+<!-- Екран перестрілки БР -->
+<div id="royale-shootout">
+  <h2>⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА</h2>
+  <div id="rso-arena"><canvas id="rso-canvas"></canvas><div id="rso-winner"><div class="crown">👑</div><div class="label">Победитель</div><div class="big" id="rso-winner-name"></div></div></div>
+  <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
+    <button class="btn-dark" onclick="rsoFocusNext(-1)" style="font-size:16px;padding:6px 18px;">◀</button>
+    <span style="font-size:12px;color:var(--text-muted);">камера по бойцам</span>
+    <button class="btn-dark" onclick="rsoFocusNext(1)" style="font-size:16px;padding:6px 18px;">▶</button>
+    <button class="btn-dark" id="rso-overview-btn" onclick="rsoToggleOverview()" style="font-size:13px;padding:6px 18px;">🗺 Вся карта</button>
+  </div>
+</div>
+
 <div id="chatgame-overlay">
   <!-- Ліва колонка: список переможців -->
   <div id="chatgame-right">
@@ -1566,6 +1686,10 @@ chatEvtSource.onmessage = (e) => {
   if (gameMode === 'chatgame') {
     handleChatgameMessage(username, content);
     appendChatgameChatMsg(username, content, color, badges);
+  }
+  // В режиме БАТЛ РОЯЛЬ — занимаем клетку по координате
+  if (gameMode === 'royale') {
+    royHandleMessage(username, content);
   }
 };
 
@@ -1763,6 +1887,7 @@ function setGameMode(mode) {
   closeRevolverOverlay();
   closeChatgameOverlay();
   closeCashhuntOverlay();
+  closeRoyaleOverlay();
   phase = 'idle';
 
   gameMode = mode;
@@ -1771,6 +1896,7 @@ function setGameMode(mode) {
   document.getElementById('mode-btn-roulette').classList.toggle('active', mode === 'roulette');
   document.getElementById('mode-btn-revolver').classList.toggle('active', mode === 'revolver');
   document.getElementById('mode-btn-chatgame').classList.toggle('active', mode === 'chatgame');
+  document.getElementById('mode-btn-royale').classList.toggle('active', mode === 'royale');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
 }
@@ -1817,6 +1943,7 @@ async function startGame() {
   if (gameMode === 'roulette') return startRoulette();
   if (gameMode === 'revolver') return startRevolverGame();
   if (gameMode === 'chatgame') return startChatgame();
+  if (gameMode === 'royale') return startRoyale();
 
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
@@ -2917,6 +3044,1177 @@ let chatgameMsgBuffer = [];     // сообщения текущего побе�
 let chatgameTimedOut = false;   // время вышло — не принимаем новые сообщения
 let chatgameTimer = null;
 let chatgameTimerSeconds = 0;
+
+// ─────────────────────────────────────────────────────────────
+//  🪂 БАТЛ РОЯЛЬ
+// ─────────────────────────────────────────────────────────────
+const ROY_COLS = 'ABCDEFGHIJ'.split('');
+const ROY_ROWS = 10, ROY_N = ROY_COLS.length;
+let royPlayers = {};   // nick -> {nick, col, row, alive, dying, removed}
+let royZone = null;
+let royPhase = 'idle'; // idle | playing | shootout | finished
+
+function royFloat() { return secureRandomInt(1000000) / 1000000; }
+
+function royMapSVG() {
+  return '<img src="https://github.com/G1bsi/DORNOD/blob/main/Map1.webp?raw=true" ' +
+    'style="width:100%;height:100%;object-fit:cover;display:block;" alt="map">';
+}
+
+function startRoyale() {
+  royPlayers = {}; royZone = null; royPhase = 'playing';
+  phase = 'racing';
+  // переносимо всіх учасників — вони ще без клітинок, чекаємо координати з чату
+  document.getElementById('royale-overlay').classList.add('visible');
+  royBuildGrid();
+  royRender();
+  royStatus('Зрители пишут координаты (A1, G4...) чтобы занять клетку');
+  // перебудова сітки при зміні розміру вікна
+  if (!window._royResizeHooked) {
+    window._royResizeHooked = true;
+    window.addEventListener('resize', () => {
+      if (royPhase === 'playing' || royPhase === 'finished') { royBuildGrid(); royRender(); }
+    });
+  }
+}
+
+function royBuildGrid() {
+  const grid = document.getElementById('royale-grid');
+  // розмір клітинки — максимально великий під доступний простір (ширина і висота)
+  // динамічна ширина бокових панелей (clamp 120-200px по 16vw, ×2 + відступи)
+  const sideW = Math.min(200, Math.max(120, window.innerWidth * 0.16)) * 2 + 60;
+  const availW = window.innerWidth - sideW;
+  const availH = window.innerHeight - 200;
+  const cellSize = Math.max(26, Math.min(80, Math.floor(Math.min(availW, availH) / ROY_N)));
+  grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
+  grid.innerHTML = '';
+  for (let r = 0; r < ROY_ROWS; r++) {
+    for (let c = 0; c < ROY_N; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'rcell'; cell.id = 'rcell-' + c + '-' + r;
+      cell.style.height = cellSize + 'px';
+      const coord = document.createElement('div');
+      coord.className = 'rcoord'; coord.textContent = ROY_COLS[c] + (r + 1);
+      cell.appendChild(coord);
+      const occ = document.createElement('div');
+      occ.className = 'rocc'; occ.id = 'rocc-' + c + '-' + r;
+      cell.appendChild(occ);
+      grid.appendChild(cell);
+    }
+  }
+  document.getElementById('royale-map-bg').innerHTML = royMapSVG();
+}
+
+function royParseCoord(text) {
+  const m = text.trim().match(/^([A-Ja-j])\s*([1-9]|10)$/);
+  if (!m) return null;
+  const col = ROY_COLS.indexOf(m[1].toUpperCase());
+  const row = parseInt(m[2]) - 1;
+  if (col < 0 || row < 0 || row >= ROY_ROWS) return null;
+  return { col, row };
+}
+
+// Викликається з SSE обробника чату коли gameMode === 'royale'
+function royHandleMessage(nick, text) {
+  if (royPhase !== 'playing') return;
+  const coord = royParseCoord(text);
+  if (!coord) return;
+  if (royPlayers[nick] && !royPlayers[nick].alive) return; // вибулі не повертаються
+  royPlayers[nick] = { nick, col: coord.col, row: coord.row, alive: true, dying: false, removed: false };
+  royRender();
+}
+
+// ── Тестове заповнення без стріма ──
+function royToggleTestForm() {
+  const f = document.getElementById('roy-test-form');
+  f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
+  if (f.style.display === 'flex') document.getElementById('roy-test-nick').focus();
+}
+function royTestAdd() {
+  const nick = document.getElementById('roy-test-nick').value.trim();
+  const coord = document.getElementById('roy-test-coord').value.trim();
+  if (!nick || !coord) return;
+  const c = royParseCoord(coord);
+  if (!c) { alert('Неверная клетка (пример: C5)'); return; }
+  royPlayers[nick] = { nick, col: c.col, row: c.row, alive: true, dying: false, removed: false };
+  royRender();
+  document.getElementById('roy-test-nick').value = '';
+  document.getElementById('roy-test-coord').value = '';
+  document.getElementById('roy-test-nick').focus();
+}
+function royTestAdd10() {
+  const names = ['Тест','Бот','Игрок','Чел','Нуб','Про','Лудик','Ставка','Слот','Спин','Краш','Бонус','Депо','Кеш','Вин'];
+  for (let i = 0; i < 10; i++) {
+    const nick = names[secureRandomInt(names.length)] + (Math.floor(royFloat()*9000)+1000);
+    royPlayers[nick] = { nick, col: secureRandomInt(ROY_N), row: secureRandomInt(ROY_ROWS), alive: true, dying: false, removed: false };
+  }
+  royRender();
+}
+
+function royZoneDist(c, r, cx, cy) {
+  const dx = Math.abs(c - cx), dy = Math.abs(r - cy);
+  return Math.max(dx, dy) + 0.41 * Math.min(dx, dy);
+}
+function royInZone(c, r) { return !royZone ? true : royZoneDist(c, r, royZone.cx, royZone.cy) <= royZone.radius + 0.001; }
+
+function royRender() {
+  const cellGroups = {}, dyingGroups = {};
+  Object.values(royPlayers).forEach(p => {
+    if (p.removed) return;
+    const key = p.col + ',' + p.row;
+    if (p.alive) (cellGroups[key] = cellGroups[key] || []).push(p.nick);
+    else if (p.dying) (dyingGroups[key] = dyingGroups[key] || []).push(p.nick);
+  });
+  for (let r = 0; r < ROY_ROWS; r++) {
+    for (let c = 0; c < ROY_N; c++) {
+      const cell = document.getElementById('rcell-' + c + '-' + r);
+      const occ = document.getElementById('rocc-' + c + '-' + r);
+      if (!cell) continue;
+      cell.classList.remove('danger', 'rwinner');
+      const group = cellGroups[c + ',' + r] || [];
+      const dgroup = dyingGroups[c + ',' + r] || [];
+      if (royPhase === 'playing' && !royInZone(c, r)) cell.classList.add('danger');
+      let html = '';
+      if (group.length === 0) html = '';
+      else if (group.length <= 2) html = group.map(n => escapeHtml(n)).join('<br>');
+      else html = escapeHtml(group[0]) + '<div class="rbadge">+' + (group.length - 1) + '</div>';
+      if (dgroup.length) {
+        const dtxt = dgroup.length <= 2 ? dgroup.map(n => escapeHtml(n)).join('<br>') : escapeHtml(dgroup[0]) + ' +' + (dgroup.length - 1);
+        html += '<div style="opacity:0.35;font-size:8px;color:#ff8080;">' + dtxt + '</div>';
+      }
+      occ.innerHTML = html;
+    }
+  }
+  const alive = Object.values(royPlayers).filter(p => p.alive);
+  document.getElementById('royale-alive-count').textContent = alive.length;
+  document.getElementById('royale-dead-count').textContent = Object.values(royPlayers).filter(p => !p.alive).length;
+  document.getElementById('royale-alive-list').innerHTML = alive.sort((a,b) => a.nick.localeCompare(b.nick))
+    .map(p => '<div class="royale-pill"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+  document.getElementById('royale-dead-list').innerHTML = Object.values(royPlayers).filter(p => !p.alive)
+    .map(p => '<div class="royale-pill dead"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+}
+
+function royStatus(msg) { document.getElementById('royale-status').textContent = msg; }
+
+function royaleShrinkZone() {
+  const alive = Object.values(royPlayers).filter(p => p.alive);
+  if (alive.length <= 1) { royCheckWinner(); return; }
+  Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
+  if (!royZone) royZone = { cx: (ROY_N-1)/2, cy: (ROY_ROWS-1)/2, radius: ROY_N };
+
+  // мінімальний радіус 0.5 — гарантує що клітинка-центр завжди в зоні (зона ніколи не зникає)
+  const MIN_RADIUS = 0.5;
+  const newRadius = Math.max(MIN_RADIUS, royZone.radius * 0.62 - 0.3);
+
+  let ncx, ncy;
+  // якщо зона вже мала (фінальна стадія) — центруємо на клітинці одного з живих гравців,
+  // щоб завжди лишалась хоч одна безпечна клітинка з людиною
+  if (newRadius <= 1.2 && alive.length >= 2) {
+    // вибираємо випадкового живого як "центр" фінальної зони
+    const anchor = alive[secureRandomInt(alive.length)];
+    ncx = anchor.col;
+    ncy = anchor.row;
+  } else {
+    const maxShift = Math.max(0, royZone.radius - newRadius);
+    ncx = royZone.cx + (royFloat()*2-1) * maxShift * 0.6;
+    ncy = royZone.cy + (royFloat()*2-1) * maxShift * 0.6;
+    ncx = Math.max(0, Math.min(ROY_N-1, ncx));
+    ncy = Math.max(0, Math.min(ROY_ROWS-1, ncy));
+  }
+  royZone = { cx: ncx, cy: ncy, radius: newRadius };
+
+  const outside = alive.filter(p => !royInZone(p.col, p.row));
+  const inside = alive.filter(p => royInZone(p.col, p.row));
+
+  if (inside.length === 0 && outside.length >= 2) {
+    royRender();
+    const withDist = outside.map(p => ({ p, dist: royZoneDist(p.col, p.row, royZone.cx, royZone.cy) - royZone.radius }));
+    const maxD = Math.max(...withDist.map(w => w.dist), 0.01);
+    const finalists = withDist.map(w => ({ nick: w.p.nick, startHP: Math.round(45 + (1 - w.dist/maxD) * 55) }));
+    royPrepareFight(finalists, '⚠️ Все за зоной! Кто ближе — больше HP. Готовы к перестрелке (' + finalists.length + ')');
+    return;
+  }
+
+  outside.forEach(p => { p.alive = false; p.dying = true; });
+  royRender();
+  royStatus('🌀 Зона сузилась! Выбыло: ' + outside.length + '. Осталось: ' + inside.length + (inside.length > 1 ? ' · Можно сменить клетку!' : ''));
+  royCheckWinner();
+}
+
+function royaleRedZone() {
+  const alive = Object.values(royPlayers).filter(p => p.alive);
+  if (alive.length <= 1) return;
+  Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
+  const w = 2 + secureRandomInt(3), h = 2 + secureRandomInt(3);
+  const x0 = secureRandomInt(ROY_N - w + 1), y0 = secureRandomInt(ROY_ROWS - h + 1);
+  const redCells = [];
+  for (let c = x0; c < x0 + w; c++) for (let r = y0; r < y0 + h; r++) redCells.push([c, r]);
+  redCells.forEach(([c, r]) => { const el = document.getElementById('rcell-' + c + '-' + r); if (el) el.classList.add('redzone-warn'); });
+  royStatus('💥 КРАСНАЯ ЗОНА приближается!');
+  setTimeout(() => {
+    redCells.forEach(([c, r]) => { const el = document.getElementById('rcell-' + c + '-' + r); if (el) { el.classList.remove('redzone-warn'); el.classList.add('redzone-blast'); } });
+    const hit = alive.filter(p => redCells.some(([c,r]) => c === p.col && r === p.row));
+    const survivors = alive.filter(p => !hit.includes(p));
+    if (survivors.length === 0 && hit.length >= 2) {
+      setTimeout(() => {
+        redCells.forEach(([c, r]) => { const el = document.getElementById('rcell-' + c + '-' + r); if (el) el.classList.remove('redzone-blast'); });
+        royRender();
+        royPrepareFight(hit.map(p => ({ nick: p.nick, startHP: 100 })), '⚠️ Все в красной зоне! Готовы к перестрелке (' + hit.length + ')');
+      }, 600);
+      return;
+    }
+    hit.forEach(p => { p.alive = false; p.dying = true; });
+    setTimeout(() => {
+      redCells.forEach(([c, r]) => { const el = document.getElementById('rcell-' + c + '-' + r); if (el) el.classList.remove('redzone-blast'); });
+      royRender();
+      royStatus('💥 Взрыв! Выбыло: ' + hit.length + '. Осталось: ' + survivors.length);
+      royCheckWinner();
+    }, 600);
+  }, 1800);
+}
+
+function royCheckWinner() {
+  const alive = Object.values(royPlayers).filter(p => p.alive);
+  if (alive.length > 1) {
+    const cells = new Set(alive.map(p => p.col + ',' + p.row));
+    if (cells.size === 1 && alive.length >= 2) {
+      royPrepareFight(alive.map(p => ({ nick: p.nick, startHP: 100 })), '⚔️ Все в одной клетке! Готовы к перестрелке (' + alive.length + ')');
+    }
+    return;
+  }
+  if (alive.length === 0) { royStatus('Все выбыли! Закройте и начните заново'); royPhase = 'finished'; return; }
+  royDeclareWinner(alive[0]);
+}
+
+let royPendingFight = null;
+
+function royPrepareFight(finalists, statusMsg) {
+  royPendingFight = finalists;
+  royStatus(statusMsg);
+  // показуємо кнопку, ховаємо зону/червону зону
+  const fb = document.getElementById('roy-fight-btn');
+  fb.style.display = '';
+  fb.textContent = '⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ (' + finalists.length + ')';
+}
+
+function royLaunchFight() {
+  if (!royPendingFight) return;
+  document.getElementById('roy-fight-btn').style.display = 'none';
+  const f = royPendingFight;
+  royPendingFight = null;
+  rsoStart(f);
+}
+
+function royDeclareWinner(winner) {
+  royPhase = 'finished';
+  const cell = document.getElementById('rcell-' + winner.col + '-' + winner.row);
+  if (cell) { cell.classList.add('rwinner'); document.getElementById('rocc-' + winner.col + '-' + winner.row).innerHTML = '👑<br>' + escapeHtml(winner.nick); }
+  royStatus('👑 ПОБЕДИТЕЛЬ: ' + winner.nick);
+  // додаємо переможця у загальний список переможців бота
+  addWinner(winner.nick);
+}
+
+function closeRoyaleOverlay() {
+  royPhase = 'idle';
+  royPendingFight = null;
+  const fb = document.getElementById('roy-fight-btn'); if (fb) fb.style.display = 'none';
+  document.getElementById('royale-overlay').classList.remove('visible');
+  document.getElementById('royale-shootout').classList.remove('visible');
+  rsoRunning = false;
+  if (rsoRAF) cancelAnimationFrame(rsoRAF);
+  if (phase === 'racing') phase = 'idle';
+}
+
+// ── Перестрілка (canvas, 2.5D + улучшенный ИИ) ──
+// ═══════════════ МЕХАНІКА (з вашого коду) ═══════════════
+let rsoCanvas, rsoCtx, rsoRAF = null, rsoRunning = false;
+let rsoFighters = [], rsoBullets = [], rsoFloats = [], rsoCovers = [], rsoTracers = [], rsoCasings = [], rsoSmoke = [];
+let rsoW = 1000, rsoH = 440, rsoPending = null;
+let rsoWorldW = 1600, rsoWorldH = 1000;
+let rsoCam = { x: 0, y: 0, zoom: 1.6, focusIdx: 0 };
+let rsoGrassPattern = null;
+
+const RSO_COLORS = ['#ff4a4a', '#4a9bff', '#53fc18', '#ffd700', '#c77dff', '#ff8a4a', '#00ffcc', '#ff00aa'];
+const RAK = { fireRate: 200, magSize: 30, reloadTime: 3000, baseSpread: 0.04, maxSpread: 0.34, spreadPerShot: 0.034, spreadRecover: 0.035, bulletSpeed: 15, baseDmg: 8, headMult: 2.2, headChance: 0.10, range: 300 };
+let rsoGrenades = [], rsoEffects = [], rsoKillFeed = [];
+let rsoOverview = true;
+
+// Ресайз
+window.addEventListener('resize', () => {
+    if (rsoCanvas && document.getElementById('rso-arena')) {
+        const rect = document.getElementById('rso-arena').getBoundingClientRect();
+        rsoW = rsoCanvas.width = rect.width;
+        rsoH = rsoCanvas.height = rect.height;
+    }
+});
+
+function rsoStart(finalists) {
+  royPhase = 'shootout';
+  document.getElementById('royale-shootout').classList.add('visible');
+  document.getElementById('rso-winner').classList.remove('show');
+  rsoCanvas = document.getElementById('rso-canvas');
+  const rect = document.getElementById('rso-arena').getBoundingClientRect();
+  rsoW = rsoCanvas.width = rect.width; 
+  rsoH = rsoCanvas.height = rect.height;
+  rsoCtx = rsoCanvas.getContext('2d');
+
+  const total = finalists.length;
+  rsoWorldW = Math.max(1100, 600 + total * 90);
+  rsoWorldH = Math.max(800, 450 + total * 65);
+  rsoCam = { x: rsoWorldW/2, y: rsoWorldH/2, zoom: 1.55, focusIdx: 0, targetX: rsoWorldW/2, targetY: rsoWorldH/2 };
+
+  rsoBuildGrass();
+  rsoGenCovers();
+  const spawnPts = rsoSpawnPoints(total);
+  rsoFighters = finalists.map((p, i) => {
+    let pt = spawnPts[i], tries = 0;
+    let x = pt.x, y = pt.y;
+    // спроба біля точки спавну з розширенням радіуса
+    while (tries < 60 && rsoCoverAt(x, y, 22)) {
+      const spread = 30 + tries * 6; // радіус пошуку росте
+      x = pt.x + (royFloat()*2-1) * spread;
+      y = pt.y + (royFloat()*2-1) * spread;
+      x = Math.max(40, Math.min(rsoWorldW-40, x));
+      y = Math.max(40, Math.min(rsoWorldH-40, y));
+      tries++;
+    }
+    // якщо все ще в укритті — сканування сіткою по всій карті (гарантовано знайде вільне)
+    if (rsoCoverAt(x, y, 22)) {
+      outer:
+      for (let gy = 50; gy < rsoWorldH-50; gy += 40) {
+        for (let gx = 50; gx < rsoWorldW-50; gx += 40) {
+          if (!rsoCoverAt(gx, gy, 22)) { x = gx; y = gy; break outer; }
+        }
+      }
+    }
+    const hp = p.startHP || 100;
+    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28,
+      nades: { frag: 1, smoke: 2, flash: 1, molotov: 1 }, nadeCooldown: 5000 + royFloat()*4000, flashedUntil: 0, blockedSince: 0, lastSawEnemy: 0 };
+  });
+  rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
+  rsoGrenades = []; rsoEffects = []; rsoKillFeed = []; rsoOverview = true;
+  rsoCircle = null; rsoLastKillAt = performance.now(); rsoFightStart = performance.now();
+  const ovBtn = document.getElementById('rso-overview-btn'); if (ovBtn) ovBtn.textContent = '🔍 К бою';
+
+  rsoRunning = false;
+  rsoDrawPrep();
+}
+
+function rsoDrawPrep() {
+  rsoCam.zoom = Math.min(rsoW / rsoWorldW, rsoH / rsoWorldH) * 0.95;
+  rsoCam.x = rsoWorldW/2; rsoCam.y = rsoWorldH/2;
+  rsoDraw();
+  const ctx = rsoCtx;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, rsoW, rsoH);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  ctx.font = '900 36px Inter, sans-serif';
+  ctx.fillText('⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА', rsoW/2, rsoH/2 - 64);
+  ctx.font = '16px Inter, sans-serif'; ctx.fillStyle = '#ccc';
+  ctx.fillText('Бойцов: ' + rsoFighters.length + ' · Оружие: AK-47', rsoW/2, rsoH/2 - 30);
+  
+  const bw = 240, bh = 54, bx = rsoW/2 - bw/2, by = rsoH/2 + 36;
+  ctx.fillStyle = '#53fc18'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 10); ctx.fill();
+  ctx.shadowColor = 'rgba(83,252,24,0.5)'; ctx.shadowBlur = 15; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#000'; ctx.font = '900 20px Inter, sans-serif';
+  ctx.fillText('▶ НАЧАТЬ БОЙ', rsoW/2, by + bh/2 + 7);
+  rsoPending = { bx, by, bw, bh };
+  rsoCanvas.onclick = rsoPrepClick;
+}
+
+function rsoPrepClick(e) {
+  if (!rsoPending) return;
+  const rect = rsoCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (rsoW / rect.width);
+  const y = (e.clientY - rect.top) * (rsoH / rect.height);
+  const p = rsoPending;
+  if (x>=p.bx && x<=p.bx+p.bw && y>=p.by && y<=p.by+p.bh) { rsoCanvas.onclick = null; rsoPending = null; rsoBegin(); }
+}
+
+let rsoCamManual = false, rsoCamManualUntil = 0;
+let rsoFightStart = 0, rsoLastKillAt = 0, rsoCircle = null;
+function rsoFocusNext(dir) {
+  const alive = rsoFighters.filter(f => f.alive);
+  if (!alive.length) return;
+  rsoCam.focusIdx = ((rsoCam.focusIdx + dir) % alive.length + alive.length) % alive.length;
+  rsoCamManual = true; rsoCamManualUntil = performance.now() + 4000;
+}
+function rsoKeyHandler(e) {
+  if (!rsoRunning) return;
+  if (e.key === 'ArrowLeft') { rsoFocusNext(-1); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { rsoFocusNext(1); e.preventDefault(); }
+  else if (e.key === ' ' || e.key === 'm' || e.key === 'M' || e.key === 'ь') { rsoToggleOverview(); e.preventDefault(); }
+}
+
+function rsoBegin() {
+  rsoRunning = true;
+  rsoCam.zoom = 1.55;
+  rsoCamManual = false;
+  rsoFightStart = performance.now();
+  rsoLastKillAt = performance.now();
+  rsoCircle = null;
+  if (!window._rsoKeyHooked) { window._rsoKeyHooked = true; window.addEventListener('keydown', rsoKeyHandler); }
+  rsoCanvas.onclick = () => rsoFocusNext(1);
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(50, now - last); last = now;
+    rsoUpdate(dt); rsoDraw();
+    if (rsoRunning) rsoRAF = requestAnimationFrame(loop);
+  }
+  rsoRAF = requestAnimationFrame(loop);
+}
+
+// ── Математика та генерація (залишаємо вашу логіку без змін) ──
+function rsoSpawnPoints(n) {
+  const m = 100, W = rsoWorldW, H = rsoWorldH;
+  if (n === 1) return [{ x: W/2, y: H/2 }];
+  if (n === 2) return [{ x: m, y: m }, { x: W-m, y: H-m }];
+  if (n === 3) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W/2, y: H-m }];
+  if (n === 4) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W-m, y: H-m }, { x: m, y: H-m }];
+  const pts = []; const wSide = W - 2*m, hSide = H - 2*m, perim = 2*wSide + 2*hSide;
+  for (let i = 0; i < n; i++) {
+    let d = (i / n) * perim, x, y;
+    if (d < wSide) { x = m + d; y = m; }
+    else if (d < wSide + hSide) { x = W - m; y = m + (d - wSide); }
+    else if (d < 2*wSide + hSide) { x = W - m - (d - wSide - hSide); y = H - m; }
+    else { x = m; y = H - m - (d - 2*wSide - hSide); }
+    pts.push({ x, y });
+  } return pts;
+}
+
+function rsoBuildGrass() {
+  const tile = document.createElement('canvas'); tile.width = 256; tile.height = 256;
+  const tc = tile.getContext('2d');
+  tc.fillStyle = '#2b3622'; tc.fillRect(0,0,256,256);
+  for(let i=0; i<500; i++) {
+      tc.fillStyle = Math.random() > 0.5 ? '#334028' : '#232c1c';
+      tc.globalAlpha = Math.random();
+      tc.beginPath(); tc.arc(Math.random()*256, Math.random()*256, Math.random()*4, 0, Math.PI*2); tc.fill();
+  }
+  tc.globalAlpha = 1;
+  rsoGrassPattern = rsoCtx.createPattern(tile, 'repeat');
+}
+
+function rsoGenCovers() {
+  rsoCovers = [];
+  // менше парканів: fence рідше (1 раз серед інших типів)
+  const types = ['tree','tree','rock','bush','tree','rock','fence'];
+  const area = rsoWorldW * rsoWorldH;
+  const count = Math.round(area / 30000) + 10;
+  let tries = 0;
+  while (rsoCovers.length < count && tries < 500) {
+    tries++;
+    const type = types[secureRandomInt(types.length)];
+    const x = 100 + royFloat()*(rsoWorldW-200), y = 100 + royFloat()*(rsoWorldH-200);
+    let cov;
+    if (type === 'tree') cov = { type, x, y, r: 26 + secureRandomInt(14) };
+    else if (type === 'bush') cov = { type, x, y, r: 16 + secureRandomInt(8) };
+    else if (type === 'rock') cov = { type, x, y, r: 18 + secureRandomInt(14) };
+    else {
+      // L-подібний паркан (кут/Г): два коротші сегменти, орієнтація випадкова
+      const len = 50 + secureRandomInt(30);   // довжина плеча
+      const thick = 13;
+      const orient = secureRandomInt(4);        // 4 повороти кута
+      cov = { type, x, y, len, thick, orient };
+    }
+    if (rsoCovers.some(o => Math.hypot(o.x-cov.x, o.y-cov.y) < 90)) continue;
+    rsoCovers.push(cov);
+  }
+}
+
+// Повертає 2 прямокутники [{cx,cy,w,h}] що утворюють L-паркан (кут/Г)
+function rsoFenceRects(c) {
+  const t = c.thick, L = c.len;
+  // базова форма: горизонтальне плече + вертикальне плече, що сходяться в куті
+  // orient визначає в якому напрямку "відкритий" кут
+  let hSeg, vSeg;
+  if (c.orient === 0) { // ┌
+    hSeg = { cx: c.x + L/2 - t/2, cy: c.y, w: L, h: t };
+    vSeg = { cx: c.x, cy: c.y + L/2 - t/2, w: t, h: L };
+  } else if (c.orient === 1) { // ┐
+    hSeg = { cx: c.x - L/2 + t/2, cy: c.y, w: L, h: t };
+    vSeg = { cx: c.x, cy: c.y + L/2 - t/2, w: t, h: L };
+  } else if (c.orient === 2) { // └
+    hSeg = { cx: c.x + L/2 - t/2, cy: c.y, w: L, h: t };
+    vSeg = { cx: c.x, cy: c.y - L/2 + t/2, w: t, h: L };
+  } else { // ┘
+    hSeg = { cx: c.x - L/2 + t/2, cy: c.y, w: L, h: t };
+    vSeg = { cx: c.x, cy: c.y - L/2 + t/2, w: t, h: L };
+  }
+  return [hSeg, vSeg];
+}
+
+function rsoCoverAt(x, y, pad) {
+  return rsoCovers.some(c => {
+    if (c.type === 'bush') return false; 
+    if (c.type === 'tree' || c.type === 'rock') return Math.hypot(c.x-x, c.y-y) < c.r + pad;
+    // fence: перевіряємо обидва плеча L
+    for (const s of rsoFenceRects(c)) {
+      if (Math.abs(s.cx-x) < s.w/2+pad && Math.abs(s.cy-y) < s.h/2+pad) return true;
+    }
+    return false;
+  });
+}
+function rsoLineBlocked(x1,y1,x2,y2) {
+  for (const c of rsoCovers) {
+    if (c.type === 'bush') continue;
+    if (c.type === 'tree' || c.type === 'rock') { if (rsoSegCircle(x1,y1,x2,y2,c.x,c.y,c.r)) return true; }
+    else {
+      for (const s of rsoFenceRects(c)) {
+        if (rsoSegRect(x1,y1,x2,y2,s.cx-s.w/2,s.cy-s.h/2,s.w,s.h)) return true;
+      }
+    }
+  }
+  for (const sm of rsoSmoke) if (sm.block && sm.life > 400 && rsoSegCircle(x1,y1,x2,y2,sm.x,sm.y,sm.r*0.8)) return true;
+  return false;
+}
+function rsoSegCircle(x1,y1,x2,y2,cx,cy,r){const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy||1;let t=((cx-x1)*dx+(cy-y1)*dy)/l2;t=Math.max(0,Math.min(1,t));return Math.hypot(x1+t*dx-cx,y1+t*dy-cy)<r;}
+function rsoSegRect(x1,y1,x2,y2,rx,ry,rw,rh){const E=[[rx,ry,rx+rw,ry],[rx+rw,ry,rx+rw,ry+rh],[rx+rw,ry+rh,rx,ry+rh],[rx,ry+rh,rx,ry]];for(const[a,b,c,d]of E)if(rsoSegSeg(x1,y1,x2,y2,a,b,c,d))return true;if(x1>rx&&x1<rx+rw&&y1>ry&&y1<ry+rh)return true;return false;}
+function rsoSegSeg(a,b,c,d,p,q,r,s){const d1=(r-p)*(b-q)-(s-q)*(a-p),d2=(r-p)*(d-q)-(s-q)*(c-p),d3=(c-a)*(q-b)-(d-b)*(p-a),d4=(c-a)*(s-b)-(d-b)*(r-a);return((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));}
+function rsoAngleDiff(a,b){let d=a-b;while(d>Math.PI)d-=6.283;while(d<-Math.PI)d+=6.283;return d;}
+function rsoLerpAng(a,b,t){return a+rsoAngleDiff(b,a)*t;}
+
+// ── Оновлення логіки (Ваш код) ──
+function rsoUpdate(dt) {
+  const alive = rsoFighters.filter(f => f.alive);
+  if (alive.length <= 1) { rsoRunning = false; if (rsoRAF) cancelAnimationFrame(rsoRAF); rsoEnd(alive.length===1?alive[0]:null); return; }
+  
+  const now = performance.now();
+
+  // ── ANTI-STALL: якщо немає вбивств 7с — зона звужується до центру і дамажить тих хто зовні ──
+  if (now - rsoLastKillAt > 14000) {
+    if (!rsoCircle) {
+      let cx = 0, cy = 0;
+      for (const f of alive) { cx += f.x; cy += f.y; }
+      cx /= alive.length; cy /= alive.length;
+      rsoCircle = { x: cx, y: cy, r: Math.max(rsoWorldW, rsoWorldH), lastTick: now };
+    }
+    rsoCircle.r = Math.max(60, rsoCircle.r - 0.08 * dt);
+    if (now - rsoCircle.lastTick > 350) {
+      rsoCircle.lastTick = now;
+      for (const f of alive) {
+        if (Math.hypot(f.x - rsoCircle.x, f.y - rsoCircle.y) > rsoCircle.r) {
+          f.hp -= 12;
+          rsoFloats.push({ x: f.x, y: f.y-20, text: '-12', color: '#5af', life: 600 });
+          if (f.hp <= 0) {
+            f.hp = 0; f.alive = false;
+            rsoKillFeed.unshift({ killer: '🌀 Зона', victim: f.nick, head:false, life: 5000, kColor:'#5af', vColor: f.color });
+            rsoLastKillAt = now;
+          }
+        }
+      }
+    }
+  } else if (rsoCircle && now - rsoLastKillAt < 2000) {
+    rsoCircle = null;
+  }
+  
+  // Кулі
+  for (const b of rsoBullets) {
+    const steps = 3;
+    for (let s = 0; s < steps && !b.dead; s++) {
+      b.x += b.vx*dt/16/steps; b.y += b.vy*dt/16/steps;
+      if (rsoCoverAt(b.x, b.y, 0)) { b.dead = true; rsoFloats.push({x:b.x,y:b.y,impact:true,life:150}); break; }
+      for (const f of alive) {
+        if (f === b.owner || !f.alive) continue;
+        if (Math.hypot(f.x-b.x, f.y-b.y) < f.radius) {
+          b.dead = true;
+          const head = royFloat() < (RAK.headChance + (b.precise?0.12:0));
+          let dmg = RAK.baseDmg + secureRandomInt(8) - 4;
+          if (head) dmg = Math.round(dmg * RAK.headMult);
+          f.hp -= dmg;
+          for(let k=0; k<6; k++) rsoEffects.push({ type:'blood', x:f.x, y:f.y, vx:(Math.random()-0.5)*5, vy:(Math.random()-0.5)*5, life:25 });
+          rsoFloats.push({ x: f.x+(royFloat()*20-10), y: f.y-20, text: '-'+dmg, color: head?'#ffeb3b':'#ff5a5a', life: 700 });
+          if (f.hp <= 0) {
+            f.hp = 0; f.alive = false;
+            rsoKillFeed.unshift({ killer: b.owner.nick, victim: f.nick, head, life: 5000, kColor: b.owner.color, vColor: f.color });
+            rsoLastKillAt = now;
+          }
+          break;
+        }
+      }
+    }
+    b.dist += Math.hypot(b.vx*dt/16, b.vy*dt/16);
+    if (b.dist > RAK.range) b.dead = true;
+  }
+  rsoBullets = rsoBullets.filter(b => !b.dead);
+
+  // ШІ Бійців
+  for (const f of alive) {
+    f.spread = Math.max(RAK.baseSpread, f.spread - RAK.spreadRecover * (dt/16));
+    if (f.reloading) { if (now > f.reloadEnd) { f.reloading = false; f.ammo = RAK.magSize; } }
+    let enemy = f.target;
+    if (!enemy || !enemy.alive) {
+      let bd = 9999;
+      for (const e of alive) { if (e !== f) { const d = Math.hypot(f.x-e.x, f.y-e.y); if (d < bd) { bd = d; enemy = e; } } }
+      f.target = enemy;
+    }
+    if (!enemy) continue;
+    
+    const dx = enemy.x - f.x, dy = enemy.y - f.y;
+    const nd = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const hasLOS = !rsoLineBlocked(f.x, f.y, enemy.x, enemy.y);
+    f.aimAng = rsoLerpAng(f.aimAng, ang, 0.12 * (dt/16));
+    f.facing = f.aimAng; // Повертаємо тіло туди ж, куди й зброю
+    const flashed = now < f.flashedUntil;
+
+    if (!hasLOS) { if (!f.blockedSince) f.blockedSince = now; } 
+    else { f.blockedSince = 0; f.lastSawEnemy = now; }
+
+    // Гранати — НИЗЬКИЙ пріоритет: тільки коли стрільба зараз неможлива/невигідна
+    // (немає лінії вогню, або ворог поза дальністю), і не в перші секунди бою
+    const canShootNow = hasLOS && nd < RAK.range && !f.reloading && !flashed;
+    const fightAge = now - rsoFightStart;
+    if (now > f.nadeCooldown && !flashed && !canShootNow && fightAge > 4000) {
+      const hpPct = f.hp / f.maxHP;
+      // ФРАГ — ворог давно засів за укриттям близько, вистрілити не можемо → вибиваємо
+      if (f.nades.frag > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 2500 && nd < 340) {
+        rsoThrowGrenade(f, enemy, 'frag'); f.nades.frag--; f.nadeCooldown = now + 6000 + royFloat()*3000;
+      // МОЛОТОВ — ворог далеко за укриттям, перекриваємо підхід
+      } else if (f.nades.molotov > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 3000 && nd > 220 && nd < 460) {
+        rsoThrowGrenade(f, enemy, 'molotov'); f.nades.molotov--; f.nadeCooldown = now + 7000 + royFloat()*3000;
+      // СМОК — тікаємо при низькому HP і не можемо відстрілятись
+      } else if (f.nades.smoke > 0 && hpPct < 0.35) {
+        rsoThrowGrenade(f, {x: f.x + dx*0.3, y: f.y + dy*0.3}, 'smoke'); f.nades.smoke--; f.nadeCooldown = now + 6000;
+      }
+    }
+    // ФЛЕШКА — окремо: тільки якщо є LOS і збираємось пушити (перед стрільбою на близькій), рідко
+    if (now > f.nadeCooldown && !flashed && f.nades.flash > 0 && hasLOS && nd < 250 && f.hp/f.maxHP > 0.6 && fightAge > 5000 && royFloat() < 0.15) {
+      rsoThrowGrenade(f, enemy, 'flash'); f.nades.flash--; f.nadeCooldown = now + 6000 + royFloat()*3000;
+    }
+
+    if (now > f.decisionAt) {
+      const hpPct = f.hp / f.maxHP;
+      // push "липкий": якщо ворог далі за range — завжди зближаємось, не перемикаємось на орбітальні режими
+      if (nd > RAK.range * 0.85) f.mode = 'push';
+      else if (hpPct < 0.3 && royFloat() < 0.6) f.mode = 'retreat';
+      else if (!hasLOS) f.mode = 'reposition';
+      else if (nd < 180) f.mode = royFloat()<0.5?'engage':'peek';
+      else f.mode = royFloat()<0.6?'peek':'engage';
+      f.decisionAt = now + 400 + royFloat()*600;
+      f.strafeDir = royFloat()<0.5?1:-1;
+      
+      if (f.mode === 'retreat') f.moveTarget = rsoHideSpot(f, enemy) || rsoAway(f, enemy, 140);
+      else if (f.mode === 'push') {
+        // ціль — прямо на ворога (зупинимось коли увійдемо в range через перевірку нижче)
+        f.moveTarget = { x: enemy.x, y: enemy.y };
+      }
+      else if (f.mode === 'reposition') f.moveTarget = rsoFlank(f, enemy);
+      else if (f.mode === 'peek') {
+        f.anchorCover = rsoNearCover(f);
+        f.moveTarget = f.anchorCover ? rsoPeek(f.anchorCover, enemy) : rsoStrafe(f, enemy);
+      } else f.moveTarget = rsoStrafe(f, enemy);
+    }
+
+    // push: щойно увійшли в зону стрільби — зупиняємось і переходимо в бій
+    if (f.mode === 'push' && nd < RAK.range * 0.8) {
+      f.moveTarget = null;
+      f.mode = hasLOS ? 'engage' : 'reposition';
+      f.decisionAt = now + 200;
+    }
+
+    let speed = 1.4;
+    if (f.mode === 'engage') speed = 0.8;
+    if (f.mode === 'push') speed = 2.0; // швидше зближення
+    if (now < f.muzzle + 150) speed *= 0.6; // повільніше при стрільбі
+    for (const eff of rsoEffects) { if (eff.type === 'fire' && Math.hypot(f.x-eff.x, f.y-eff.y) < eff.r + 10) speed = 2.4; }
+    
+    if (f.moveTarget) {
+      const mdx = f.moveTarget.x - f.x, mdy = f.moveTarget.y - f.y;
+      const md = Math.hypot(mdx, mdy);
+      if (md > 5) {
+        const step = speed*(dt/16);
+        let nx = f.x + (mdx/md)*step, ny = f.y + (mdy/md)*step;
+        if (!rsoCoverAt(nx, ny, f.radius)) { f.x = nx; f.y = ny; f.walkPhase += step*0.15; }
+        else {
+          // обхід укриття: пробуємо вліво/вправо перпендикулярно, не зупиняючись
+          const perpX = -mdy/md, perpY = mdx/md;
+          const sideX = f.x + perpX*step*f.strafeDir, sideY = f.y + perpY*step*f.strafeDir;
+          if (!rsoCoverAt(sideX, sideY, f.radius)) { f.x = sideX; f.y = sideY; f.walkPhase += step*0.15; }
+          else {
+            const sideX2 = f.x - perpX*step*f.strafeDir, sideY2 = f.y - perpY*step*f.strafeDir;
+            if (!rsoCoverAt(sideX2, sideY2, f.radius)) { f.x = sideX2; f.y = sideY2; f.walkPhase += step*0.15; }
+            else { f.strafeDir *= -1; } // обидва боки заблоковані — міняємо напрям обходу
+          }
+        }
+      }
+    }
+    f.x = Math.max(20, Math.min(rsoWorldW-20, f.x)); f.y = Math.max(20, Math.min(rsoWorldH-20, f.y));
+
+    // Стрільба
+    if (hasLOS && !f.reloading && nd < RAK.range && !flashed) {
+      if (Math.abs(rsoAngleDiff(f.aimAng, ang)) < 0.15 + f.spread) {
+        if (f.burstLeft <= 0 && now > f.burstCooldown) { f.burstLeft = 3 + secureRandomInt(6); }
+        if (f.burstLeft > 0 && now > f.shotTimer) {
+          rsoFire(f, enemy);
+          f.burstLeft--; f.shotTimer = now + RAK.fireRate;
+          if (f.burstLeft <= 0) f.burstCooldown = now + 400 + royFloat()*400;
+        }
+      }
+    }
+  }
+
+  // Частинки
+  rsoCasings.forEach(c => { c.x += c.vx*(dt/16); c.y += c.vy*(dt/16); c.vx*=0.85; c.vy*=0.85; c.life -= dt; });
+  rsoCasings = rsoCasings.filter(c => c.life > 0);
+  rsoFloats.forEach(f => f.life -= dt); rsoFloats = rsoFloats.filter(f => f.life > 0);
+  rsoTracers.forEach(t => t.life -= dt); rsoTracers = rsoTracers.filter(t => t.life > 0);
+  rsoSmoke.forEach(s => { s.life -= dt; s.r += dt*0.02; if(s.life>200 && s.r>50) s.block = true; });
+  rsoSmoke = rsoSmoke.filter(sm => sm.life > 0);
+  
+  rsoUpdateGrenades(dt, now);
+  rsoUpdateEffects(dt, now);
+  
+  for (const k of rsoKillFeed) k.life -= dt;
+  rsoKillFeed = rsoKillFeed.filter(k => k.life > 0);
+
+  // Камера
+  if (now > rsoCamManualUntil) rsoCamManual = false;
+  if (rsoOverview) {
+    rsoCam.targetX = rsoWorldW/2; rsoCam.targetY = rsoWorldH/2;
+    rsoCam.targetZoom = Math.min(rsoW/rsoWorldW, rsoH/rsoWorldH) * 0.95;
+  } else if (rsoCamManual) {
+    const targ = alive[rsoCam.focusIdx % alive.length];
+    if (targ) { rsoCam.targetX = targ.x; rsoCam.targetY = targ.y; rsoCam.targetZoom = 1.6; }
+  } else {
+    rsoCam.targetZoom = 1.55;
+    let tx = rsoWorldW/2, ty = rsoWorldH/2;
+    if (alive.length === 1) { tx = alive[0].x; ty = alive[0].y; }
+    else if (alive.length > 1) {
+      let bd = 9999, bestA = alive[0], bestB = alive[1];
+      for (let i=0; i<alive.length; i++) {
+        for (let j=i+1; j<alive.length; j++) {
+          const d = Math.hypot(alive[i].x-alive[j].x, alive[i].y-alive[j].y);
+          if (d < bd) { bd = d; bestA = alive[i]; bestB = alive[j]; }
+        }
+      }
+      tx = (bestA.x + bestB.x) / 2; ty = (bestA.y + bestB.y) / 2;
+    }
+    rsoCam.targetX = tx; rsoCam.targetY = ty;
+  }
+  rsoCam.x += (rsoCam.targetX - rsoCam.x) * Math.min(1, dt/200);
+  rsoCam.y += (rsoCam.targetY - rsoCam.y) * Math.min(1, dt/200);
+  rsoCam.zoom += (rsoCam.targetZoom - rsoCam.zoom) * Math.min(1, dt/200);
+}
+
+function rsoFire(shooter, enemy) {
+  const ang = shooter.aimAng + shooter.spread*(royFloat()*2-1);
+  const precise = shooter.spread < RAK.baseSpread + 0.04;
+  const mx = shooter.x + Math.cos(shooter.aimAng)*25;
+  const cy = shooter.y + Math.sin(shooter.aimAng)*25;
+  
+  shooter.ammo--;
+  if (shooter.ammo <= 0) { shooter.reloading = true; shooter.reloadEnd = performance.now() + RAK.reloadTime; }
+  shooter.spread = Math.min(RAK.maxSpread, shooter.spread + RAK.spreadPerShot);
+  shooter.muzzle = performance.now();
+  
+  const vx = Math.cos(ang) * RAK.bulletSpeed, vy = Math.sin(ang) * RAK.bulletSpeed;
+  rsoBullets.push({ x: mx, y: cy, vx, vy, owner: shooter, dead: false, dist: 0, precise });
+  rsoTracers.push({ x1: mx, y1: cy, x2: mx+vx*2, y2: cy+vy*2, life: 60 });
+  rsoEffects.push({ type: 'flash', x: mx, y: cy, life: 2, r: 25 });
+  rsoCasings.push({ x: shooter.x, y: shooter.y, vx: Math.cos(ang+1.5)*3+royFloat(), vy: Math.sin(ang+1.5)*3+royFloat(), life: 2000, ang: royFloat()*6 });
+}
+
+// ── Математика ІІ ──
+function rsoHideSpot(f, e) {
+  for (const c of rsoCovers) {
+    if (c.type === 'bush') continue;
+    const dx = c.x - e.x, dy = c.y - e.y, d = Math.hypot(dx, dy);
+    if (d > 0) {
+      const fr = c.r || (c.len ? c.len/2 : 30);
+      const hx = c.x + (dx/d)*(fr + 20), hy = c.y + (dy/d)*(fr + 20);
+      if (!rsoCoverAt(hx, hy, f.radius)) return {x:hx, y:hy};
+    }
+  }
+  return null;
+}
+function rsoAway(f, e, dist) { const ang = Math.atan2(f.y-e.y, f.x-e.x); return { x: f.x + Math.cos(ang)*dist, y: f.y + Math.sin(ang)*dist }; }
+function rsoFlank(f, e) { const ang = Math.atan2(e.y-f.y, e.x-f.x) + (royFloat()<0.5?1:-1)*1.2; return { x: e.x - Math.cos(ang)*150, y: e.y - Math.sin(ang)*150 }; }
+function rsoNearCover(f) { let bc = null, bd = 999; for (const c of rsoCovers) { if (c.type==='bush') continue; const d = Math.hypot(f.x-c.x, f.y-c.y); if (d<bd && d<150) { bd=d; bc=c; } } return bc; }
+function rsoPeek(c, e) { const a = Math.atan2(e.y-c.y, e.x-c.x) + (royFloat()<0.5?0.6:-0.6); const r = (c.r||(c.len?c.len/2:30))+20; return { x: c.x+Math.cos(a)*r, y: c.y+Math.sin(a)*r }; }
+function rsoStrafe(f, e) { const a = Math.atan2(e.y-f.y, e.x-f.x) + 1.5*f.strafeDir; return { x: f.x+Math.cos(a)*60, y: f.y+Math.sin(a)*60 }; }
+
+// ── Гранати ──
+function rsoThrowGrenade(thrower, target, type) {
+  const dx = target.x - thrower.x, dy = target.y - thrower.y, dist = Math.hypot(dx, dy) || 1, ang = Math.atan2(dy, dx);
+  rsoGrenades.push({ x: thrower.x, y: thrower.y, tx: target.x, ty: target.y, vx: Math.cos(ang)*dist/48, vy: Math.sin(ang)*dist/48, type, life: 800, maxLife: 800 });
+}
+function rsoUpdateGrenades(dt, now) {
+  for (const g of rsoGrenades) {
+    g.x += g.vx*(dt/16); g.y += g.vy*(dt/16); g.life -= dt;
+    if (g.life <= 0) {
+      if (g.type === 'frag') {
+        rsoEffects.push({ type: 'blast', x: g.x, y: g.y, r: 120, life: 300, maxLife: 300 });
+        for (const f of rsoFighters) {
+          if (!f.alive) continue;
+          const d = Math.hypot(f.x - g.x, f.y - g.y);
+          if (d < 120 && !rsoLineBlocked(f.x, f.y, g.x, g.y)) { f.hp -= Math.max(10, 80 * (1 - d/120)); if (f.hp<=0) { f.hp=0; f.alive=false; } }
+        }
+      } else if (g.type === 'smoke') {
+        for (let i=0; i<4; i++) rsoSmoke.push({ x: g.x+(royFloat()*30-15), y: g.y+(royFloat()*30-15), r: 20, life: 7000+royFloat()*1000, maxLife: 8000, block: false });
+      } else if (g.type === 'flash') {
+        rsoEffects.push({ type: 'flashbang', x: g.x, y: g.y, life: 200, maxLife: 200 });
+        for (const f of rsoFighters) {
+          if (!f.alive) continue;
+          const d = Math.hypot(f.x - g.x, f.y - g.y);
+          if (d < 200 && !rsoLineBlocked(f.x, f.y, g.x, g.y)) f.flashedUntil = now + 1800 + (1 - d/200)*1200;
+        }
+      } else if (g.type === 'molotov') {
+        rsoEffects.push({ type: 'fire', x: g.x, y: g.y, life: 5000, maxLife: 5000, r: 70 });
+      }
+    }
+  }
+  rsoGrenades = rsoGrenades.filter(g => g.life > 0);
+}
+function rsoUpdateEffects(dt, now) {
+  for (const e of rsoEffects) {
+    e.life -= dt;
+    if (e.type === 'fire') {
+      // урон раз на 500мс (не щокадрово), невеликий — щоб встигали вибігти
+      if (!e.lastBurn) e.lastBurn = now;
+      if (now - e.lastBurn >= 500) {
+        e.lastBurn = now;
+        for (const f of rsoFighters) {
+          if (f.alive && Math.hypot(f.x-e.x, f.y-e.y) < e.r) {
+            f.hp -= 6;
+            rsoFloats.push({ x: f.x, y: f.y-20, text: '-6', color: '#ff7a2a', life: 600 });
+            if (f.hp<=0) { f.hp=0; f.alive=false; rsoKillFeed.unshift({ killer:'🔥', victim:f.nick, head:false, life:5000, kColor:'#ff7a2a', vColor:f.color }); rsoLastKillAt = now; }
+          }
+        }
+      }
+    } else if (e.type === 'blood') { e.x += e.vx; e.y += e.vy; e.vx *= 0.9; e.vy *= 0.9; }
+  }
+  rsoEffects = rsoEffects.filter(e => e.life > 0);
+}
+
+// ═══════════════ ВІДМАЛЬОВКА 2.5D ═══════════════
+
+function rsoDraw() {
+  const ctx = rsoCtx;
+  // Базовий темний фон (на випадок країв)
+  ctx.fillStyle = '#1a2417';
+  ctx.fillRect(0, 0, rsoW, rsoH);
+
+  ctx.save();
+  ctx.translate(rsoW/2, rsoH/2);
+  ctx.scale(rsoCam.zoom, rsoCam.zoom);
+  ctx.translate(-rsoCam.x, -rsoCam.y);
+
+  const viewL = rsoCam.x - rsoW/2/rsoCam.zoom - 100;
+  const viewR = rsoCam.x + rsoW/2/rsoCam.zoom + 100;
+  const viewT = rsoCam.y - rsoH/2/rsoCam.zoom - 100;
+  const viewB = rsoCam.y + rsoH/2/rsoCam.zoom + 100;
+  const inView = (x, y, m) => x > viewL-m && x < viewR+m && y > viewT-m && y < viewB+m;
+
+  // Трав'яна текстура — в світових координатах, рухається з камерою
+  if (rsoGrassPattern) {
+    ctx.fillStyle = rsoGrassPattern;
+    ctx.fillRect(viewL, viewT, viewR - viewL, viewB - viewT);
+  } else {
+    ctx.fillStyle = '#2b3622';
+    ctx.fillRect(viewL, viewT, viewR - viewL, viewB - viewT);
+  }
+
+  // Кров і гільзи (на землі)
+  for(let e of rsoEffects) if(e.type==='blood' && inView(e.x, e.y, 10)) { ctx.fillStyle='rgba(150,0,0,'+(e.life/25)+')'; ctx.beginPath(); ctx.arc(e.x,e.y,3,0,7); ctx.fill(); }
+  ctx.fillStyle = '#ffd700';
+  for(let c of rsoCasings) if(inView(c.x, c.y, 10)) { ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.ang); ctx.fillRect(-2,-1,4,2); ctx.restore(); }
+
+  // Сортування по Y для псевдо-3D (Z-Index)
+  let renderList = [];
+  rsoCovers.forEach(c => { if(inView(c.x,c.y,80)) renderList.push({ obj: c, type: c.type, y: c.y }); });
+  rsoFighters.forEach(f => { 
+    if(inView(f.x,f.y,30)) renderList.push({ obj: f, type: f.alive ? 'fighter' : 'dead_fighter', y: f.y }); 
+  });
+  rsoGrenades.forEach(g => { if(inView(g.x,g.y,20)) renderList.push({ obj: g, type: 'grenade', y: g.y }); });
+  
+  renderList.sort((a, b) => a.y - b.y);
+
+  // Відмальовка відсортованих об'єктів
+  renderList.forEach(item => {
+    if (item.type === 'fighter') rsoDrawFighter3D(ctx, item.obj);
+    else if (item.type === 'dead_fighter') rsoDrawDeadFighter(ctx, item.obj);
+    else if (item.type === 'grenade') rsoDrawGrenade(ctx, item.obj);
+    else rsoDrawCover3D(ctx, item.obj, rsoCam.x, rsoCam.y);
+  });
+
+  // Ефекти поверх (вогонь, дим, світіння)
+  ctx.globalCompositeOperation = 'lighter';
+  for(let t of rsoTracers) {
+    if(!inView(t.x1, t.y1, 20)) continue;
+    ctx.strokeStyle = 'rgba(255,200,100,0.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke();
+  }
+  for(let e of rsoEffects) {
+    if(!inView(e.x, e.y, e.r||50)) continue;
+    if(e.type === 'flash') {
+      let grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+      grad.addColorStop(0, 'rgba(255,255,200,1)'); grad.addColorStop(1, 'rgba(255,150,0,0)');
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 7); ctx.fill();
+    } else if (e.type === 'blast' || e.type === 'flashbang') {
+      const a = Math.max(0, e.life/e.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = e.type==='blast' ? '#ffaa40' : '#fff';
+      ctx.beginPath(); ctx.arc(e.x, e.y, (e.r||150) * (1-a) + 10, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (e.type === 'fire') {
+      for(let i=0; i<3; i++) {
+        ctx.fillStyle = i===0?'rgba(255,50,0,0.2)':'rgba(255,150,0,0.4)';
+        ctx.beginPath(); ctx.arc(e.x+(Math.random()*10-5), e.y+(Math.random()*10-5), e.r - i*15, 0, 7); ctx.fill();
+      }
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Дим (звичайне накладання)
+  for(let s of rsoSmoke) {
+    if(!inView(s.x, s.y, s.r)) continue;
+    ctx.globalAlpha = Math.min(0.6, s.life/2000);
+    ctx.fillStyle = '#99aab5';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Floating text
+  for (const f of rsoFloats) {
+    if(!inView(f.x, f.y, 10)) continue;
+    const a = Math.max(0, f.life/700);
+    if (f.impact) {
+      ctx.fillStyle = 'rgba(255,255,255,'+a+')'; ctx.beginPath(); ctx.arc(f.x, f.y-3+(1-a)*5, 3, 0, 7); ctx.fill();
+    } else {
+      ctx.globalAlpha = a; ctx.font = 'bold 14px Inter'; ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y - (1-a)*20); ctx.globalAlpha = 1;
+    }
+  }
+
+  // ── Anti-stall зона (синє коло що звужується) ──
+  if (rsoCircle) {
+    ctx.strokeStyle = 'rgba(90,170,255,0.9)';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#5aaaff'; ctx.shadowBlur = 20;
+    ctx.beginPath(); ctx.arc(rsoCircle.x, rsoCircle.y, rsoCircle.r, 0, 7); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // легка синя заливка зовні
+    ctx.fillStyle = 'rgba(40,90,200,0.12)';
+    ctx.beginPath();
+    ctx.rect(viewL, viewT, viewR-viewL, viewB-viewT);
+    ctx.arc(rsoCircle.x, rsoCircle.y, rsoCircle.r, 0, 7, true);
+    ctx.fill('evenodd');
+  }
+
+  ctx.restore();
+
+  // Віньєтка (кінематографічність)
+  let vig = ctx.createRadialGradient(rsoW/2, rsoH/2, rsoH/3, rsoW/2, rsoH/2, rsoH);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.7)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, rsoW, rsoH);
+
+  rsoDrawHUD(ctx);
+}
+
+// ── Малювання 2.5D Об'єктів ──
+
+function rsoDrawFighter3D(ctx, f) {
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  
+  // Тінь
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10; ctx.shadowOffsetX = -5; ctx.shadowOffsetY = 10;
+  
+  // Поворот тіла туди куди дивиться зброя
+  ctx.rotate(f.facing);
+
+  // Тіло (Бронежилет)
+  ctx.fillStyle = f.color;
+  ctx.beginPath(); ctx.roundRect(-10, -14, 20, 28, 6); ctx.fill();
+
+  // Руки
+  ctx.fillStyle = '#f1c27d'; 
+  ctx.beginPath(); ctx.arc(8, -14, 5, 0, Math.PI*2); ctx.fill(); // ліва
+  ctx.beginPath(); ctx.arc(18, -4, 5, 0, Math.PI*2); ctx.fill(); // права
+
+  // Зброя (AK)
+  ctx.fillStyle = '#222'; ctx.fillRect(5, -6, 28, 4); // ствол
+  ctx.fillStyle = '#5c3a21'; ctx.fillRect(10, -7, 10, 6); // цівка
+
+  // Голова (Малюється зверху, без тіні для себе, щоб тінь від тіла працювала)
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(-2, -2, 4, 0, Math.PI*2); ctx.fill(); // блік
+
+  ctx.restore();
+
+  // Флешка ефект
+  if (performance.now() < f.flashedUntil) {
+    ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.radius+4, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.font = '14px serif'; ctx.fillText('😵', f.x-7, f.y - 25);
+  }
+
+  // HUD над гравцем
+  ctx.font = 'bold 11px Inter, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'white'; ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
+  ctx.fillText(f.nick, f.x, f.y - 30); ctx.shadowColor = 'transparent';
+  
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(f.x - 15, f.y - 24, 30, 4);
+  ctx.fillStyle = f.color; ctx.fillRect(f.x - 15, f.y - 24, 30 * (Math.max(0, f.hp) / f.maxHP), 4);
+  
+  if (f.reloading) { ctx.font = '12px serif'; ctx.fillText('🔄', f.x+20, f.y-20); }
+}
+
+function rsoDrawDeadFighter(ctx, f) {
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = 'rgba(150,0,0,0.5)';
+  ctx.beginPath(); ctx.arc(f.x, f.y, f.radius*1.5, 0, 7); ctx.fill();
+  ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.fillText('💀', f.x, f.y+6);
+  ctx.globalAlpha = 1;
+}
+
+function rsoDrawCover3D(ctx, c, camX, camY) {
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  if (c.type === 'rock') {
+    const h = 25;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath(); ctx.ellipse(0, c.r/2, c.r, c.r*0.6, 0, 0, 7); ctx.fill(); // тінь
+    ctx.fillStyle = '#4a4d4a'; // стінка
+    ctx.beginPath(); ctx.ellipse(0, 0, c.r, c.r*0.8, 0, 0, 7); ctx.ellipse(0, -h, c.r, c.r*0.8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#686b68'; // верх
+    ctx.beginPath(); ctx.ellipse(0, -h, c.r, c.r*0.8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'; // блік
+    ctx.beginPath(); ctx.ellipse(-c.r*0.2, -h - c.r*0.2, c.r*0.4, c.r*0.3, 0, 0, 7); ctx.fill();
+  } else if (c.type === 'tree') {
+    const h = 46;
+    // тінь на землі
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(c.r*0.15, c.r*0.3, c.r*0.85, c.r*0.5, 0, 0, 7); ctx.fill();
+    // стовбур
+    ctx.fillStyle = '#3b2512'; ctx.fillRect(-5, -h*0.5, 10, h*0.7);
+    ctx.fillStyle = '#2a1a0d'; ctx.fillRect(-5, -h*0.5, 3, h*0.7); // тінь стовбура
+    // крона — концентричні шари знизу-вгору для об'єму (без бічного розповзання)
+    const cy = -h;
+    // невеликий паралакс — крона трохи зміщена від стовбура у бік від камери
+    const px = (c.x - camX) * 0.04, py = (c.y - camY) * 0.04;
+    const greens = ['#234d18', '#2d5e1f', '#377026', '#43822e'];
+    for (let i = 0; i < greens.length; i++) {
+      const rr = c.r * (1 - i * 0.16);
+      const oy = cy - i * 5 + py;
+      const ox = px;
+      ctx.fillStyle = greens[i];
+      ctx.beginPath(); ctx.arc(ox, oy, rr, 0, 7); ctx.fill();
+    }
+    // світлі плями-листя
+    ctx.fillStyle = 'rgba(110,160,80,0.5)';
+    for (let i = 0; i < 4; i++) {
+      const a = (c.r + i*97) % 628 / 100;
+      const rr = c.r * 0.5;
+      ctx.beginPath(); ctx.arc(px + Math.cos(a)*rr*0.6, cy - h*0.05 + py + Math.sin(a)*rr*0.5, 3, 0, 7); ctx.fill();
+    }
+  } else if (c.type === 'fence') {
+    const h = 18;
+    // плечі в локальних координатах (центр уже translated до c.x,c.y)
+    const rects = rsoFenceRects(c).map(s => ({ x: s.cx - c.x, y: s.cy - c.y, w: s.w, h: s.h }));
+    // тінь
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (const r of rects) ctx.fillRect(r.x - r.w/2 + 4, r.y - r.h/2 + 4, r.w, r.h);
+    // нижня частина (основа стовпів)
+    ctx.fillStyle = '#3a2410';
+    for (const r of rects) ctx.fillRect(r.x - r.w/2, r.y - r.h/2, r.w, r.h);
+    // верхня частина (дошки, підняті на h)
+    ctx.fillStyle = '#6b4320';
+    for (const r of rects) ctx.fillRect(r.x - r.w/2, r.y - r.h/2 - h, r.w, r.h);
+    // бічна стінка (з'єднання низ-верх)
+    ctx.fillStyle = '#523418';
+    for (const r of rects) {
+      ctx.beginPath();
+      ctx.moveTo(r.x - r.w/2, r.y + r.h/2);
+      ctx.lineTo(r.x - r.w/2, r.y + r.h/2 - h);
+      ctx.lineTo(r.x + r.w/2, r.y + r.h/2 - h);
+      ctx.lineTo(r.x + r.w/2, r.y + r.h/2);
+      ctx.fill();
+    }
+    // вертикальні стовпчики для деталізації
+    ctx.fillStyle = '#4a2e15';
+    for (const r of rects) {
+      if (r.w > r.h) { // горизонтальне плече
+        for (let px = r.x - r.w/2; px <= r.x + r.w/2; px += 18) ctx.fillRect(px - 2, r.y - r.h/2 - h, 4, r.h + h);
+      } else { // вертикальне плече
+        for (let py = r.y - r.h/2; py <= r.y + r.h/2; py += 18) ctx.fillRect(r.x - r.w/2, py - 2 - h, r.w, 4);
+      }
+    }
+  } else if (c.type === 'bush') {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(5, 5, c.r, c.r*0.7, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a5526'; ctx.beginPath(); ctx.arc(0, 0, c.r, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a6b32'; ctx.beginPath(); ctx.arc(-c.r*0.2, -c.r*0.2, c.r*0.7, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function rsoDrawGrenade(ctx, g) {
+  const prog = 1 - (g.life/g.maxLife);
+  const lift = Math.sin(prog * Math.PI) * 20; // дуга польоту
+  const gy = g.y - lift;
+  const gc = g.type === 'frag' ? '#3a4a2a' : g.type === 'smoke' ? '#8a8a8a' : g.type === 'flash' ? '#d0d0a0' : '#5a3020';
+  
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.arc(g.x, g.y+5, 4, 0, 7); ctx.fill(); // тінь
+  ctx.fillStyle = gc; ctx.beginPath(); ctx.arc(g.x, gy, 5, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+}
+
+function rsoDrawHUD(ctx) {
+  const aliveCount = rsoFighters.filter(f => f.alive).length;
+  ctx.textAlign = 'right'; ctx.font = '900 24px Inter, sans-serif';
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
+  ctx.fillText('ALIVE: ' + aliveCount, rsoW - 20, 36);
+  ctx.shadowBlur = 0;
+  
+  let y = 70;
+  for (const k of rsoKillFeed) {
+    ctx.globalAlpha = Math.min(1, k.life/1000);
+    ctx.font = 'bold 14px Inter, sans-serif';
+    const vw = ctx.measureText(k.victim).width;
+    ctx.fillStyle = k.vColor; ctx.fillText(k.victim, rsoW - 20, y);
+    ctx.fillStyle = '#fff'; ctx.fillText(k.head ? ' 🎯 ' : ' 💀 ', rsoW - 20 - vw, y);
+    const sw = ctx.measureText(k.head ? ' 🎯 ' : ' 💀 ').width;
+    ctx.fillStyle = k.kColor; ctx.fillText(k.killer, rsoW - 20 - vw - sw, y);
+    y += 24; ctx.globalAlpha = 1;
+  }
+}
+
+function rsoEnd(winner) {
+  setTimeout(() => {
+    const scr = document.getElementById('rso-winner');
+    const nameEl = document.getElementById('rso-winner-name');
+    const labelEl = scr.querySelector('.label');
+    const crownEl = scr.querySelector('.crown');
+    scr.classList.add('show');
+    if (winner) {
+      nameEl.textContent = winner.nick;
+      nameEl.className = 'big';
+      if (labelEl) labelEl.textContent = 'Победитель';
+      if (crownEl) crownEl.textContent = '👑';
+    } else {
+      nameEl.textContent = 'Все погибли';
+      nameEl.className = 'big draw';
+      if (crownEl) crownEl.textContent = '💀';
+      if (labelEl) labelEl.textContent = 'Ничья';
+    }
+    // повертаємо переможця в основну гру бота
+    setTimeout(() => {
+      document.getElementById('royale-shootout').classList.remove('visible');
+      Object.values(royPlayers).forEach(p => { if (winner && p.nick !== winner.nick) { p.alive = false; p.dying = false; p.removed = true; } });
+      if (winner) { const wp = royPlayers[winner.nick]; if (wp) { wp.alive = true; wp.dying = false; wp.removed = false; if (typeof royRender === 'function') royRender(); royDeclareWinner(wp); } }
+      else { royPhase = 'finished'; if (typeof royStatus === 'function') royStatus('Ничья!'); if (typeof royRender === 'function') royRender(); }
+    }, 3500);
+  }, 2000);
+}
+function rsoToggleOverview() {
+  rsoOverview = !rsoOverview;
+  const btn = document.getElementById('rso-overview-btn');
+  if (btn) btn.textContent = rsoOverview ? '🔍 К бою' : '🗺 Вся карта';
+}
+
+
 
 function startChatgame() {
   if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
