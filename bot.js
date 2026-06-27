@@ -751,14 +751,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
   #royale-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: var(--kick); }
   #royale-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
-  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: center; align-items: stretch; }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: space-between; align-items: stretch; }
   .royale-side {
-    width: clamp(120px, 16vw, 200px); flex-shrink: 1; min-width: 0; background: rgba(0,0,0,0.3);
+    width: clamp(160px, 19vw, 280px); flex-shrink: 0; min-width: 0; background: rgba(0,0,0,0.3);
     border: 1px solid var(--panel-border); border-radius: 10px;
     padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
   }
   @media (max-width: 760px) {
-    .royale-side { width: clamp(90px, 22vw, 140px); padding: 6px; }
+    .royale-side { width: clamp(110px, 24vw, 160px); padding: 6px; }
     #royale-top h2 { font-size: 14px; }
     #royale-status { font-size: 11px; }
   }
@@ -766,7 +766,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .royale-pill { font-size: 12px; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); display: flex; justify-content: space-between; gap: 6px; }
   .royale-pill .pos { color: var(--text-muted); font-family: monospace; font-size: 11px; }
   .royale-pill.dead { opacity: 0.5; text-decoration: line-through; }
-  #royale-stage { position: relative; display: flex; align-items: center; }
+  #royale-stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
   #royale-map-bg { position: absolute; inset: 8px; border-radius: 6px; overflow: hidden; opacity: 0.55; pointer-events: none; z-index: 0; }
   #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
   #royale-grid { position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.015); }
@@ -779,9 +779,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .rcell.redzone-blast { background: rgba(255,74,74,0.6) !important; border-color: #fff !important; }
   .rcell.rwinner { background: linear-gradient(145deg, var(--kick), #28a708) !important; border-color: #fff !important; color: #000; font-weight: 900; animation: winnerGlow 0.8s ease infinite alternate; }
   #royale-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-  #royale-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; justify-content: center; }
-  #royale-legend span { display: flex; align-items: center; gap: 4px; }
-  #royale-legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .royale-pill.highlight { background: rgba(255,215,0,0.25); outline: 1px solid var(--gold); }
+  .rcell.cell-hover { outline: 2px solid var(--gold); outline-offset: -2px; z-index: 2; }
   /* перестрілка */
   #royale-shootout { position: fixed; inset: 0; z-index: 9994; background: rgba(6,8,10,0.97); backdrop-filter: blur(4px); display: none; flex-direction: column; align-items: center; padding: 20px; }
   #royale-shootout.visible { display: flex; }
@@ -1461,7 +1460,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 <!-- Оверлей БАТЛ РОЯЛЬ -->
 <div id="royale-overlay">
   <div id="royale-top">
-    <h2>🪂 БАТЛ РОЯЛЬ</h2>
+    <h2>🪂 БАТЛ РОЯЛЬ <span style="font-size:13px;color:var(--text-muted);letter-spacing:1px;vertical-align:middle;">(бета)</span></h2>
     <div id="royale-status">Зрители пишут координаты (A1, G4...) чтобы занять клетку</div>
   </div>
   <div id="royale-main">
@@ -1478,15 +1477,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <div id="royale-dead-list"></div>
     </div>
   </div>
-  <div id="royale-legend">
-    <span><span class="sw" style="background:rgba(83,252,24,0.3)"></span> Безопасно</span>
-    <span><span class="sw" style="background:rgba(43,140,255,0.4)"></span> Вне зоны</span>
-    <span><span class="sw" style="background:rgba(255,74,74,0.4)"></span> Красная зона</span>
-  </div>
   <div id="royale-controls">
     <button class="btn-orange" onclick="royaleShrinkZone()">🌀 Зона</button>
     <button class="btn-dark" style="background:var(--red);color:#fff;" onclick="royaleRedZone()">💥 Красная зона</button>
-    <button class="btn-primary" id="roy-fight-btn" style="display:none;background:var(--gold);color:#000;" onclick="royLaunchFight()">⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ</button>
+    <button class="btn-primary" id="roy-fight-btn" style="display:none;background:var(--gold);color:#000;" onclick="royLaunchFight()">⚔️ НАЧАТЬ ФИНАЛ</button>
     <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
   </div>
   <!-- Тестова кнопка-олівець (ручне заповнення) -->
@@ -1506,13 +1500,13 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 </div>
 <!-- Екран перестрілки БР -->
 <div id="royale-shootout">
-  <h2>⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА</h2>
+  <h2>⚔️ ФИНАЛ</h2>
   <div id="rso-arena"><canvas id="rso-canvas"></canvas><div id="rso-winner"><div class="crown">👑</div><div class="label">Победитель</div><div class="big" id="rso-winner-name"></div></div></div>
   <div style="display:flex;gap:10px;margin-top:8px;align-items:center;">
     <button class="btn-dark" onclick="rsoFocusNext(-1)" style="font-size:16px;padding:6px 18px;">◀</button>
-    <span style="font-size:12px;color:var(--text-muted);">камера по бойцам</span>
+    <span id="rso-cam-label" style="font-size:13px;color:var(--text-muted);min-width:120px;text-align:center;">камера</span>
     <button class="btn-dark" onclick="rsoFocusNext(1)" style="font-size:16px;padding:6px 18px;">▶</button>
-    <button class="btn-dark" id="rso-overview-btn" onclick="rsoToggleOverview()" style="font-size:13px;padding:6px 18px;">🗺 Вся карта</button>
+    <button class="btn-dark" id="rso-overview-btn" onclick="rsoToggleOverview()" style="font-size:13px;padding:6px 18px;">🔍 Вид</button>
   </div>
 </div>
 
@@ -3081,8 +3075,8 @@ function startRoyale() {
 function royBuildGrid() {
   const grid = document.getElementById('royale-grid');
   // розмір клітинки — максимально великий під доступний простір (ширина і висота)
-  // динамічна ширина бокових панелей (clamp 120-200px по 16vw, ×2 + відступи)
-  const sideW = Math.min(200, Math.max(120, window.innerWidth * 0.16)) * 2 + 60;
+  // динамічна ширина бокових панелей (clamp 160-280px, ×2 + відступи)
+  const sideW = Math.min(280, Math.max(160, window.innerWidth * 0.19)) * 2 + 60;
   const availW = window.innerWidth - sideW;
   const availH = window.innerHeight - 200;
   const cellSize = Math.max(26, Math.min(80, Math.floor(Math.min(availW, availH) / ROY_N)));
@@ -3093,6 +3087,9 @@ function royBuildGrid() {
       const cell = document.createElement('div');
       cell.className = 'rcell'; cell.id = 'rcell-' + c + '-' + r;
       cell.style.height = cellSize + 'px';
+      cell.dataset.col = c; cell.dataset.row = r;
+      cell.addEventListener('mouseenter', royCellHover);
+      cell.addEventListener('mouseleave', royCellUnhover);
       const coord = document.createElement('div');
       coord.className = 'rcoord'; coord.textContent = ROY_COLS[c] + (r + 1);
       cell.appendChild(coord);
@@ -3103,6 +3100,23 @@ function royBuildGrid() {
     }
   }
   document.getElementById('royale-map-bg').innerHTML = royMapSVG();
+}
+
+// Наведення на клітинку — підсвічуємо гравців у цій клітинці в списках
+function royCellHover(e) {
+  const cell = e.currentTarget;
+  const c = +cell.dataset.col, r = +cell.dataset.row;
+  cell.classList.add('cell-hover');
+  const nicks = Object.values(royPlayers).filter(p => p.col === c && p.row === r).map(p => p.nick.toLowerCase());
+  if (!nicks.length) return;
+  document.querySelectorAll('#royale-alive-list .royale-pill, #royale-dead-list .royale-pill').forEach(pill => {
+    const nm = (pill.dataset.nick || '').toLowerCase();
+    if (nicks.includes(nm)) pill.classList.add('highlight');
+  });
+}
+function royCellUnhover(e) {
+  e.currentTarget.classList.remove('cell-hover');
+  document.querySelectorAll('.royale-pill.highlight').forEach(p => p.classList.remove('highlight'));
 }
 
 function royParseCoord(text) {
@@ -3189,9 +3203,9 @@ function royRender() {
   document.getElementById('royale-alive-count').textContent = alive.length;
   document.getElementById('royale-dead-count').textContent = Object.values(royPlayers).filter(p => !p.alive).length;
   document.getElementById('royale-alive-list').innerHTML = alive.sort((a,b) => a.nick.localeCompare(b.nick))
-    .map(p => '<div class="royale-pill"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+    .map(p => '<div class="royale-pill" data-nick="' + escapeHtml(p.nick) + '"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
   document.getElementById('royale-dead-list').innerHTML = Object.values(royPlayers).filter(p => !p.alive)
-    .map(p => '<div class="royale-pill dead"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+    .map(p => '<div class="royale-pill dead" data-nick="' + escapeHtml(p.nick) + '"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
 }
 
 function royStatus(msg) { document.getElementById('royale-status').textContent = msg; }
@@ -3408,10 +3422,16 @@ function rsoDrawPrep() {
   const ctx = rsoCtx;
   ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, rsoW, rsoH);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-  ctx.font = '900 36px Inter, sans-serif';
-  ctx.fillText('⚔️ ФИНАЛЬНАЯ ПЕРЕСТРЕЛКА', rsoW/2, rsoH/2 - 64);
+  // авто-вписування заголовка по ширині
+  let titleSize = 44;
+  ctx.font = '900 ' + titleSize + 'px Inter, sans-serif';
+  const title = '⚔️ ФИНАЛ';
+  while (ctx.measureText(title).width > rsoW - 60 && titleSize > 18) {
+    titleSize -= 2; ctx.font = '900 ' + titleSize + 'px Inter, sans-serif';
+  }
+  ctx.fillText(title, rsoW/2, rsoH/2 - 64);
   ctx.font = '16px Inter, sans-serif'; ctx.fillStyle = '#ccc';
-  ctx.fillText('Бойцов: ' + rsoFighters.length + ' · Оружие: AK-47', rsoW/2, rsoH/2 - 30);
+  ctx.fillText('ALIVE: ' + rsoFighters.length, rsoW/2, rsoH/2 - 30);
   
   const bw = 240, bh = 54, bx = rsoW/2 - bw/2, by = rsoH/2 + 36;
   ctx.fillStyle = '#53fc18'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 10); ctx.fill();
@@ -3437,6 +3457,9 @@ let rsoEndedAt = 0, rsoWinner = null;
 function rsoFocusNext(dir) {
   const alive = rsoFighters.filter(f => f.alive);
   if (!alive.length) return;
+  rsoOverview = false; // вихід з режиму огляду при ручному фокусі
+  const ovBtn = document.getElementById('rso-overview-btn');
+  if (ovBtn) ovBtn.textContent = '🔍 Вид';
   rsoCam.focusIdx = ((rsoCam.focusIdx + dir) % alive.length + alive.length) % alive.length;
   rsoCamManual = true; rsoCamManualUntil = performance.now() + 4000;
 }
@@ -3800,12 +3823,14 @@ function rsoUpdate(dt) {
 
   // Камера
   if (now > rsoCamManualUntil) rsoCamManual = false;
+  let camLabel = 'авто';
   if (rsoOverview) {
     rsoCam.targetX = rsoWorldW/2; rsoCam.targetY = rsoWorldH/2;
     rsoCam.targetZoom = Math.min(rsoW/rsoWorldW, rsoH/rsoWorldH) * 0.95;
+    camLabel = 'обзор';
   } else if (rsoCamManual) {
     const targ = alive[rsoCam.focusIdx % alive.length];
-    if (targ) { rsoCam.targetX = targ.x; rsoCam.targetY = targ.y; rsoCam.targetZoom = 1.6; }
+    if (targ) { rsoCam.targetX = targ.x; rsoCam.targetY = targ.y; rsoCam.targetZoom = 1.6; camLabel = targ.nick; }
   } else {
     rsoCam.targetZoom = 1.55;
     let tx = rsoWorldW/2, ty = rsoWorldH/2;
@@ -3822,6 +3847,8 @@ function rsoUpdate(dt) {
     }
     rsoCam.targetX = tx; rsoCam.targetY = ty;
   }
+  const camLbl = document.getElementById('rso-cam-label');
+  if (camLbl && camLbl.textContent !== camLabel) camLbl.textContent = camLabel;
   rsoCam.x += (rsoCam.targetX - rsoCam.x) * Math.min(1, dt/200);
   rsoCam.y += (rsoCam.targetY - rsoCam.y) * Math.min(1, dt/200);
   rsoCam.zoom += (rsoCam.targetZoom - rsoCam.zoom) * Math.min(1, dt/200);
