@@ -751,9 +751,9 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
   #royale-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: var(--kick); }
   #royale-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
-  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; align-items: stretch; }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; align-items: stretch; justify-content: center; }
   .royale-side {
-    flex: 1 1 0; min-width: 150px; max-width: 460px; background: rgba(0,0,0,0.3);
+    flex: 1 1 0; min-width: 180px; max-width: 620px; background: rgba(0,0,0,0.3);
     border: 1px solid var(--panel-border); border-radius: 10px;
     padding: 10px; overflow: hidden; display: flex; flex-direction: column; gap: 4px;
   }
@@ -3083,9 +3083,9 @@ function startRoyale() {
 function royBuildGrid() {
   const grid = document.getElementById('royale-grid');
   // карта 10×10 квадратна. Висота — головне обмеження; резервуємо ~38% ширини під дві колонки
-  const availW = window.innerWidth * 0.60;   // карта займає до 60% ширини, решта — колонки
+  const availW = window.innerWidth * 0.52;   // карта займає до ~52% ширини, решта — широкі колонки
   const availH = window.innerHeight - 200;
-  const cellSize = Math.max(26, Math.min(80, Math.floor(Math.min(availW, availH) / ROY_N)));
+  const cellSize = Math.max(26, Math.min(72, Math.floor(Math.min(availW, availH) / ROY_N)));
   grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
   // зберігаємо фон карти (щоб не знищити при очистці)
   let mapBg = document.getElementById('royale-map-bg');
