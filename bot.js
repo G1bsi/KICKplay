@@ -3381,8 +3381,8 @@ function rsoStart(finalists) {
   rsoCtx = rsoCanvas.getContext('2d');
 
   const total = finalists.length;
-  rsoWorldW = Math.max(1100, 600 + total * 90);
-  rsoWorldH = Math.max(800, 450 + total * 65);
+  rsoWorldW = Math.max(1100, Math.round(700 + Math.sqrt(total) * 230));
+  rsoWorldH = Math.max(800, Math.round(520 + Math.sqrt(total) * 165));
   rsoCam = { x: rsoWorldW/2, y: rsoWorldH/2, zoom: 1.55, focusIdx: 0, targetX: rsoWorldW/2, targetY: rsoWorldH/2 };
 
   rsoBuildGrass();
@@ -3410,7 +3410,7 @@ function rsoStart(finalists) {
       }
     }
     const hp = p.startHP || 100;
-    return { nick: p.nick, hp, maxHP: hp, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28,
+    return { nick: p.nick, hp, maxHP: 100, alive: true, x, y, color: RSO_COLORS[i%RSO_COLORS.length], target: null, radius: 15, facing: royFloat()*6.28, aimAng: royFloat()*6.28, ammo: RAK.magSize, reloading: false, reloadEnd: 0, spread: RAK.baseSpread, shotTimer: 0, burstLeft: 0, burstCooldown: 0, mode: 'reposition', moveTarget: null, decisionAt: 0, anchorCover: null, strafeDir: royFloat()<0.5?1:-1, muzzle: 0, walkPhase: royFloat()*6.28, stuckTime: 0,
       nades: { frag: 1, smoke: 2, flash: 1, molotov: 1 }, nadeCooldown: 5000 + royFloat()*4000, flashedUntil: 0, blockedSince: 0, lastSawEnemy: 0 };
   });
   rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
@@ -3503,15 +3503,26 @@ function rsoSpawnPoints(n) {
   if (n === 2) return [{ x: m, y: m }, { x: W-m, y: H-m }];
   if (n === 3) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W/2, y: H-m }];
   if (n === 4) return [{ x: m, y: m }, { x: W-m, y: m }, { x: W-m, y: H-m }, { x: m, y: H-m }];
-  const pts = []; const wSide = W - 2*m, hSide = H - 2*m, perim = 2*wSide + 2*hSide;
+  // Сітка по всій площі (заповнює центр, не лише периметр) — карта компактніша
+  const aspect = W / H;
+  let cols = Math.ceil(Math.sqrt(n * aspect));
+  let rows = Math.ceil(n / cols);
+  // легке випадкове зміщення щоб не стояли ідеально рівними рядами
+  const cellW = (W - 2*m) / Math.max(1, cols - 1 || 1);
+  const cellH = (H - 2*m) / Math.max(1, rows - 1 || 1);
+  const pts = [];
   for (let i = 0; i < n; i++) {
-    let d = (i / n) * perim, x, y;
-    if (d < wSide) { x = m + d; y = m; }
-    else if (d < wSide + hSide) { x = W - m; y = m + (d - wSide); }
-    else if (d < 2*wSide + hSide) { x = W - m - (d - wSide - hSide); y = H - m; }
-    else { x = m; y = H - m - (d - 2*wSide - hSide); }
+    const r = Math.floor(i / cols), c = i % cols;
+    // центруємо останній неповний ряд
+    const inRow = (r === rows - 1) ? (n - r * cols) : cols;
+    const rowOffset = (cols - inRow) * cellW / 2;
+    let x = m + c * cellW + rowOffset + (royFloat()*2-1) * cellW * 0.18;
+    let y = m + r * cellH + (royFloat()*2-1) * cellH * 0.18;
+    x = Math.max(m*0.6, Math.min(W - m*0.6, x));
+    y = Math.max(m*0.6, Math.min(H - m*0.6, y));
     pts.push({ x, y });
-  } return pts;
+  }
+  return pts;
 }
 
 function rsoBuildGrass() {
@@ -3783,20 +3794,69 @@ function rsoUpdate(dt) {
     if (f.moveTarget) {
       const mdx = f.moveTarget.x - f.x, mdy = f.moveTarget.y - f.y;
       const md = Math.hypot(mdx, mdy);
-      if (md > 5) {
-        const step = speed*(dt/16);
-        let nx = f.x + (mdx/md)*step, ny = f.y + (mdy/md)*step;
-        if (!rsoCoverAt(nx, ny, f.radius)) { f.x = nx; f.y = ny; f.walkPhase += step*0.15; }
-        else {
-          // обхід укриття: пробуємо вліво/вправо перпендикулярно, не зупиняючись
-          const perpX = -mdy/md, perpY = mdx/md;
-          const sideX = f.x + perpX*step*f.strafeDir, sideY = f.y + perpY*step*f.strafeDir;
-          if (!rsoCoverAt(sideX, sideY, f.radius)) { f.x = sideX; f.y = sideY; f.walkPhase += step*0.15; }
-          else {
-            const sideX2 = f.x - perpX*step*f.strafeDir, sideY2 = f.y - perpY*step*f.strafeDir;
-            if (!rsoCoverAt(sideX2, sideY2, f.radius)) { f.x = sideX2; f.y = sideY2; f.walkPhase += step*0.15; }
-            else { f.strafeDir *= -1; } // обидва боки заблоковані — міняємо напрям обходу
+      // ЯКЩО боєць вже всередині укриття (застряг) — виштовхуємо назовні, ігноруючи колізію
+      if (rsoCoverAt(f.x, f.y, f.radius)) {
+        // знаходимо найближче укриття що блокує
+        let near = null, nd2 = 1e9;
+        for (const c of rsoCovers) {
+          if (c.type === 'bush') continue;
+          const d = Math.hypot(c.x-f.x, c.y-f.y);
+          if (d < nd2) { nd2 = d; near = c; }
+        }
+        // напрямок виштовхування: від ЦЕНТРА укриття (для Г-паркана це вершина кута — гарантовано назовні)
+        let ea;
+        if (near && (Math.abs(near.x-f.x) > 0.5 || Math.abs(near.y-f.y) > 0.5)) {
+          ea = Math.atan2(f.y-near.y, f.x-near.x);
+        } else {
+          ea = Math.atan2(rsoWorldH/2-f.y, rsoWorldW/2-f.x); // на центр світу
+        }
+        const push = 3.0 * (dt/16);
+        // пробуємо виштовхнутись; якщо нова точка все ще в укритті — віялом шукаємо вихід
+        let ox = f.x + Math.cos(ea)*push, oy = f.y + Math.sin(ea)*push;
+        if (rsoCoverAt(ox, oy, f.radius)) {
+          for (let k = 1; k <= 16; k++) {
+            const a2 = ea + (k % 2 ? 1 : -1) * (k * 0.4);
+            const tx = f.x + Math.cos(a2)*push, ty = f.y + Math.sin(a2)*push;
+            if (!rsoCoverAt(tx, ty, f.radius)) { ox = tx; oy = ty; break; }
           }
+        }
+        f.x = Math.max(20, Math.min(rsoWorldW-20, ox));
+        f.y = Math.max(20, Math.min(rsoWorldH-20, oy));
+        f.walkPhase += push*0.15;
+        // даємо ціль ПОДАЛІ в напрямку виходу, щоб не ліз назад у паркан одразу
+        f.moveTarget = { x: Math.max(40, Math.min(rsoWorldW-40, f.x+Math.cos(ea)*100)), y: Math.max(40, Math.min(rsoWorldH-40, f.y+Math.sin(ea)*100)) };
+        f.decisionAt = now + 500;
+      } else if (md > 5) {
+        const step = speed*(dt/16);
+        const desiredAng = Math.atan2(mdy, mdx);
+        let nx = f.x + Math.cos(desiredAng)*step, ny = f.y + Math.sin(desiredAng)*step;
+        if (!rsoCoverAt(nx, ny, f.radius)) {
+          f.x = nx; f.y = ny; f.walkPhase += step*0.15; f.stuckTime = 0;
+        } else {
+          let moved = false;
+          const offsets = [0.5, -0.5, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0, 2.6, -2.6, Math.PI, -Math.PI*0.75];
+          for (const off of offsets) {
+            const a = desiredAng + off * f.strafeDir;
+            const tx = f.x + Math.cos(a)*step, ty = f.y + Math.sin(a)*step;
+            if (!rsoCoverAt(tx, ty, f.radius)) {
+              f.x = tx; f.y = ty; f.walkPhase += step*0.15; moved = true; f.stuckTime = 0; break;
+            }
+          }
+          if (!moved) { f.stuckTime = (f.stuckTime || 0) + dt; f.strafeDir *= -1; }
+        }
+        if ((f.stuckTime || 0) > 700) {
+          f.stuckTime = 0;
+          let near = null, nd2 = 1e9;
+          for (const c of rsoCovers) {
+            if (c.type === 'bush') continue;
+            const d = Math.hypot(c.x-f.x, c.y-f.y);
+            if (d < nd2) { nd2 = d; near = c; }
+          }
+          let ea;
+          if (near) ea = Math.atan2(f.y-near.y, f.x-near.x);
+          else ea = Math.atan2(rsoWorldH/2-f.y, rsoWorldW/2-f.x);
+          f.moveTarget = { x: Math.max(40, Math.min(rsoWorldW-40, f.x+Math.cos(ea)*120)), y: Math.max(40, Math.min(rsoWorldH-40, f.y+Math.sin(ea)*120)) };
+          f.decisionAt = now + 600;
         }
       }
     }
@@ -3925,7 +3985,20 @@ function rsoUpdateGrenades(dt, now) {
           if (d < 200 && !rsoLineBlocked(f.x, f.y, g.x, g.y)) f.flashedUntil = now + 1800 + (1 - d/200)*1200;
         }
       } else if (g.type === 'molotov') {
-        rsoEffects.push({ type: 'fire', x: g.x, y: g.y, life: 5000, maxLife: 5000, r: 70 });
+        // калюжа вогню з кількома осередками полум'я
+        const r = 60;
+        const flames = [];
+        const nf = 14;
+        for (let i = 0; i < nf; i++) {
+          const a = royFloat() * 6.28, dist = royFloat() * r * 0.85;
+          flames.push({
+            ox: Math.cos(a) * dist, oy: Math.sin(a) * dist,
+            size: 8 + royFloat() * 14,
+            phase: royFloat() * 6.28,
+            speed: 0.004 + royFloat() * 0.004
+          });
+        }
+        rsoEffects.push({ type: 'fire', x: g.x, y: g.y, life: 5000, maxLife: 5000, r, flames });
       }
     }
   }
@@ -4022,14 +4095,71 @@ function rsoDraw() {
       ctx.fillStyle = e.type==='blast' ? '#ffaa40' : '#fff';
       ctx.beginPath(); ctx.arc(e.x, e.y, (e.r||150) * (1-a) + 10, 0, 7); ctx.fill();
       ctx.globalAlpha = 1;
-    } else if (e.type === 'fire') {
-      for(let i=0; i<3; i++) {
-        ctx.fillStyle = i===0?'rgba(255,50,0,0.2)':'rgba(255,150,0,0.4)';
-        ctx.beginPath(); ctx.arc(e.x+(Math.random()*10-5), e.y+(Math.random()*10-5), e.r - i*15, 0, 7); ctx.fill();
-      }
     }
   }
   ctx.globalCompositeOperation = 'source-over';
+
+  // ── Вогонь молотова (реалістичне полум'я на підлозі) ──
+  for (const e of rsoEffects) {
+    if (e.type !== 'fire' || !inView(e.x, e.y, (e.r||60)+20)) continue;
+    const fade = e.life < 800 ? e.life/800 : (e.life > e.maxLife - 400 ? (e.maxLife - e.life)/400 : 1);
+    const t = performance.now();
+    // 1) обгоріла пляма на землі
+    ctx.globalAlpha = 0.35 * Math.max(0, fade);
+    ctx.fillStyle = '#1a0d05';
+    ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r*0.9, e.r*0.55, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    // 2) тліюче світіння під полум'ям
+    const glow = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+    glow.addColorStop(0, 'rgba(255,120,20,'+(0.35*fade)+')');
+    glow.addColorStop(0.6, 'rgba(200,60,0,'+(0.15*fade)+')');
+    glow.addColorStop(1, 'rgba(120,30,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r, e.r*0.6, 0, 0, 7); ctx.fill();
+    // 3) язики полум'я (адитивно для світіння)
+    ctx.globalCompositeOperation = 'lighter';
+    for (const fl of (e.flames||[])) {
+      // мерехтіння висоти й розміру
+      const flick = 0.6 + 0.4 * Math.sin(t * fl.speed + fl.phase);
+      const fx = e.x + fl.ox + Math.sin(t*0.003 + fl.phase) * 3;
+      const fy = e.y + fl.oy * 0.55; // сплющено по вертикалі (вид зверху-збоку)
+      const h = fl.size * flick * fade;       // висота язика
+      const wdt = fl.size * 0.5 * fade;        // ширина
+      // зовнішнє (темно-помаранчеве)
+      ctx.fillStyle = 'rgba(220,70,10,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(fx - wdt, fy);
+      ctx.quadraticCurveTo(fx - wdt*0.5, fy - h*0.6, fx, fy - h);
+      ctx.quadraticCurveTo(fx + wdt*0.5, fy - h*0.6, fx + wdt, fy);
+      ctx.quadraticCurveTo(fx, fy + wdt*0.3, fx - wdt, fy);
+      ctx.fill();
+      // середнє (помаранчеве)
+      ctx.fillStyle = 'rgba(255,150,30,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(fx - wdt*0.6, fy);
+      ctx.quadraticCurveTo(fx - wdt*0.3, fy - h*0.55, fx, fy - h*0.8);
+      ctx.quadraticCurveTo(fx + wdt*0.3, fy - h*0.55, fx + wdt*0.6, fy);
+      ctx.quadraticCurveTo(fx, fy + wdt*0.2, fx - wdt*0.6, fy);
+      ctx.fill();
+      // ядро (жовте)
+      ctx.fillStyle = 'rgba(255,230,120,0.6)';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy - h*0.3, wdt*0.35, h*0.3, 0, 0, 7);
+      ctx.fill();
+    }
+    // 4) іскри що злітають
+    for (let i = 0; i < 4; i++) {
+      const sp = (t*0.05 + i*90 + e.x) % 100 / 100; // 0..1 цикл
+      const sa = (i*1.7 + e.x*0.1);
+      const sx = e.x + Math.cos(sa) * e.r * 0.4 * (0.3+sp);
+      const sy = e.y - sp * e.r * 0.8;
+      ctx.globalAlpha = (1 - sp) * fade;
+      ctx.fillStyle = '#ffcf6a';
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
 
   // Дим (звичайне накладання)
   for(let s of rsoSmoke) {
