@@ -766,7 +766,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   /* список заповнює колонку в кілька стовпців якщо широка */
   .royale-list { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px; align-content: start; overflow-y: auto; }
   .royale-pill { font-size: 12px; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); display: flex; justify-content: space-between; gap: 6px; }
-  .royale-pill .pos { color: var(--text-muted); font-family: monospace; font-size: 11px; }
+  .royale-pill .nk { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .royale-pill .pos { flex: 0 0 auto; color: var(--text-muted); font-family: monospace; font-size: 11px; }
   .royale-pill.dead { opacity: 0.5; text-decoration: line-through; }
   #royale-stage { position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
   #royale-map-bg { position: absolute; inset: 0; border-radius: 8px; overflow: hidden; opacity: 0.55; pointer-events: none; z-index: 0; }
@@ -783,6 +784,16 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   .royale-pill.highlight { background: rgba(255,215,0,0.25); outline: 1px solid var(--gold); }
   .rcell.cell-hover { outline: 2px solid var(--gold); outline-offset: -2px; z-index: 2; }
+  /* непомітна тестова кнопка (олівець) — проявляється при наведенні */
+  #roy-test-btn {
+    position: absolute; left: 12px; bottom: 12px;
+    width: 26px; height: 26px; border-radius: 50%; font-size: 12px;
+    background: transparent; border: 1px solid rgba(255,255,255,0.07);
+    color: #4a4a4a; cursor: pointer; z-index: 5; opacity: 0.3; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.2s, color 0.2s, border-color 0.2s;
+  }
+  #roy-test-btn:hover { opacity: 1; color: #bbb; border-color: var(--panel-border); }
   /* перестрілка */
   #royale-shootout { position: fixed; inset: 0; z-index: 9994; background: rgba(6,8,10,0.97); backdrop-filter: blur(4px); display: none; flex-direction: column; align-items: center; padding: 20px; }
   #royale-shootout.visible { display: flex; }
@@ -1485,9 +1496,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
   </div>
   <!-- Тестова кнопка-олівець (ручне заповнення) -->
-  <button id="roy-test-btn" onclick="royToggleTestForm()" title="Тест: добавить игрока вручную"
-    style="position:absolute;left:14px;bottom:14px;width:42px;height:42px;border-radius:50%;font-size:18px;
-    background:rgba(255,255,255,0.08);border:1px solid var(--panel-border);color:#ccc;cursor:pointer;z-index:5;">✏️</button>
+  <button id="roy-test-btn" onclick="royToggleTestForm()" title="Тест: загрузить игроков из файла">✏️</button>
   <div id="roy-test-form" style="position:absolute;left:14px;bottom:64px;z-index:6;display:none;flex-direction:column;gap:6px;
     background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:230px;">
     <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Тест без стрима</div>
@@ -3145,7 +3154,6 @@ function royHandleMessage(nick, text) {
 function royToggleTestForm() {
   const f = document.getElementById('roy-test-form');
   f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
-  if (f.style.display === 'flex') document.getElementById('roy-test-nick').focus();
 }
 function royTestAdd() {
   const nick = document.getElementById('roy-test-nick').value.trim();
@@ -3247,9 +3255,9 @@ function royRender() {
   document.getElementById('royale-alive-count').textContent = alive.length;
   document.getElementById('royale-dead-count').textContent = Object.values(royPlayers).filter(p => !p.alive).length;
   document.getElementById('royale-alive-list').innerHTML = alive.sort((a,b) => a.nick.localeCompare(b.nick))
-    .map(p => '<div class="royale-pill" data-nick="' + escapeHtml(p.nick) + '"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+    .map(p => '<div class="royale-pill" data-nick="' + escapeHtml(p.nick) + '" title="' + escapeHtml(p.nick) + '"><span class="nk">' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
   document.getElementById('royale-dead-list').innerHTML = Object.values(royPlayers).filter(p => !p.alive)
-    .map(p => '<div class="royale-pill dead" data-nick="' + escapeHtml(p.nick) + '"><span>' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+    .map(p => '<div class="royale-pill dead" data-nick="' + escapeHtml(p.nick) + '" title="' + escapeHtml(p.nick) + '"><span class="nk">' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
 }
 
 function royStatus(msg) { document.getElementById('royale-status').textContent = msg; }
@@ -3257,6 +3265,7 @@ function royStatus(msg) { document.getElementById('royale-status').textContent =
 function royaleShrinkZone() {
   const alive = Object.values(royPlayers).filter(p => p.alive);
   if (alive.length <= 1) { royCheckWinner(); return; }
+  const firstLock = !royJoinLocked; // це перше звуження — саме тут закривається вхід
   royJoinLocked = true; // вхід закрито — після першого звуження новачки не приймаються
   Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
   if (!royZone) royZone = { cx: (ROY_N-1)/2, cy: (ROY_ROWS-1)/2, radius: ROY_N };
@@ -3296,13 +3305,14 @@ function royaleShrinkZone() {
 
   outside.forEach(p => { p.alive = false; p.dying = true; });
   royRender();
-  royStatus('🌀 Зона сузилась! Выбыло: ' + outside.length + '. Осталось: ' + inside.length + (inside.length > 1 ? ' · Можно сменить клетку!' : ''));
+  royStatus((firstLock ? '🔒 Вход закрыт! ' : '') + '🌀 Зона сузилась! Выбыло: ' + outside.length + '. Осталось: ' + inside.length + (inside.length > 1 ? ' · Можно сменить клетку!' : ''));
   royCheckWinner();
 }
 
 function royaleRedZone() {
   const alive = Object.values(royPlayers).filter(p => p.alive);
   if (alive.length <= 1) return;
+  royJoinLocked = true; // червона зона теж закриває вхід для новачків
   Object.values(royPlayers).forEach(p => { if (p.dying) { p.dying = false; p.removed = true; } });
   const w = 2 + secureRandomInt(3), h = 2 + secureRandomInt(3);
   const x0 = secureRandomInt(ROY_N - w + 1), y0 = secureRandomInt(ROY_ROWS - h + 1);
