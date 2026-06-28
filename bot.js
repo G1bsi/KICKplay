@@ -1491,18 +1491,8 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="roy-test-form" style="position:absolute;left:14px;bottom:64px;z-index:6;display:none;flex-direction:column;gap:6px;
     background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:230px;">
     <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Тест без стрима</div>
-    <input type="text" id="roy-test-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
-    <input type="text" id="roy-test-coord" placeholder="Клетка (напр. C5)" style="width:100%;box-sizing:border-box;">
-    <div style="display:flex;gap:6px;">
-      <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd()">Добавить</button>
-      <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd10()">+10 рандом</button>
-    </div>
-    <div style="height:1px;background:var(--panel-border);margin:2px 0;"></div>
-    <div style="font-size:10px;color:var(--text-muted);">Список ников (по одному на строку):</div>
-    <textarea id="roy-test-list" placeholder="Vasyl&#10;Alina&#10;ChatUser_UA&#10;..." rows="5" style="width:100%;box-sizing:border-box;font-size:12px;resize:vertical;background:#111;color:#fff;border:1px solid var(--panel-border);border-radius:5px;padding:5px;"></textarea>
-    <button class="btn-primary" style="margin:0;font-size:12px;" onclick="royTestLoadList()">📋 Загрузить список</button>
-    <button class="btn-dark" style="margin:0;font-size:11px;" onclick="document.getElementById('roy-test-file').click()">📁 Из файла (.txt/.csv)</button>
     <input type="file" id="roy-test-file" accept=".txt,.csv" style="display:none;" onchange="royTestLoadFile(event)">
+    <button class="btn-dark btn-small" style="width:100%;font-size:11px;" onclick="document.getElementById('roy-test-file').click()">📂 Загрузить файл (.txt/.csv)</button>
   </div>
 </div>
 <!-- Екран перестрілки БР -->
