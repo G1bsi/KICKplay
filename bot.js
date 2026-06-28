@@ -1490,9 +1490,10 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     </div>
   </div>
   <div id="royale-controls">
-    <button class="btn-orange" onclick="royaleShrinkZone()">🌀 Зона</button>
+    <button class="btn-orange" id="roy-zone-btn" onclick="royaleShrinkZone()">🌀 Зона</button>
     <button class="btn-dark" style="background:var(--red);color:#fff;" onclick="royaleRedZone()">💥 Красная зона</button>
     <button class="btn-primary" id="roy-fight-btn" style="display:none;background:var(--gold);color:#000;" onclick="royLaunchFight()">⚔️ НАЧАТЬ ФИНАЛ</button>
+    <button class="btn-dark" onclick="royNewGame()">🆕 Новая</button>
     <button class="btn-dark" onclick="closeRoyaleOverlay()">Закрыть</button>
   </div>
   <!-- Тестова кнопка-олівець (ручне заповнення) -->
@@ -3063,13 +3064,22 @@ function royMapSVG() {
 }
 
 function startRoyale() {
-  royPlayers = {}; royZone = null; royPhase = 'playing'; royJoinLocked = false;
+  // якщо є збережена гра — відновлюємо її, інакше починаємо нову
+  const resumed = royLoadState();
+  if (!resumed) {
+    royPlayers = {}; royZone = null; royPhase = 'playing'; royJoinLocked = false; royPendingFight = null;
+  }
   phase = 'racing';
-  // переносимо всіх учасників — вони ще без клітинок, чекаємо координати з чату
   document.getElementById('royale-overlay').classList.add('visible');
   royBuildGrid();
   royRender();
-  royStatus('Зрители пишут координаты (A1, G4...) чтобы занять клетку');
+  roySyncControls(); // стан кнопок «Зона»/«Финал» за поточним станом гри
+  if (resumed) {
+    const aliveN = Object.values(royPlayers).filter(p => p.alive).length;
+    royStatus('▶️ Игра восстановлена · в игре: ' + aliveN + (royJoinLocked ? ' · 🔒 вход закрыт' : ''));
+  } else {
+    royStatus('Зрители пишут координаты (A1, G4...) чтобы занять клетку');
+  }
   // перебудова сітки при зміні розміру вікна
   if (!window._royResizeHooked) {
     window._royResizeHooked = true;
@@ -3077,6 +3087,59 @@ function startRoyale() {
       if (royPhase === 'playing' || royPhase === 'finished') { royBuildGrid(); royRender(); }
     });
   }
+}
+
+// ── Збереження / відновлення стану БР (localStorage) ──
+const ROY_SAVE_KEY = 'royaleState';
+let _roySaveT = 0;
+function roySaveState(force) {
+  // не затираємо збереження порожньою грою (важливо при ініціалізації сторінки)
+  if (!royPlayers || Object.keys(royPlayers).length === 0) return;
+  const now = Date.now();
+  if (!force && now - _roySaveT < 700) return; // легкий тротлінг
+  _roySaveT = now;
+  try {
+    localStorage.setItem(ROY_SAVE_KEY, JSON.stringify({
+      players: royPlayers, zone: royZone, joinLocked: royJoinLocked,
+      phase: royPhase, pendingFight: royPendingFight, savedAt: now
+    }));
+  } catch (e) {}
+}
+function royLoadState() {
+  try {
+    const raw = localStorage.getItem(ROY_SAVE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d || !d.players || Object.keys(d.players).length === 0) return false;
+    royPlayers = d.players;
+    royZone = d.zone || null;
+    royJoinLocked = !!d.joinLocked;
+    royPhase = (d.phase === 'finished') ? 'finished' : 'playing';
+    royPendingFight = d.pendingFight || null;
+    return true;
+  } catch (e) { return false; }
+}
+// синхронізує кнопки «Зона»/«Финал» з поточним станом гри
+function roySyncControls() {
+  const zb = document.getElementById('roy-zone-btn');
+  const fb = document.getElementById('roy-fight-btn');
+  if (royPendingFight && royPendingFight.length) {
+    if (zb) zb.style.display = 'none';
+    if (fb) { fb.style.display = ''; fb.textContent = '⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ (' + royPendingFight.length + ')'; }
+  } else {
+    if (zb) zb.style.display = '';
+    if (fb) fb.style.display = 'none';
+  }
+}
+// почати нову гру (скинути збережений стан)
+function royNewGame() {
+  if (Object.keys(royPlayers).length && !confirm('Начать новую игру? Текущая будет удалена.')) return;
+  try { localStorage.removeItem(ROY_SAVE_KEY); } catch (e) {}
+  royPlayers = {}; royZone = null; royPhase = 'playing'; royJoinLocked = false; royPendingFight = null;
+  royBuildGrid();
+  royRender();
+  roySyncControls();
+  royStatus('Зрители пишут координаты (A1, G4...) чтобы занять клетку');
 }
 
 function royBuildGrid() {
@@ -3258,11 +3321,13 @@ function royRender() {
     .map(p => '<div class="royale-pill" data-nick="' + escapeHtml(p.nick) + '" title="' + escapeHtml(p.nick) + '"><span class="nk">' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
   document.getElementById('royale-dead-list').innerHTML = Object.values(royPlayers).filter(p => !p.alive)
     .map(p => '<div class="royale-pill dead" data-nick="' + escapeHtml(p.nick) + '" title="' + escapeHtml(p.nick) + '"><span class="nk">' + escapeHtml(p.nick) + '</span><span class="pos">' + ROY_COLS[p.col] + (p.row+1) + '</span></div>').join('');
+  roySaveState(); // автозбереження стану (для відновлення після «Закрыть» / перезавантаження)
 }
 
 function royStatus(msg) { document.getElementById('royale-status').textContent = msg; }
 
 function royaleShrinkZone() {
+  if (royPendingFight) return; // фінал уже готується — зона більше не звужується
   const alive = Object.values(royPlayers).filter(p => p.alive);
   if (alive.length <= 1) { royCheckWinner(); return; }
   const firstLock = !royJoinLocked; // це перше звуження — саме тут закривається вхід
@@ -3360,10 +3425,12 @@ let royPendingFight = null;
 function royPrepareFight(finalists, statusMsg) {
   royPendingFight = finalists;
   royStatus(statusMsg);
-  // показуємо кнопку, ховаємо зону/червону зону
+  // показуємо кнопку фіналу і ховаємо «Зону» — далі тільки ФИНАЛ або КРАСНАЯ ЗОНА
   const fb = document.getElementById('roy-fight-btn');
   fb.style.display = '';
   fb.textContent = '⚔️ НАЧАТЬ ПЕРЕСТРЕЛКУ (' + finalists.length + ')';
+  const zb = document.getElementById('roy-zone-btn');
+  if (zb) zb.style.display = 'none';
 }
 
 function royLaunchFight() {
@@ -3384,9 +3451,11 @@ function royDeclareWinner(winner) {
 }
 
 function closeRoyaleOverlay() {
+  roySaveState(true); // зберігаємо гру перед закриттям (відновиться при наступному вході)
   royPhase = 'idle';
   royPendingFight = null;
   const fb = document.getElementById('roy-fight-btn'); if (fb) fb.style.display = 'none';
+  const zb = document.getElementById('roy-zone-btn'); if (zb) zb.style.display = '';
   document.getElementById('royale-overlay').classList.remove('visible');
   document.getElementById('royale-shootout').classList.remove('visible');
   rsoRunning = false;
