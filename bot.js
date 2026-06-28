@@ -751,22 +751,24 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
   #royale-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: var(--kick); }
   #royale-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
-  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; justify-content: space-between; align-items: stretch; }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; align-items: stretch; }
   .royale-side {
-    width: clamp(160px, 19vw, 280px); flex-shrink: 0; min-width: 0; background: rgba(0,0,0,0.3);
+    flex: 1 1 0; min-width: 150px; max-width: 460px; background: rgba(0,0,0,0.3);
     border: 1px solid var(--panel-border); border-radius: 10px;
-    padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+    padding: 10px; overflow: hidden; display: flex; flex-direction: column; gap: 4px;
   }
   @media (max-width: 760px) {
-    .royale-side { width: clamp(110px, 24vw, 160px); padding: 6px; }
+    .royale-side { min-width: 100px; padding: 6px; }
     #royale-top h2 { font-size: 14px; }
     #royale-status { font-size: 11px; }
   }
   .royale-side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--kick); margin: 0 0 6px; }
+  /* список заповнює колонку в кілька стовпців якщо широка */
+  .royale-list { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 4px; align-content: start; overflow-y: auto; }
   .royale-pill { font-size: 12px; padding: 3px 7px; border-radius: 5px; background: rgba(255,255,255,0.04); display: flex; justify-content: space-between; gap: 6px; }
   .royale-pill .pos { color: var(--text-muted); font-family: monospace; font-size: 11px; }
   .royale-pill.dead { opacity: 0.5; text-decoration: line-through; }
-  #royale-stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
+  #royale-stage { position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
   #royale-map-bg { position: absolute; inset: 0; border-radius: 8px; overflow: hidden; opacity: 0.55; pointer-events: none; z-index: 0; }
   #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
   #royale-grid { position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px; border-radius: 10px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.015); }
@@ -1466,14 +1468,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div id="royale-main">
     <div class="royale-side">
       <h3>🟢 Живые (<span id="royale-alive-count">0</span>)</h3>
-      <div id="royale-alive-list"></div>
+      <div id="royale-alive-list" class="royale-list"></div>
     </div>
     <div id="royale-stage">
       <div id="royale-grid"><div id="royale-map-bg"></div></div>
     </div>
     <div class="royale-side">
       <h3>💀 Выбыли (<span id="royale-dead-count">0</span>)</h3>
-      <div id="royale-dead-list"></div>
+      <div id="royale-dead-list" class="royale-list"></div>
     </div>
   </div>
   <div id="royale-controls">
@@ -1487,7 +1489,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     style="position:absolute;left:14px;bottom:14px;width:42px;height:42px;border-radius:50%;font-size:18px;
     background:rgba(255,255,255,0.08);border:1px solid var(--panel-border);color:#ccc;cursor:pointer;z-index:5;">✏️</button>
   <div id="roy-test-form" style="position:absolute;left:14px;bottom:64px;z-index:6;display:none;flex-direction:column;gap:6px;
-    background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:200px;">
+    background:rgba(0,0,0,0.92);border:1px solid var(--panel-border);border-radius:10px;padding:12px;width:230px;">
     <div style="font-size:11px;color:var(--kick);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Тест без стрима</div>
     <input type="text" id="roy-test-nick" placeholder="Никнейм" style="width:100%;box-sizing:border-box;">
     <input type="text" id="roy-test-coord" placeholder="Клетка (напр. C5)" style="width:100%;box-sizing:border-box;">
@@ -1495,6 +1497,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       <button class="btn-primary" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd()">Добавить</button>
       <button class="btn-dark" style="flex:1;margin:0;font-size:12px;" onclick="royTestAdd10()">+10 рандом</button>
     </div>
+    <div style="height:1px;background:var(--panel-border);margin:2px 0;"></div>
+    <div style="font-size:10px;color:var(--text-muted);">Список ников (по одному на строку):</div>
+    <textarea id="roy-test-list" placeholder="Vasyl&#10;Alina&#10;ChatUser_UA&#10;..." rows="5" style="width:100%;box-sizing:border-box;font-size:12px;resize:vertical;background:#111;color:#fff;border:1px solid var(--panel-border);border-radius:5px;padding:5px;"></textarea>
+    <button class="btn-primary" style="margin:0;font-size:12px;" onclick="royTestLoadList()">📋 Загрузить список</button>
+    <button class="btn-dark" style="margin:0;font-size:11px;" onclick="document.getElementById('roy-test-file').click()">📁 Из файла (.txt/.csv)</button>
+    <input type="file" id="roy-test-file" accept=".txt,.csv" style="display:none;" onchange="royTestLoadFile(event)">
   </div>
 </div>
 <!-- Екран перестрілки БР -->
@@ -3074,10 +3082,8 @@ function startRoyale() {
 
 function royBuildGrid() {
   const grid = document.getElementById('royale-grid');
-  // розмір клітинки — максимально великий під доступний простір (ширина і висота)
-  // динамічна ширина бокових панелей (clamp 160-280px, ×2 + відступи)
-  const sideW = Math.min(280, Math.max(160, window.innerWidth * 0.19)) * 2 + 60;
-  const availW = window.innerWidth - sideW;
+  // карта 10×10 квадратна. Висота — головне обмеження; резервуємо ~38% ширини під дві колонки
+  const availW = window.innerWidth * 0.60;   // карта займає до 60% ширини, решта — колонки
   const availH = window.innerHeight - 200;
   const cellSize = Math.max(26, Math.min(80, Math.floor(Math.min(availW, availH) / ROY_N)));
   grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
@@ -3170,6 +3176,47 @@ function royTestAdd10() {
     royPlayers[nick] = { nick, col: secureRandomInt(ROY_N), row: secureRandomInt(ROY_ROWS), alive: true, dying: false, removed: false };
   }
   royRender();
+}
+// Завантаження списку справжніх ніків (по одному на рядок або через кому)
+function royAddNicks(nicks) {
+  let added = 0;
+  for (let raw of nicks) {
+    const nick = (raw || '').trim();
+    if (!nick || nick.length > 40) continue;
+    if (royPlayers[nick]) continue; // не дублюємо
+    royPlayers[nick] = { nick, col: secureRandomInt(ROY_N), row: secureRandomInt(ROY_ROWS), alive: true, dying: false, removed: false };
+    added++;
+  }
+  royRender();
+  return added;
+}
+function royTestLoadList() {
+  const ta = document.getElementById('roy-test-list');
+  // роздільники: новий рядок (10), CR (13), кома, ; , таб (9) — будуємо клас без літеральних escape
+  const sepClass = '[' + String.fromCharCode(10, 13) + ',;' + String.fromCharCode(9) + ']+';
+  const nicks = ta.value.split(new RegExp(sepClass)).map(function(s){ return s.trim(); }).filter(Boolean);
+  if (!nicks.length) { alert('Список пуст'); return; }
+  const added = royAddNicks(nicks);
+  ta.value = '';
+  royStatus('Загружено ников: ' + added);
+}
+function royTestLoadFile(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result || '';
+    const lineSep = new RegExp('[' + String.fromCharCode(10, 13) + ']+');
+    const colSep = new RegExp('[,;' + String.fromCharCode(9) + ']');
+    const lines = text.split(lineSep);
+    const nicks = lines.map(function(line){ return line.split(colSep)[0].trim(); }).filter(Boolean);
+    // пропускаємо ймовірний заголовок
+    if (nicks.length && /^(nick|name|никнейм|ник|имя|user|username)$/i.test(nicks[0])) nicks.shift();
+    const added = royAddNicks(nicks);
+    royStatus('Из файла загружено: ' + added);
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
 }
 
 function royZoneDist(c, r, cx, cy) {
