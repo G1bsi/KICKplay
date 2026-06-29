@@ -3754,16 +3754,19 @@ function rsoUpdate(dt) {
   
   const now = performance.now();
 
-  // ── ANTI-STALL: якщо немає вбивств 7с — зона звужується до центру і дамажить тих хто зовні ──
-  if (now - rsoLastKillAt > 14000) {
+  // ── ANTI-STALL: 5с без вбивств — зона стискається ДО ЦЕНТРА бійців і виганяє їх на відкрите ──
+  if (now - rsoLastKillAt > 5000) {
     if (!rsoCircle) {
       let cx = 0, cy = 0;
       for (const f of alive) { cx += f.x; cy += f.y; }
       cx /= alive.length; cy /= alive.length;
-      rsoCircle = { x: cx, y: cy, r: Math.max(rsoWorldW, rsoWorldH), lastTick: now };
+      // старт — трохи більший за поточний розкид бійців, щоб одразу почати тиснути
+      let maxD = 0;
+      for (const f of alive) maxD = Math.max(maxD, Math.hypot(f.x-cx, f.y-cy));
+      rsoCircle = { x: cx, y: cy, r: maxD + 40, lastTick: now };
     }
-    rsoCircle.r = Math.max(60, rsoCircle.r - 0.08 * dt);
-    if (now - rsoCircle.lastTick > 350) {
+    rsoCircle.r = Math.max(45, rsoCircle.r - 0.22 * dt); // стискається помітно швидше
+    if (now - rsoCircle.lastTick > 300) {
       rsoCircle.lastTick = now;
       for (const f of alive) {
         if (Math.hypot(f.x - rsoCircle.x, f.y - rsoCircle.y) > rsoCircle.r) {
@@ -3901,6 +3904,13 @@ function rsoUpdate(dt) {
       f.decisionAt = now + 200;
     }
 
+    // ANTI-STALL: якщо зона активна — біжимо до її центру (виходимо на відкрите, де є LOS)
+    if (rsoCircle && Math.hypot(f.x - rsoCircle.x, f.y - rsoCircle.y) > rsoCircle.r - 40) {
+      f.moveTarget = { x: rsoCircle.x, y: rsoCircle.y };
+      f.mode = 'push';
+      f.decisionAt = now + 250;
+    }
+
     let speed = 1.4;
     if (f.mode === 'engage') speed = 0.8;
     if (f.mode === 'push') speed = 2.0; // швидше зближення
@@ -3960,7 +3970,7 @@ function rsoUpdate(dt) {
           }
           if (!moved) { f.stuckTime = (f.stuckTime || 0) + dt; f.strafeDir *= -1; }
         }
-        if ((f.stuckTime || 0) > 700) {
+        if ((f.stuckTime || 0) > 450) {
           f.stuckTime = 0;
           let near = null, nd2 = 1e9;
           for (const c of rsoCovers) {
@@ -3968,11 +3978,19 @@ function rsoUpdate(dt) {
             const d = Math.hypot(c.x-f.x, c.y-f.y);
             if (d < nd2) { nd2 = d; near = c; }
           }
+          // напрямок «від укриття» (виходимо з кишені Г-паркана)
           let ea;
           if (near) ea = Math.atan2(f.y-near.y, f.x-near.x);
           else ea = Math.atan2(rsoWorldH/2-f.y, rsoWorldW/2-f.x);
-          f.moveTarget = { x: Math.max(40, Math.min(rsoWorldW-40, f.x+Math.cos(ea)*120)), y: Math.max(40, Math.min(rsoWorldH-40, f.y+Math.sin(ea)*120)) };
-          f.decisionAt = now + 600;
+          // огинання: йдемо перпендикулярно до напрямку на ворога, обираючи бік ближче до виходу
+          const toEnemy = Math.atan2(enemy.y-f.y, enemy.x-f.x);
+          const p1 = toEnemy + Math.PI/2, p2 = toEnemy - Math.PI/2;
+          const side = Math.abs(rsoAngleDiff(p1, ea)) < Math.abs(rsoAngleDiff(p2, ea)) ? p1 : p2;
+          const wx = f.x + Math.cos(side)*170 + Math.cos(ea)*50;
+          const wy = f.y + Math.sin(side)*170 + Math.sin(ea)*50;
+          f.moveTarget = { x: Math.max(40, Math.min(rsoWorldW-40, wx)), y: Math.max(40, Math.min(rsoWorldH-40, wy)) };
+          f.mode = 'reposition';
+          f.decisionAt = now + 1000; // тримаємо обхід, щоб не лізти одразу назад у стіну
         }
       }
     }
