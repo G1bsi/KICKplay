@@ -1131,6 +1131,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   .w-status.pending { color: var(--gold); font-family: 'Roboto Mono', monospace; font-size: 12px; width: auto; font-weight: bold; }
   .w-status.bad { color: var(--red); }
   .w-name { font-weight: 700; color: #fff; flex: 1; font-size: 14px; letter-spacing: 0.5px; }
+  .w-num { font-size: 12px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; min-width: 22px; text-align: center; flex-shrink: 0; }
   .w-time { font-size: 10px; color: var(--text-muted); font-family: 'Roboto Mono', monospace; }
   
   .w-msg {
@@ -1924,6 +1925,12 @@ function fmtConfirmSec(s) {
   if (s % 60 === 0) return (s / 60) + ' мин';
   return Math.floor(s / 60) + 'м ' + (s % 60) + 'с';
 }
+function setConfirmSecondsValue(val) {
+  const inp = document.getElementById('confirm-seconds');
+  if (inp) inp.value = val;
+  const disp = document.getElementById('confirm-display');
+  if (disp) disp.textContent = fmtConfirmSec(val);
+}
 function adjustConfirmSeconds(dir) {
   const inp = document.getElementById('confirm-seconds');
   if (!inp) return;
@@ -1938,9 +1945,7 @@ function adjustConfirmSeconds(dir) {
   }
   idx = Math.max(0, Math.min(CONFIRM_PRESETS.length - 1, idx + dir));
   const val = CONFIRM_PRESETS[idx];
-  inp.value = val;
-  const disp = document.getElementById('confirm-display');
-  if (disp) disp.textContent = fmtConfirmSec(val);
+  setConfirmSecondsValue(val);
 }
 
 function setGameMode(mode) {
@@ -3403,7 +3408,6 @@ function royaleShrinkZone() {
   // якщо зона вже мала (фінальна стадія) — центруємо на клітинці одного з живих гравців,
   // щоб завжди лишалась хоч одна безпечна клітинка з людиною
   if (newRadius <= 1.2 && alive.length >= 2) {
-    // вибираємо випадкового живого як "центр" фінальної зони
     const anchor = alive[secureRandomInt(alive.length)];
     ncx = anchor.col;
     ncy = anchor.row;
@@ -5199,36 +5203,14 @@ function renderWinners() {
     return;
   }
 
-  box.innerHTML = winnersHistory.map(w => {
-    let statusHtml, rowClass = '';
-    if (w.status === 'ok') {
-      statusHtml = '<span class="w-status ok">✓</span>';
-      rowClass = 'confirmed';
-    } else if (w.status === 'bad') {
-      statusHtml = '<span class="w-status bad">⏰</span>';
-      rowClass = 'expired';
-    } else {
-      statusHtml = '<span class="w-status pending" data-name="' + escapeAttr(w.name) + '">…</span>';
-    }
-
-    let msgHtml = '';
-    if (w.status === 'ok' && w.message) {
-      msgHtml = '<div class="w-msg">' + escapeHtml(w.message) + '</div>';
-    } else if (w.status === 'pending') {
-      msgHtml = '<div class="w-msg empty">ожидание ответа...</div>';
-    } else if (w.status === 'bad') {
-      msgHtml = '<div class="w-msg empty">время вышло, ответа нет</div>' +
-        '<button class="btn-dark btn-small w-retry" style="margin-top:8px;" onclick="retryWinner(\\'' + escapeAttr(w.name) + '\\')">↻ Заново</button>';
-    }
-
-    return '<div class="winner-row ' + rowClass + '">' +
-      '<div class="winner-top">' + statusHtml +
-      '<span class="w-name">' + escapeHtml(w.name) + '</span>' +
-      '<span class="w-time">' + w.time + '</span>' +
+  box.innerHTML = winnersHistory.map((w, i) =>
+    '<div class="winner-row">' +
+      '<div class="winner-top">' +
+        '<span class="w-num">' + (i + 1) + '</span>' +
+        '<span class="w-name">' + escapeHtml(w.name) + '</span>' +
       '</div>' +
-      msgHtml +
-    '</div>';
-  }).join('');
+    '</div>'
+  ).join('');
 }
 
 function escapeAttr(s) {
