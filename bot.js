@@ -3721,8 +3721,8 @@ function rsoBuildGrass() {
 
 function rsoGenCovers() {
   rsoCovers = [];
-  // менше парканів: fence рідше (1 раз серед інших типів)
-  const types = ['tree','tree','rock','bush','tree','rock','fence'];
+  // без парканів — лише круглі укриття (дерева/каміння/кущі), щоб не було глухих кутів
+  const types = ['tree','tree','rock','bush','tree','rock','bush'];
   const area = rsoWorldW * rsoWorldH;
   const count = Math.round(area / 30000) + 10;
   let tries = 0;
@@ -3917,21 +3917,31 @@ function rsoUpdate(dt) {
     if (!hasLOS) { if (!f.blockedSince) f.blockedSince = now; } 
     else { f.blockedSince = 0; f.lastSawEnemy = now; }
 
-    // Гранати — НИЗЬКИЙ пріоритет: тільки коли стрільба зараз неможлива/невигідна
-    // (немає лінії вогню, або ворог поза дальністю), і не в перші секунди бою
+    // Гранати
     const canShootNow = hasLOS && nd < RAK.range && !f.reloading && !flashed;
     const fightAge = now - rsoFightStart;
+
+    // СМОК — НАЙВИЩИЙ пріоритет: щойно ворог нас бачить, кидаємо дим собі під ноги,
+    // щоб розірвати лінію вогню, відділитись і спокійно перебігти на нову позицію
+    if (f.nades.smoke > 0 && now > (f.smokeCooldown || 0) && hasLOS && nd < RAK.range && fightAge > 800 && !flashed) {
+      const sx = f.x + Math.cos(ang) * 48, sy = f.y + Math.sin(ang) * 48; // дим між собою і ворогом, ближче до себе
+      rsoThrowGrenade(f, { x: sx, y: sy }, 'smoke');
+      f.nades.smoke--;
+      f.smokeCooldown = now + 5000 + royFloat()*2500;
+      // одразу йдемо на фланг під прикриттям диму
+      f.mode = 'reposition';
+      f.moveTarget = rsoFlank(f, enemy);
+      f.decisionAt = now + 1300;
+    }
+
+    // Інші гранати — НИЗЬКИЙ пріоритет: лише коли стрільба зараз неможлива/невигідна
     if (now > f.nadeCooldown && !flashed && !canShootNow && fightAge > 4000) {
-      const hpPct = f.hp / f.maxHP;
       // ФРАГ — ворог давно засів за укриттям близько, вистрілити не можемо → вибиваємо
       if (f.nades.frag > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 2500 && nd < 340) {
         rsoThrowGrenade(f, enemy, 'frag'); f.nades.frag--; f.nadeCooldown = now + 6000 + royFloat()*3000;
       // МОЛОТОВ — ворог далеко за укриттям, перекриваємо підхід
       } else if (f.nades.molotov > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 3000 && nd > 220 && nd < 460) {
         rsoThrowGrenade(f, enemy, 'molotov'); f.nades.molotov--; f.nadeCooldown = now + 7000 + royFloat()*3000;
-      // СМОК — тікаємо при низькому HP і не можемо відстрілятись
-      } else if (f.nades.smoke > 0 && hpPct < 0.35) {
-        rsoThrowGrenade(f, {x: f.x + dx*0.3, y: f.y + dy*0.3}, 'smoke'); f.nades.smoke--; f.nadeCooldown = now + 6000;
       }
     }
     // ФЛЕШКА — окремо: тільки якщо є LOS і збираємось пушити (перед стрільбою на близькій), рідко
