@@ -3531,7 +3531,7 @@ function rsoStart(finalists) {
   });
   rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
   rsoGrenades = []; rsoEffects = []; rsoKillFeed = []; rsoOverview = true;
-  rsoCircle = null; rsoLastKillAt = performance.now(); rsoFightStart = performance.now();
+  rsoCircle = null; rsoLastKillAt = performance.now(); rsoLastShotAt = performance.now(); rsoFightStart = performance.now();
   rsoEndedAt = 0; rsoWinner = null;
   const ovBtn = document.getElementById('rso-overview-btn'); if (ovBtn) ovBtn.textContent = '🔍 К бою';
 
@@ -3576,7 +3576,7 @@ function rsoPrepClick(e) {
 }
 
 let rsoCamManual = false, rsoCamManualUntil = 0;
-let rsoFightStart = 0, rsoLastKillAt = 0, rsoCircle = null;
+let rsoFightStart = 0, rsoLastKillAt = 0, rsoLastShotAt = 0, rsoCircle = null;
 let rsoEndedAt = 0, rsoWinner = null;
 function rsoFocusNext(dir) {
   const alive = rsoFighters.filter(f => f.alive);
@@ -3600,6 +3600,7 @@ function rsoBegin() {
   rsoCamManual = false;
   rsoFightStart = performance.now();
   rsoLastKillAt = performance.now();
+  rsoLastShotAt = performance.now();
   rsoCircle = null;
   if (!window._rsoKeyHooked) { window._rsoKeyHooked = true; window.addEventListener('keydown', rsoKeyHandler); }
   rsoCanvas.onclick = () => rsoFocusNext(1);
@@ -3754,8 +3755,8 @@ function rsoUpdate(dt) {
   
   const now = performance.now();
 
-  // ── ANTI-STALL: 5с без вбивств — зона стискається ДО ЦЕНТРА бійців і виганяє їх на відкрите ──
-  if (now - rsoLastKillAt > 5000) {
+  // ── ANTI-STALL: 8с без жодного пострілу — зона стискається ДО ЦЕНТРА бійців і виганяє їх на відкрите ──
+  if (now - rsoLastShotAt > 8000) {
     if (!rsoCircle) {
       let cx = 0, cy = 0;
       for (const f of alive) { cx += f.x; cy += f.y; }
@@ -3780,7 +3781,7 @@ function rsoUpdate(dt) {
         }
       }
     }
-  } else if (rsoCircle && now - rsoLastKillAt < 2000) {
+  } else if (rsoCircle && now - rsoLastShotAt < 2000) {
     rsoCircle = null;
   }
   
@@ -4057,6 +4058,7 @@ function rsoUpdate(dt) {
 }
 
 function rsoFire(shooter, enemy) {
+  rsoLastShotAt = performance.now(); // фіксуємо момент пострілу (для антистол-зони)
   const ang = shooter.aimAng + shooter.spread*(royFloat()*2-1);
   const precise = shooter.spread < RAK.baseSpread + 0.04;
   const mx = shooter.x + Math.cos(shooter.aimAng)*25;
