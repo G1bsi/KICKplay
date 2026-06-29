@@ -3595,7 +3595,7 @@ function rsoStart(finalists) {
   });
   rsoBullets = []; rsoFloats = []; rsoTracers = []; rsoCasings = []; rsoSmoke = [];
   rsoGrenades = []; rsoEffects = []; rsoKillFeed = []; rsoOverview = true;
-  rsoCircle = null; rsoLastKillAt = performance.now(); rsoLastShotAt = performance.now(); rsoFightStart = performance.now();
+  rsoCircle = null; rsoLastKillAt = performance.now(); rsoFightStart = performance.now();
   rsoEndedAt = 0; rsoWinner = null;
   const ovBtn = document.getElementById('rso-overview-btn'); if (ovBtn) ovBtn.textContent = '🔍 К бою';
 
@@ -3640,7 +3640,7 @@ function rsoPrepClick(e) {
 }
 
 let rsoCamManual = false, rsoCamManualUntil = 0;
-let rsoFightStart = 0, rsoLastKillAt = 0, rsoLastShotAt = 0, rsoCircle = null;
+let rsoFightStart = 0, rsoLastKillAt = 0, rsoCircle = null;
 let rsoEndedAt = 0, rsoWinner = null;
 function rsoFocusNext(dir) {
   const alive = rsoFighters.filter(f => f.alive);
@@ -3664,7 +3664,6 @@ function rsoBegin() {
   rsoCamManual = false;
   rsoFightStart = performance.now();
   rsoLastKillAt = performance.now();
-  rsoLastShotAt = performance.now();
   rsoCircle = null;
   if (!window._rsoKeyHooked) { window._rsoKeyHooked = true; window.addEventListener('keydown', rsoKeyHandler); }
   rsoCanvas.onclick = () => rsoFocusNext(1);
@@ -3819,19 +3818,16 @@ function rsoUpdate(dt) {
   
   const now = performance.now();
 
-  // ── ANTI-STALL: 8с без жодного пострілу — зона стискається ДО ЦЕНТРА бійців і виганяє їх на відкрите ──
-  if (now - rsoLastShotAt > 8000) {
+  // ── ANTI-STALL: якщо немає вбивств 20с — зона звужується до центру і дамажить тих хто зовні ──
+  if (now - rsoLastKillAt > 20000) {
     if (!rsoCircle) {
       let cx = 0, cy = 0;
       for (const f of alive) { cx += f.x; cy += f.y; }
       cx /= alive.length; cy /= alive.length;
-      // старт — трохи більший за поточний розкид бійців, щоб одразу почати тиснути
-      let maxD = 0;
-      for (const f of alive) maxD = Math.max(maxD, Math.hypot(f.x-cx, f.y-cy));
-      rsoCircle = { x: cx, y: cy, r: maxD + 40, lastTick: now };
+      rsoCircle = { x: cx, y: cy, r: Math.max(rsoWorldW, rsoWorldH), lastTick: now };
     }
-    rsoCircle.r = Math.max(45, rsoCircle.r - 0.22 * dt); // стискається помітно швидше
-    if (now - rsoCircle.lastTick > 300) {
+    rsoCircle.r = Math.max(60, rsoCircle.r - 0.08 * dt);
+    if (now - rsoCircle.lastTick > 350) {
       rsoCircle.lastTick = now;
       for (const f of alive) {
         if (Math.hypot(f.x - rsoCircle.x, f.y - rsoCircle.y) > rsoCircle.r) {
@@ -3845,7 +3841,7 @@ function rsoUpdate(dt) {
         }
       }
     }
-  } else if (rsoCircle && now - rsoLastShotAt < 2000) {
+  } else if (rsoCircle && now - rsoLastKillAt < 2000) {
     rsoCircle = null;
   }
   
@@ -3917,46 +3913,51 @@ function rsoUpdate(dt) {
     if (!hasLOS) { if (!f.blockedSince) f.blockedSince = now; } 
     else { f.blockedSince = 0; f.lastSawEnemy = now; }
 
-    // Гранати
-    const canShootNow = hasLOS && nd < RAK.range && !f.reloading && !flashed;
+    // ── Гранати: боєць САМ вирішує, що і коли кинути (тактика як у пабзі) ──
     const fightAge = now - rsoFightStart;
+    const hpPct = f.hp / f.maxHP;
+    const blockedFor = f.blockedSince ? (now - f.blockedSince) : 0;
 
-    // СМОК — НАЙВИЩИЙ пріоритет: щойно ворог нас бачить, кидаємо дим собі під ноги,
-    // щоб розірвати лінію вогню, відділитись і спокійно перебігти на нову позицію
-    if (f.nades.smoke > 0 && now > (f.smokeCooldown || 0) && hasLOS && nd < RAK.range && fightAge > 800 && !flashed) {
-      const sx = f.x + Math.cos(ang) * 48, sy = f.y + Math.sin(ang) * 48; // дим між собою і ворогом, ближче до себе
-      rsoThrowGrenade(f, { x: sx, y: sy }, 'smoke');
-      f.nades.smoke--;
-      f.smokeCooldown = now + 5000 + royFloat()*2500;
-      // одразу йдемо на фланг під прикриттям диму
-      f.mode = 'reposition';
-      f.moveTarget = rsoFlank(f, enemy);
-      f.decisionAt = now + 1300;
-    }
-
-    // Інші гранати — НИЗЬКИЙ пріоритет: лише коли стрільба зараз неможлива/невигідна
-    if (now > f.nadeCooldown && !flashed && !canShootNow && fightAge > 4000) {
-      // ФРАГ — ворог давно засів за укриттям близько, вистрілити не можемо → вибиваємо
-      if (f.nades.frag > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 2500 && nd < 340) {
+    if (fightAge > 2500 && !flashed && now > f.nadeCooldown) {
+      // 1) СМОК на відхід — мало HP і нас бачать: ставимо дим перед собою й тікаємо
+      if (f.nades.smoke > 0 && now > (f.smokeCooldown||0) && hpPct < 0.4 && hasLOS && nd < RAK.range) {
+        const sx = f.x + Math.cos(ang)*46, sy = f.y + Math.sin(ang)*46;
+        rsoThrowGrenade(f, { x: sx, y: sy }, 'smoke');
+        f.nades.smoke--; f.smokeCooldown = now + 6000 + royFloat()*2000; f.nadeCooldown = now + 1500;
+        f.mode = 'retreat'; f.moveTarget = rsoHideSpot(f, enemy) || rsoAway(f, enemy, 170); f.decisionAt = now + 1200;
+      }
+      // 2) СМОК на пуш — здорові, ворог далеко на відкритому: дим на півдорозі, біжимо ближче під ним
+      else if (f.nades.smoke > 0 && now > (f.smokeCooldown||0) && hasLOS && hpPct > 0.45 && nd > 230 && nd < RAK.range && royFloat() < 0.7) {
+        const mx = f.x + Math.cos(ang)*nd*0.55, my = f.y + Math.sin(ang)*nd*0.55;
+        rsoThrowGrenade(f, { x: mx, y: my }, 'smoke');
+        f.nades.smoke--; f.smokeCooldown = now + 6000 + royFloat()*2000; f.nadeCooldown = now + 1500;
+        f.mode = 'push'; f.moveTarget = { x: enemy.x, y: enemy.y }; f.decisionAt = now + 1400;
+      }
+      // 3) ФЛЕШ перед ближнім пушем — бачимо ворога, близько, ми здорові
+      else if (f.nades.flash > 0 && hasLOS && nd < 240 && hpPct > 0.55 && royFloat() < 0.45) {
+        rsoThrowGrenade(f, enemy, 'flash'); f.nades.flash--; f.nadeCooldown = now + 5000 + royFloat()*2500;
+        f.mode = 'push'; f.moveTarget = { x: enemy.x, y: enemy.y }; f.decisionAt = now + 900;
+      }
+      // 4) ФРАГ — ворог засів за укриттям близько і давно не показується: вибиваємо
+      else if (f.nades.frag > 0 && !hasLOS && blockedFor > 2000 && nd < 330) {
         rsoThrowGrenade(f, enemy, 'frag'); f.nades.frag--; f.nadeCooldown = now + 6000 + royFloat()*3000;
-      // МОЛОТОВ — ворог далеко за укриттям, перекриваємо підхід
-      } else if (f.nades.molotov > 0 && !hasLOS && f.blockedSince && (now - f.blockedSince) > 3000 && nd > 220 && nd < 460) {
+      }
+      // 5) МОЛОТОВ — ворог тримає позицію за укриттям на середній: перекриваємо / виганяємо
+      else if (f.nades.molotov > 0 && !hasLOS && blockedFor > 2500 && nd > 200 && nd < 470) {
         rsoThrowGrenade(f, enemy, 'molotov'); f.nades.molotov--; f.nadeCooldown = now + 7000 + royFloat()*3000;
       }
     }
-    // ФЛЕШКА — окремо: тільки якщо є LOS і збираємось пушити (перед стрільбою на близькій), рідко
-    if (now > f.nadeCooldown && !flashed && f.nades.flash > 0 && hasLOS && nd < 250 && f.hp/f.maxHP > 0.6 && fightAge > 5000 && royFloat() < 0.15) {
-      rsoThrowGrenade(f, enemy, 'flash'); f.nades.flash--; f.nadeCooldown = now + 6000 + royFloat()*3000;
-    }
 
     if (now > f.decisionAt) {
-      const hpPct = f.hp / f.maxHP;
-      // push "липкий": якщо ворог далі за range — завжди зближаємось, не перемикаємось на орбітальні режими
-      if (nd > RAK.range * 0.85) f.mode = 'push';
-      else if (hpPct < 0.3 && royFloat() < 0.6) f.mode = 'retreat';
-      else if (!hasLOS) f.mode = 'reposition';
-      else if (nd < 180) f.mode = royFloat()<0.5?'engage':'peek';
-      else f.mode = royFloat()<0.6?'peek':'engage';
+      const ehpPct = enemy.hp / enemy.maxHP;
+      const adv = hpPct - ehpPct; // >0 — я здоровіший за ворога
+      if (hpPct < 0.3 && royFloat() < 0.7) f.mode = 'retreat';                            // мало HP → відходимо (часто з димом)
+      else if (!hasLOS) f.mode = 'reposition';                                             // не бачу ворога → шукаю кут/обхід
+      else if (nd > RAK.range * 0.9) f.mode = 'push';                                      // надто далеко → треба зблизитись
+      else if (ehpPct < 0.35 && adv > -0.05) f.mode = 'push';                              // ворог при смерті → добиваємо
+      else if (adv > 0.25 && nd < RAK.range*0.8) f.mode = royFloat()<0.6?'push':'engage';  // перевага по HP → тиснемо
+      else if (nd < 170) f.mode = royFloat()<0.45?'engage':'peek';                         // ближній бій → стоїмо/визираємо
+      else f.mode = royFloat()<0.65?'peek':'engage';                                       // середня → переважно з-за укриття
       f.decisionAt = now + 400 + royFloat()*600;
       f.strafeDir = royFloat()<0.5?1:-1;
       
@@ -3977,13 +3978,6 @@ function rsoUpdate(dt) {
       f.moveTarget = null;
       f.mode = hasLOS ? 'engage' : 'reposition';
       f.decisionAt = now + 200;
-    }
-
-    // ANTI-STALL: якщо зона активна — біжимо до її центру (виходимо на відкрите, де є LOS)
-    if (rsoCircle && Math.hypot(f.x - rsoCircle.x, f.y - rsoCircle.y) > rsoCircle.r - 40) {
-      f.moveTarget = { x: rsoCircle.x, y: rsoCircle.y };
-      f.mode = 'push';
-      f.decisionAt = now + 250;
     }
 
     let speed = 1.4;
@@ -4132,7 +4126,6 @@ function rsoUpdate(dt) {
 }
 
 function rsoFire(shooter, enemy) {
-  rsoLastShotAt = performance.now(); // фіксуємо момент пострілу (для антистол-зони)
   const ang = shooter.aimAng + shooter.spread*(royFloat()*2-1);
   const precise = shooter.spread < RAK.baseSpread + 0.04;
   const mx = shooter.x + Math.cos(shooter.aimAng)*25;
