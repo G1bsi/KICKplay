@@ -368,16 +368,32 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #raffle-cmd { color: var(--kick); font-weight: bold; }
   #winners-count, #confirm-seconds { text-align: center; }
 
-  /* ── Перемикач режиму гри ─────────────────── */
-  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid var(--panel-border); }
-  .mode-btn {
-    flex: 1; padding: 8px 6px; border-radius: 6px; border: none;
-    background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 800;
-    font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.3s;
-    text-transform: uppercase;
+  /* ── Перемикач режиму гри (карусель) ─────────────────── */
+  .mode-carousel { display: flex; align-items: stretch; gap: 8px; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 10px; border: 1px solid var(--panel-border); }
+  .mode-arrow {
+    flex: 0 0 auto; width: 42px; border: none; border-radius: 8px;
+    background: rgba(255,255,255,0.04); color: var(--text-muted);
+    font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer;
+    transition: all 0.18s; display: flex; align-items: center; justify-content: center;
+    font-family: 'Inter', sans-serif;
   }
-  .mode-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-  .mode-btn.active { background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 8px rgba(83,252,24,0.1); }
+  .mode-arrow:hover { background: rgba(255,255,255,0.09); color: #fff; }
+  .mode-arrow:active { transform: scale(0.93); }
+  .mode-current {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; text-align: center;
+    padding: 9px 8px; min-height: 58px; border-radius: 8px; user-select: none;
+    background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 10px rgba(83,252,24,0.12);
+  }
+  .mode-current .mc-icon { font-size: 21px; line-height: 1; }
+  .mode-current .mc-label { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.15; }
+  .mode-current .mc-beta { font-size: 9px; font-weight: 700; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; }
+  .time-current {
+    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center;
+    padding: 9px 8px; min-height: 42px; border-radius: 8px; user-select: none;
+    background: var(--kick-dark); color: var(--kick); box-shadow: 0 2px 10px rgba(83,252,24,0.12);
+    font-size: 15px; font-weight: 800; letter-spacing: 0.5px;
+  }
 
   /* ── Перемикачі (toggle) ─────────────────── */
   .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); }
@@ -1327,13 +1343,12 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
 
     <div class="field" style="margin-top:4px;">
       <label class="field-label">Режим игры</label>
-      <div class="mode-switch">
-        <button type="button" class="mode-btn active" id="mode-btn-roulette" onclick="setGameMode('roulette')">🎰 Дефолт</button>
-        <button type="button" class="mode-btn" id="mode-btn-race" onclick="setGameMode('race')">🏎️ Гонка</button>
-        <button type="button" class="mode-btn" id="mode-btn-cashhunt" onclick="setGameMode('cashhunt')">🎯 Cash Hunt</button>
-        <button type="button" class="mode-btn" id="mode-btn-revolver" onclick="setGameMode('revolver')">🔫 Револьвер</button>
-        <button type="button" class="mode-btn" id="mode-btn-chatgame" onclick="setGameMode('chatgame')" style="grid-column:1/-1;">💬 БОНУСБУРЯ С ЧАТОМ</button>
-        <button type="button" class="mode-btn" id="mode-btn-royale" onclick="setGameMode('royale')" style="grid-column:1/-1;">🪂 БАТЛ РОЯЛЬ <span style="font-size:10px;opacity:0.6;">(бета)</span></button>
+      <div class="mode-carousel">
+        <button type="button" class="mode-arrow" onclick="cycleGameMode(-1)" aria-label="Предыдущий режим">&#8249;</button>
+        <div class="mode-current" id="mode-current">
+          <span class="mc-icon">🎰</span><span class="mc-label">Дефолт</span>
+        </div>
+        <button type="button" class="mode-arrow" onclick="cycleGameMode(1)" aria-label="Следующий режим">&#8250;</button>
       </div>
     </div>
 
@@ -1350,10 +1365,14 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
       </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-      <span style="font-size:12px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">⏱ ВРЕМЯ НА ОТВЕТ</span>
-      <input type="number" id="confirm-seconds" value="60" min="5" max="600"
-        style="width:56px;padding:4px 6px;font-size:13px;font-weight:700;text-align:center;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.15);color:#fff;">
+    <div style="margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">⏱ Время на ответ</div>
+      <div class="mode-carousel">
+        <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(-1)" aria-label="Меньше времени">&#8249;</button>
+        <div class="time-current" id="confirm-display">1 мин</div>
+        <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(1)" aria-label="Больше времени">&#8250;</button>
+      </div>
+      <input type="number" id="confirm-seconds" value="60" min="5" max="600" style="display:none;">
       <input type="checkbox" id="toggle-confirm" checked style="display:none;">
     </div>
 
@@ -1881,6 +1900,49 @@ let gameMode = 'roulette';
 let raceQualifiers = [];
 let raceAnimId = null;
 
+// Список режимів для каруселі (порядок = порядок перемикання стрілками)
+const GAME_MODES = [
+  { id: 'roulette', icon: '🎰', label: 'Дефолт' },
+  { id: 'race',     icon: '🏎️', label: 'Гонка' },
+  { id: 'cashhunt', icon: '🎯', label: 'Cash Hunt' },
+  { id: 'revolver', icon: '🔫', label: 'Револьвер' },
+  { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
+  { id: 'royale',   icon: '🪂', label: 'Батл Рояль', beta: true },
+];
+
+// Перемикання режиму стрілками (з циклічним переходом)
+function cycleGameMode(dir) {
+  const idx = GAME_MODES.findIndex(m => m.id === gameMode);
+  const next = (idx + dir + GAME_MODES.length) % GAME_MODES.length;
+  setGameMode(GAME_MODES[next].id);
+}
+
+// Пресети часу на відповідь (стрілки перемикають між ними, без зациклення)
+const CONFIRM_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
+function fmtConfirmSec(s) {
+  if (s < 60) return s + ' сек';
+  if (s % 60 === 0) return (s / 60) + ' мин';
+  return Math.floor(s / 60) + 'м ' + (s % 60) + 'с';
+}
+function adjustConfirmSeconds(dir) {
+  const inp = document.getElementById('confirm-seconds');
+  if (!inp) return;
+  const cur = parseInt(inp.value) || 60;
+  let idx = CONFIRM_PRESETS.indexOf(cur);
+  if (idx === -1) { // поточне значення не з пресетів — беремо найближчий
+    let bd = 1e9;
+    for (let k = 0; k < CONFIRM_PRESETS.length; k++) {
+      const d = Math.abs(CONFIRM_PRESETS[k] - cur);
+      if (d < bd) { bd = d; idx = k; }
+    }
+  }
+  idx = Math.max(0, Math.min(CONFIRM_PRESETS.length - 1, idx + dir));
+  const val = CONFIRM_PRESETS[idx];
+  inp.value = val;
+  const disp = document.getElementById('confirm-display');
+  if (disp) disp.textContent = fmtConfirmSec(val);
+}
+
 function setGameMode(mode) {
   // Примусово закриваємо всі оверлеї та скидаємо стан перед перемиканням режиму
   hideRaceOverlay();
@@ -1892,12 +1954,10 @@ function setGameMode(mode) {
   phase = 'idle';
 
   gameMode = mode;
-  document.getElementById('mode-btn-cashhunt').classList.toggle('active', mode === 'cashhunt');
-  document.getElementById('mode-btn-race').classList.toggle('active', mode === 'race');
-  document.getElementById('mode-btn-roulette').classList.toggle('active', mode === 'roulette');
-  document.getElementById('mode-btn-revolver').classList.toggle('active', mode === 'revolver');
-  document.getElementById('mode-btn-chatgame').classList.toggle('active', mode === 'chatgame');
-  document.getElementById('mode-btn-royale').classList.toggle('active', mode === 'royale');
+  // оновлюємо центральну плитку каруселі
+  const _m = GAME_MODES.find(x => x.id === mode) || GAME_MODES[0];
+  const _cur = document.getElementById('mode-current');
+  if (_cur) _cur.innerHTML = '<span class="mc-icon">' + _m.icon + '</span><span class="mc-label">' + _m.label + '</span>' + (_m.beta ? '<span class="mc-beta">бета</span>' : '');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
 }
@@ -5243,6 +5303,7 @@ function escapeHtml(s) {
 renderWinners();
 loadState();
 setGameMode('roulette'); // ховає поле переможців в дефолтному режимі
+adjustConfirmSeconds(0); // синхронізуємо плитку «час на відповідь» з поточним значенням
 setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
 
 // Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
