@@ -5303,7 +5303,7 @@ renderWinners();
 loadState();
 setGameMode('roulette'); // ховає поле переможців в дефолтному режимі
 adjustConfirmSeconds(0); // синхронізуємо плитку «час на відповідь» з поточним значенням
-setInterval(() => { if (phase === 'idle') loadState(); }, 5000);
+setInterval(() => { if (phase === 'idle') loadState(); }, 2000);
 
 // Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
 // гри натискання пробілу повторно запускало startGame() з нуля)
