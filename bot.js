@@ -1485,6 +1485,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   </div>
   <div id="roulette-overlay-controls" style="display:none;">
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-orange" style="width:auto; margin-bottom:0;" onclick="fastReroll()">⚡ Фаст рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
   </div>
 </div>
@@ -2040,6 +2041,11 @@ async function reroll() {
   renderGame(data.game);
 }
 
+// Швидкий рерол рулетки — те саме, але з коротким прокручуванням
+function fastReroll() {
+  return startRoulette(true);
+}
+
 
 function resetGameUIKeepMode() {
   selected = new Set();
@@ -2058,7 +2064,7 @@ function resetGameUIKeepMode() {
 
 let rouletteTimeout = null;
 
-async function startRoulette() {
+async function startRoulette(fast) {
   if (!state.participants.length) return alert('Нет участников');
   phase = 'racing';
 
@@ -2094,11 +2100,12 @@ async function startRoulette() {
 
   await sleep(50);
 
-  strip.style.transition = 'transform 4.6s cubic-bezier(0.12, 0.7, 0.15, 1)';
+  const spinDur = fast ? 0.9 : 4.6; // «фаст рерол» — швидке прокручування
+  strip.style.transition = 'transform ' + spinDur + 's cubic-bezier(0.12, 0.7, 0.15, 1)';
   strip.style.transform = 'translateX(-' + targetOffset + 'px)';
 
   await new Promise(resolve => {
-    rouletteTimeout = setTimeout(resolve, 4700);
+    rouletteTimeout = setTimeout(resolve, fast ? 1000 : 4700);
   });
   rouletteTimeout = null;
 
