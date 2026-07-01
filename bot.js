@@ -2066,6 +2066,13 @@ let rouletteTimeout = null;
 
 async function startRoulette(fast) {
   if (!state.participants.length) return alert('Нет участников');
+
+  // Виключаємо тих, хто вже випадав (у списку переможців) — повторно випасти не можуть.
+  // Знову доступними стають лише після скидання розіграшу та нової реєстрації.
+  const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
+  const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()));
+  if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
+
   phase = 'racing';
 
   const overlay = document.getElementById('roulette-overlay');
@@ -2077,7 +2084,7 @@ async function startRoulette(fast) {
   controls.style.display = 'none';
   overlayHint.textContent = 'Крутим барабан...';
 
-  const winner = state.participants[secureRandomInt(state.participants.length)];
+  const winner = eligible[secureRandomInt(eligible.length)];
 
   const STRIP_LEN = 60;
   const WINNER_IDX = 52;
