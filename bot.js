@@ -1373,7 +1373,7 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
         <div class="time-current" id="confirm-display">1 мин</div>
         <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(1)" aria-label="Больше времени">&#8250;</button>
       </div>
-      <input type="number" id="confirm-seconds" value="60" min="5" max="600" style="display:none;">
+      <input type="number" id="confirm-seconds" value="60" min="0" max="600" style="display:none;">
       <input type="checkbox" id="toggle-confirm" checked style="display:none;">
     </div>
 
@@ -1920,8 +1920,10 @@ function cycleGameMode(dir) {
 }
 
 // Пресети часу на відповідь (стрілки перемикають між ними, без зациклення)
-const CONFIRM_PRESETS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
+// 0 — окремий пресет: підтвердження не потрібне, переможець одразу вважається готовим
+const CONFIRM_PRESETS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
 function fmtConfirmSec(s) {
+  if (s === 0) return '0 сек';
   if (s < 60) return s + ' сек';
   if (s % 60 === 0) return (s / 60) + ' мин';
   return Math.floor(s / 60) + 'м ' + (s % 60) + 'с';
@@ -1932,10 +1934,16 @@ function setConfirmSecondsValue(val) {
   const disp = document.getElementById('confirm-display');
   if (disp) disp.textContent = fmtConfirmSec(val);
 }
+// Безпечний парсинг: parseInt(...) || 60 неправильно трактує 0 як falsy — тут 0 зберігається коректно
+function getConfirmSeconds() {
+  const raw = document.getElementById('confirm-seconds').value;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : 60;
+}
 function adjustConfirmSeconds(dir) {
   const inp = document.getElementById('confirm-seconds');
   if (!inp) return;
-  const cur = parseInt(inp.value) || 60;
+  const cur = getConfirmSeconds();
   let idx = CONFIRM_PRESETS.indexOf(cur);
   if (idx === -1) { // поточне значення не з пресетів — беремо найближчий
     let bd = 1e9;
@@ -4637,7 +4645,7 @@ function openChatgameOverlay(nick) {
   if (oldBadge) oldBadge.remove();
 
   // Запускаем таймер
-  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  const seconds = getConfirmSeconds();
   chatgameTimerSeconds = seconds;
   renderChatgameTimer(seconds);
 
@@ -5182,8 +5190,8 @@ function saveWinnersToServer() {
 }
 
 function addWinner(name) {
-  const confirmOn = document.getElementById('toggle-confirm').checked;
-  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  const seconds = getConfirmSeconds();
+  const confirmOn = document.getElementById('toggle-confirm').checked && seconds > 0; // 0 = времени не надо, ждать не нужно
   const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
   const entry = { name, time, status: confirmOn ? 'pending' : 'ok', message: null };
@@ -5276,7 +5284,7 @@ async function pollCheckState() {
 }
 
 async function retryWinner(name) {
-  const seconds = parseInt(document.getElementById('confirm-seconds').value) || 60;
+  const seconds = getConfirmSeconds();
   await fetch('/api/raffle/check/reset', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ winner: name })
