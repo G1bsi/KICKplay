@@ -1923,7 +1923,7 @@ function cycleGameMode(dir) {
 // 0 — окремий пресет: підтвердження не потрібне, переможець одразу вважається готовим
 const CONFIRM_PRESETS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
 function fmtConfirmSec(s) {
-  if (s === 0) return '0 сек';
+  if (s === 0) return '-';
   if (s < 60) return s + ' сек';
   if (s % 60 === 0) return (s / 60) + ' мин';
   return Math.floor(s / 60) + 'м ' + (s % 60) + 'с';
