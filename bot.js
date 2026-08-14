@@ -8,11 +8,7 @@ import crypto from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Настройки ──────────────────────────────────────────────
-// Нікнейм каналу Kick, під яким має працювати бот. За замовчуванням береться
-// з Environment Variables (KICK_CHANNEL), але його можна змінити прямо на сайті
-// бота (вкладка «Настройки») — новий нік зберігається і застосовується без редеплою.
-let kickChannel = process.env.KICK_CHANNEL || '';
-let CHATROOM_ID = null; // заповнюється в resolveChatroomId() перед підключенням
+const CHATROOM_ID = 235222;
 const STATE_FILE  = path.join(__dirname, 'marble_state.json');
 
 // Пароль береться з Environment Variables на Render:
@@ -21,19 +17,6 @@ const WEB_PASSWORD = process.env.WEB_PASSWORD;
 // OAuth токен бота для відправки повідомлень в чат Kick
 // Render Dashboard → Environment → BOT_TOKEN = твій токен
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
-
-// Визначає chatroom_id за нікнеймом каналу через публічний API Kick —
-// це дозволяє боту працювати з будь-яким каналом, просто змінивши KICK_CHANNEL
-async function resolveChatroomId(slug) {
-  const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, {
-    headers: { 'Accept': 'application/json' }
-  });
-  if (!res.ok) throw new Error(`Канал "${slug}" не знайдено (HTTP ${res.status}) — перевір нікнейм`);
-  const data = await res.json();
-  const id = data?.chatroom?.id;
-  if (!id) throw new Error(`Канал "${slug}" знайдено, але у відповіді немає chatroom.id`);
-  return id;
-}
 
 // Відправляє повідомлення від бота в чат (потребує BOT_TOKEN)
 async function sendChatAnnounce(msg) {
@@ -74,14 +57,6 @@ const PUSHER_WS =
 
 // ── Розіграш (Cash Hunt) ─────────────────────────────────────
 let rafflePlayers   = [];
-
-// Перевірка «ця людина вже в списку» без урахування регістру та зайвих пробілів —
-// інакше той самий глядач може потрапити в пул двічі під трохи іншим написанням
-// (інший регістр з CSV, зайвий пробіл тощо) і мати вдвічі більше шансів виграти.
-function hasPlayer(name) {
-  const norm = String(name).trim().toLowerCase();
-  return rafflePlayers.some(p => String(p).trim().toLowerCase() === norm);
-}
 let raffleAccepting = false;
 let raffleJoinCmd   = '';
 let raffleGame      = null; 
@@ -116,7 +91,6 @@ function saveState() {
   const state = {
     rafflePlayers, raffleAccepting, raffleJoinCmd,
     savedWinners, savedChatgameWinners,
-    kickChannel,
     savedAt: new Date().toISOString()
   };
   try {
@@ -136,7 +110,6 @@ function loadState() {
     raffleJoinCmd   = state.raffleJoinCmd || '';
     savedWinners    = Array.isArray(state.savedWinners) ? state.savedWinners : [];
     savedChatgameWinners = Array.isArray(state.savedChatgameWinners) ? state.savedChatgameWinners : [];
-    if (state.kickChannel) kickChannel = state.kickChannel;
     console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей, ${savedChatgameWinners.length} в чат-режиме`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
@@ -827,37 +800,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   #royale-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   .royale-pill.highlight { background: rgba(255,215,0,0.25); outline: 1px solid var(--gold); }
   .rcell.cell-hover { outline: 2px solid var(--gold); outline-offset: -2px; z-index: 2; }
-  /* ── 🚢 МОРСКОЙ БОЙ ── */
-  #battleship-overlay {
-    position: fixed; inset: 0; z-index: 9992;
-    background: rgba(3,10,18,0.97); backdrop-filter: blur(6px);
-    display: none; flex-direction: column; align-items: center;
-    padding: 16px; gap: 10px; overflow: hidden;
-  }
-  #battleship-overlay.visible { display: flex; }
-  #bsh-top h2 { font-size: 18px; margin: 0; letter-spacing: 2px; color: #4fc3f7; text-align: center; }
-  #bsh-status { font-size: 14px; font-weight: 700; color: var(--gold); min-height: 18px; text-align: center; }
-  #bsh-stats { font-size: 14px; color: #cfe; text-align: center; font-family: 'Roboto Mono', monospace; }
-  #bsh-stats b { color: var(--kick); }
-  #bsh-grid-wrap {
-    background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border); border-radius: 14px;
-    overflow: hidden; flex: 1; max-height: 75vh; padding: 8px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  #bsh-grid { display: grid; gap: 2px; }
-  .bcell {
-    position: relative; background: rgba(43,140,255,0.10); border: 1px solid rgba(79,195,247,0.25);
-    border-radius: 3px; display: flex; align-items: center; justify-content: center;
-    font-size: 9px; font-weight: 700; color: #cfe; overflow: hidden; flex-direction: column;
-    transition: background 0.3s, border-color 0.3s;
-  }
-  .bcell .bcoord { position: absolute; top: 2px; left: 3px; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.6); pointer-events: none; }
-  .bcell .bicon { font-size: 15px; line-height: 1; }
-  .bcell .bpay { font-size: 9px; font-weight: 800; color: #fff; }
-  .bcell.hit { background: rgba(255,107,53,0.35); border-color: #ff6b35; }
-  .bcell.miss { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); opacity: 0.6; }
-  .bcell.unrevealed-ship { background: rgba(255,255,255,0.05); border: 1px dashed rgba(255,255,255,0.3); opacity: 0.55; }
-  #bsh-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   /* непомітна тестова кнопка (олівець) — проявляється при наведенні */
   #roy-test-btn {
     position: absolute; left: 12px; bottom: 12px;
@@ -1387,15 +1329,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div class="col">
     <div class="col-title">Настройки</div>
 
-    <div class="field" style="margin-bottom:14px;">
-      <label class="field-label">Канал Kick <span id="kick-conn-dot" class="dot closed"></span></label>
-      <div style="display:flex; gap:8px;">
-        <input type="text" id="kick-channel-input" placeholder="твой-ник-на-kick" style="flex:1;" onkeydown="if(event.key==='Enter')saveKickChannel()">
-        <button type="button" class="btn-dark" style="width:auto; white-space:nowrap; margin-bottom:0;" onclick="saveKickChannel()">Сохранить</button>
-      </div>
-      <span id="kick-channel-msg" style="font-size:11px; display:block; margin-top:4px;"></span>
-    </div>
-
     <div class="field-row">
       <div class="field" style="flex:1;">
         <label class="field-label">Слово для участия</label>
@@ -1430,13 +1363,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
           <label class="field-label">Кругов</label>
           <input type="number" id="race-laps" value="3" min="1" max="20">
         </div>
-      </div>
-    </div>
-
-    <div id="battleship-count-field" style="display:none;">
-      <div class="field" style="margin-top:8px;">
-        <label class="field-label">Выстрелов на игрока</label>
-        <input type="number" id="bsh-shots" value="15" min="1" max="100">
       </div>
     </div>
 
@@ -1561,22 +1487,6 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
     <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
     <button class="btn-orange" style="width:auto; margin-bottom:0;" onclick="fastReroll()">⚡ Фаст рерол</button>
     <button class="btn-primary" style="width:auto; margin-bottom: 0;" onclick="closeRouletteOverlay()">Завершить</button>
-  </div>
-</div>
-
-<!-- Оверлей Морской бой -->
-<div id="battleship-overlay">
-  <div id="bsh-top">
-    <h2>🚢 МОРСКОЙ БОЙ</h2>
-    <div id="bsh-status"></div>
-  </div>
-  <div id="bsh-stats"></div>
-  <div id="bsh-grid-wrap">
-    <div id="bsh-grid"></div>
-  </div>
-  <div id="bsh-controls" style="display:none;">
-    <button class="btn-orange" onclick="bshNewRound()">🆕 Новый обстрел</button>
-    <button class="btn-dark" onclick="closeBattleshipOverlay()">Закрыть</button>
   </div>
 </div>
 
@@ -1803,10 +1713,6 @@ chatEvtSource.onmessage = (e) => {
   if (gameMode === 'royale') {
     royHandleMessage(username, content);
   }
-  // В режиме МОРСКОЙ БОЙ — стрелок пише координату пострілу
-  if (gameMode === 'battleship') {
-    bshHandleMessage(username, content);
-  }
 };
 
 async function loadState() {
@@ -1878,51 +1784,6 @@ async function saveRaffleCmd() {
   setTimeout(() => el.textContent = '', 2000);
   return res.ok;
 }
-
-// Підвантажує поточний канал Kick і статус підключення (викликається на завантаженні і періодично)
-async function loadKickChannelStatus() {
-  try {
-    const res = await fetch('/api/settings/channel');
-    if (!res.ok) return;
-    const data = await res.json();
-    const input = document.getElementById('kick-channel-input');
-    // не затираємо те, що людина зараз друкує
-    if (document.activeElement !== input) input.value = data.channel || '';
-    document.getElementById('kick-conn-dot').className = 'dot ' + (data.connected ? 'open' : 'closed');
-  } catch (e) {}
-}
-
-// Зберігає новий канал Kick — бот одразу перепідключається, без редеплою
-async function saveKickChannel() {
-  const input = document.getElementById('kick-channel-input');
-  const msgEl = document.getElementById('kick-channel-msg');
-  const channel = input.value.trim();
-  if (!channel) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Введите никнейм канала'; return; }
-
-  msgEl.style.color = '#8b8f96';
-  msgEl.textContent = 'Подключаемся...';
-  try {
-    const res = await fetch('/api/settings/channel', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel })
-    });
-    const data = await res.json();
-    if (data.error) {
-      msgEl.style.color = '#ff4444';
-      msgEl.textContent = '✗ ' + data.error;
-      document.getElementById('kick-conn-dot').className = 'dot closed';
-    } else {
-      msgEl.style.color = '#53fc18';
-      msgEl.textContent = '✓ Подключено к каналу «' + data.channel + '»';
-      document.getElementById('kick-conn-dot').className = 'dot open';
-    }
-  } catch (e) {
-    msgEl.style.color = '#ff4444';
-    msgEl.textContent = '✗ Ошибка сети';
-  }
-}
-loadKickChannelStatus();
-setInterval(loadKickChannelStatus, 5000);
 
 async function toggleRegistration() {
   if (!raffleOpen) {
@@ -2049,7 +1910,6 @@ const GAME_MODES = [
   { id: 'revolver', icon: '🔫', label: 'Револьвер' },
   { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
   { id: 'royale',   icon: '🪂', label: 'Батл Рояль', beta: true },
-  { id: 'battleship', icon: '🚢', label: 'Морской бой' },
 ];
 
 // Перемикання режиму стрілками (з циклічним переходом)
@@ -2063,7 +1923,7 @@ function cycleGameMode(dir) {
 // 0 — окремий пресет: підтвердження не потрібне, переможець одразу вважається готовим
 const CONFIRM_PRESETS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600];
 function fmtConfirmSec(s) {
-  if (s === 0) return '0 сек (времени не надо)';
+  if (s === 0) return '-';
   if (s < 60) return s + ' сек';
   if (s % 60 === 0) return (s / 60) + ' мин';
   return Math.floor(s / 60) + 'м ' + (s % 60) + 'с';
@@ -2105,7 +1965,6 @@ function setGameMode(mode) {
   closeChatgameOverlay();
   closeCashhuntOverlay();
   closeRoyaleOverlay();
-  closeBattleshipOverlay();
   phase = 'idle';
 
   gameMode = mode;
@@ -2114,7 +1973,6 @@ function setGameMode(mode) {
   const _cur = document.getElementById('mode-current');
   if (_cur) _cur.innerHTML = '<span class="mc-icon">' + _m.icon + '</span><span class="mc-label">' + _m.label + '</span>' + (_m.beta ? '<span class="mc-beta">бета</span>' : '');
   document.getElementById('race-count-field').style.display = mode === 'race' ? 'block' : 'none';
-  document.getElementById('battleship-count-field').style.display = mode === 'battleship' ? 'block' : 'none';
   document.querySelector('#winners-count').closest('.field').style.display = mode === 'cashhunt' ? '' : 'none';
 }
 
@@ -2161,7 +2019,6 @@ async function startGame() {
   if (gameMode === 'revolver') return startRevolverGame();
   if (gameMode === 'chatgame') return startChatgame();
   if (gameMode === 'royale') return startRoyale();
-  if (gameMode === 'battleship') return startBattleship();
 
   const n = parseInt(document.getElementById('winners-count').value);
   if (!n || n < 1) return alert('Укажите количество победителей');
@@ -3690,192 +3547,6 @@ function closeRoyaleOverlay() {
   rsoRunning = false;
   if (rsoRAF) cancelAnimationFrame(rsoRAF);
   if (phase === 'racing') phase = 'idle';
-}
-
-// ── 🚢 МОРСКОЙ БОЙ ─────────────────────────────────────────
-// Стрілок (один переможець) отримує N пострілів і пише координати в чат (A1, G4...),
-// щоб знайти приховані кораблики. Малі кораблики платять мало, великі — багато.
-const BSH_SHIPS = [
-  { size: 4, count: 1, pay: 200 }, // лінкор
-  { size: 3, count: 2, pay: 100 }, // крейсер
-  { size: 2, count: 3, pay: 50 },  // есмінець
-  { size: 1, count: 4, pay: 20 },  // катер
-];
-let bshActive = false;
-let bshShooter = null;
-let bshShotsLeft = 0, bshShotsTotal = 0;
-let bshGrid = null;   // [row][col] -> id кораблика або null
-let bshShips = [];    // [{id, size, pay, cells:[{r,c}], hits}]
-let bshRevealed = null; // Set "row,col" вже відстріляних клітинок
-let bshHits = 0, bshTotal = 0;
-
-// Розставляємо кораблики випадково без перекриттів
-function bshPlaceShips() {
-  const grid = Array.from({ length: ROY_ROWS }, () => Array(ROY_N).fill(null));
-  const ships = [];
-  let shipId = 0;
-  for (const cfg of BSH_SHIPS) {
-    for (let i = 0; i < cfg.count; i++) {
-      let placed = false, attempts = 0;
-      while (!placed && attempts < 300) {
-        attempts++;
-        const horiz = royFloat() < 0.5;
-        const r0 = secureRandomInt(ROY_ROWS - (horiz ? 0 : cfg.size - 1));
-        const c0 = secureRandomInt(ROY_N - (horiz ? cfg.size - 1 : 0));
-        const cells = [];
-        let ok = true;
-        for (let k = 0; k < cfg.size; k++) {
-          const r = horiz ? r0 : r0 + k;
-          const c = horiz ? c0 + k : c0;
-          if (grid[r][c] !== null) { ok = false; break; }
-          cells.push({ r, c });
-        }
-        if (ok) {
-          cells.forEach(({ r, c }) => grid[r][c] = shipId);
-          ships.push({ id: shipId, size: cfg.size, pay: cfg.pay, cells, hits: 0 });
-          shipId++; placed = true;
-        }
-      }
-    }
-  }
-  return { grid, ships };
-}
-
-function startBattleship() {
-  if (!state.participants.length) return alert('Нет участников');
-  // виключаємо тих, хто вже випадав (як і в рулетці) — повторно не випадуть до скидання
-  const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
-  const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()));
-  if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
-  const shots = Math.max(1, parseInt(document.getElementById('bsh-shots').value) || 15);
-
-  phase = 'racing';
-  bshShooter = eligible[secureRandomInt(eligible.length)];
-
-  // реєструємо стрільця як переможця (виключає з майбутніх розіграшів, зберігається на сервері)
-  const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
-  winnersHistory.unshift({ name: bshShooter, time, status: 'ok', message: null });
-  renderWinners();
-  saveWinnersToServer();
-
-  const { grid, ships } = bshPlaceShips();
-  bshGrid = grid; bshShips = ships;
-  bshRevealed = new Set();
-  bshHits = 0; bshTotal = 0;
-  bshShotsLeft = shots; bshShotsTotal = shots;
-  bshActive = true;
-
-  document.getElementById('battleship-overlay').classList.add('visible');
-  document.getElementById('bsh-controls').style.display = 'none';
-  requestAnimationFrame(() => requestAnimationFrame(() => bshBuildGrid()));
-  bshUpdateStats();
-  bshStatus('🎯 Стреляет: ' + bshShooter + ' — пишите координаты (A1, G4...) в чат!');
-}
-
-function bshBuildGrid() {
-  const grid = document.getElementById('bsh-grid');
-  const wrap = document.getElementById('bsh-grid-wrap');
-  const availW = (wrap.clientWidth || window.innerWidth * 0.7) - 20;
-  const availH = (wrap.clientHeight || window.innerHeight * 0.6) - 20;
-  const cellSize = Math.max(24, Math.min(60, Math.floor(Math.min(availW, availH) / ROY_N)));
-  grid.style.gridTemplateColumns = 'repeat(' + ROY_N + ', ' + cellSize + 'px)';
-  grid.innerHTML = '';
-  for (let r = 0; r < ROY_ROWS; r++) {
-    for (let c = 0; c < ROY_N; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'bcell';
-      cell.id = 'bcell-' + c + '-' + r;
-      cell.style.height = cellSize + 'px';
-      cell.innerHTML = '<span class="bcoord">' + ROY_COLS[c] + (r + 1) + '</span>';
-      grid.appendChild(cell);
-    }
-  }
-}
-
-function bshUpdateStats() {
-  document.getElementById('bsh-stats').innerHTML =
-    '🎯 <b>' + escapeHtml(bshShooter) + '</b> &nbsp;·&nbsp; Выстрелов: <b>' + bshShotsLeft + ' / ' + bshShotsTotal + '</b>' +
-    ' &nbsp;·&nbsp; Попаданий: <b>' + bshHits + '</b> &nbsp;·&nbsp; Выигрыш: <b>' + bshTotal + '</b>';
-}
-
-function bshStatus(msg) {
-  const el = document.getElementById('bsh-status');
-  if (el) el.textContent = msg;
-}
-
-// Викликається з SSE обробника чату коли gameMode === 'battleship'
-function bshHandleMessage(nick, text) {
-  if (!bshActive) return;
-  if (String(nick).toLowerCase() !== String(bshShooter).toLowerCase()) return; // стріляти може лише обраний переможець
-  const coord = royParseCoord(text);
-  if (!coord) return;
-  const key = coord.row + ',' + coord.col;
-  if (bshRevealed.has(key)) return; // сюди вже стріляли
-  if (bshShotsLeft <= 0) return;
-
-  bshRevealed.add(key);
-  bshShotsLeft--;
-
-  const cellEl = document.getElementById('bcell-' + coord.col + '-' + coord.row);
-  const coordLabel = ROY_COLS[coord.col] + (coord.row + 1);
-  const shipId = bshGrid[coord.row][coord.col];
-
-  if (shipId !== null) {
-    const ship = bshShips.find(s => s.id === shipId);
-    ship.hits++;
-    bshHits++;
-    bshTotal += ship.pay;
-    if (cellEl) {
-      cellEl.classList.add('hit');
-      cellEl.innerHTML = '<span class="bcoord">' + coordLabel + '</span><span class="bicon">🔥</span><span class="bpay">+' + ship.pay + '</span>';
-    }
-    const sunk = ship.hits === ship.cells.length;
-    bshStatus((sunk ? '💥 Корабль потоплен! ' : '🎯 Попадание! ') + coordLabel + ' +' + ship.pay);
-  } else {
-    if (cellEl) {
-      cellEl.classList.add('miss');
-      cellEl.innerHTML = '<span class="bcoord">' + coordLabel + '</span><span class="bicon">💦</span>';
-    }
-    bshStatus('💦 Мимо: ' + coordLabel);
-  }
-
-  bshUpdateStats();
-  if (bshShotsLeft <= 0) bshEndGame();
-}
-
-function bshEndGame() {
-  bshActive = false;
-  // показуємо всі нерозкриті кораблики — для чесності/драми
-  for (const ship of bshShips) {
-    for (const { r, c } of ship.cells) {
-      const key = r + ',' + c;
-      if (!bshRevealed.has(key)) {
-        const cellEl = document.getElementById('bcell-' + c + '-' + r);
-        if (cellEl) {
-          cellEl.classList.add('unrevealed-ship');
-          cellEl.innerHTML = '<span class="bcoord">' + ROY_COLS[c] + (r + 1) + '</span><span class="bicon">🚢</span>';
-        }
-      }
-    }
-  }
-  bshStatus('🏁 Обстрел завершён! Попаданий: ' + bshHits + ' · Выигрыш: ' + bshTotal);
-  document.getElementById('bsh-controls').style.display = 'flex';
-}
-
-function closeBattleshipOverlay() {
-  bshActive = false;
-  const ol = document.getElementById('battleship-overlay');
-  if (ol) ol.classList.remove('visible');
-  const grid = document.getElementById('bsh-grid'); if (grid) grid.innerHTML = '';
-  const ctrl = document.getElementById('bsh-controls'); if (ctrl) ctrl.style.display = 'none';
-  const stats = document.getElementById('bsh-stats'); if (stats) stats.innerHTML = '';
-  if (phase === 'racing') phase = 'idle';
-}
-
-// новий обстріл — новий стрілок з поточної кількості пострілів
-function bshNewRound() {
-  closeBattleshipOverlay();
-  startBattleship();
 }
 
 // ── Перестрілка (canvas, 2.5D + улучшенный ИИ) ──
@@ -5657,11 +5328,6 @@ window.addEventListener('resize', () => {
     const box = document.getElementById('main-box');
     if (grid && box && currentGame) fitGridColumns(grid, box, currentGame.cells.length);
   }
-  // Перерахувати сітку Морского боя — перебудова стирає прогрес відкритих клітинок,
-  // тож перебудовуємо лише коли гра ще не активна (щоб не втратити результати обстрілу)
-  if (!bshActive && document.getElementById('battleship-overlay').classList.contains('visible') && bshShips.length) {
-    bshBuildGrid();
-  }
 });
 
 function toggleConfirmField() {
@@ -5883,37 +5549,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Поточний канал Kick + статус підключення — для вкладки «Настройки» на сайті
-  if (req.url === '/api/settings/channel' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      channel: kickChannel,
-      chatroomId: CHATROOM_ID,
-      connected: !!(currentWs && currentWs.readyState === WebSocket.OPEN),
-    }));
-    return;
-  }
-
-  // Змінити канал Kick прямо із сайту — без редеплою
-  if (req.url === '/api/settings/channel' && req.method === 'POST') {
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', async () => {
-      try {
-        const { channel } = JSON.parse(body);
-        const slug = String(channel || '').trim().toLowerCase();
-        if (!slug) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введи нікнейм каналу' })); return; }
-        const chatroomId = await switchKickChannel(slug);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, channel: slug, chatroomId }));
-      } catch (err) {
-        res.writeHead(200, { 'Content-Type': 'application/json' }); // 200, щоб фронт спокійно прочитав .error
-        res.end(JSON.stringify({ error: err.message || 'Не вдалося підключитись до каналу' }));
-      }
-    });
-    return;
-  }
-
   if (req.url === '/api/raffle/csv') {
     res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
@@ -5968,7 +5603,7 @@ const server = http.createServer((req, res) => {
         const { name } = JSON.parse(body);
         const trimmed = (name || '').trim();
         if (!trimmed) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введите имя' })); return; }
-        if (hasPlayer(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
+        if (rafflePlayers.includes(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
         rafflePlayers.push(trimmed);
         saveState();
         console.log(`[РОЗІГРАШ +тест] ${trimmed} (${rafflePlayers.length})`);
@@ -5991,7 +5626,7 @@ const server = http.createServer((req, res) => {
           let name;
           do {
             name = 'Тестер' + Math.floor(Math.random() * 100000);
-          } while (hasPlayer(name));
+          } while (rafflePlayers.includes(name));
           rafflePlayers.push(name);
           added++;
         }
@@ -6014,7 +5649,7 @@ const server = http.createServer((req, res) => {
         let added = 0;
         names.forEach(name => {
           const n = String(name).trim().slice(0, 64);
-          if (n && !hasPlayer(n)) {
+          if (n && !rafflePlayers.includes(n)) {
             rafflePlayers.push(n);
             added++;
           }
@@ -6186,12 +5821,8 @@ server.listen(process.env.PORT || 3000, () => {
 });
 
 // ── Kick WebSocket ──────────────────────────────────────────
-let currentWs = null;
-let switchingChannel = false; // true під час навмисної зміни каналу — щоб close-хендлер не плодив зайве авто-перепідключення
-
 function connect() {
   const ws = new WebSocket(PUSHER_WS);
-  currentWs = ws;
   let pingInterval = null;
 
   ws.on('open', () => {
@@ -6255,11 +5886,10 @@ function connect() {
       }
 
       if (raffleAccepting && raffleJoinCmd && lower === raffleJoinCmd) {
-        const trimmedUser = username.trim();
-        if (!hasPlayer(trimmedUser)) {
-          rafflePlayers.push(trimmedUser);
+        if (!rafflePlayers.includes(username)) {
+          rafflePlayers.push(username);
           saveState();
-          console.log(`[РОЗІГРАШ +] ${trimmedUser} (${rafflePlayers.length})`);
+          console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
         }
         return;
       }
@@ -6270,52 +5900,18 @@ function connect() {
 
   ws.on('close', () => {
     if (pingInterval) clearInterval(pingInterval);
-    if (switchingChannel) { switchingChannel = false; return; } // навмисна зміна каналу — новий connect() вже викликається окремо
     console.log('[WS] Соединение закрыто, переподключение через 5с...');
     setTimeout(connect, 5000);
   });
 }
 
-// Змінює канал, до якого підключений бот, «на льоту» — без редеплою.
-// Викликається з /api/settings/channel. Кидає помилку, якщо канал не знайдено.
-async function switchKickChannel(newSlug) {
-  const id = await resolveChatroomId(newSlug); // кине помилку, якщо канал не існує — виклик endpoint'у це обробить
-  kickChannel = newSlug;
-  CHATROOM_ID = id;
-  saveState();
-  if (currentWs && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
-    switchingChannel = true;
-    currentWs.close();
-  }
-  connect(); // одразу підключаємось до нового каналу, не чекаючи 5с
-  return id;
-}
-
 // ── Старт ───────────────────────────────────────────────────
-async function bootstrap() {
-  loadState(); // може підвантажити kickChannel, збережений раніше через сайт
+console.log('╔══════════════════════════════════════╗');
+console.log('║   Kick Cash Hunt — Розыгрыш BOT      ║');
+console.log('╠══════════════════════════════════════╣');
+console.log(`║  Chatroom: ${CHATROOM_ID}                  ║`);
+console.log('║  Защита: пароль через env variable   ║');
+console.log('╚══════════════════════════════════════╝\n');
 
-  console.log('╔══════════════════════════════════════╗');
-  console.log('║   Kick Cash Hunt — Розыгрыш BOT      ║');
-  console.log('╠══════════════════════════════════════╣');
-
-  if (kickChannel) {
-    console.log(`[КОНФІГ] Шукаю канал "${kickChannel}" на Kick...`);
-    try {
-      CHATROOM_ID = await resolveChatroomId(kickChannel);
-      console.log(`║  Канал: ${kickChannel}`);
-      console.log(`║  Chatroom: ${CHATROOM_ID}`);
-      connect();
-    } catch (err) {
-      console.error('[КОНФІГ] Не вдалося підключитись до каналу:', err.message);
-      console.log('║  Канал не підключено — виправ нік у вкладці «Настройки» на сайті');
-    }
-  } else {
-    console.log('║  Канал не задано — вкажи нік Kick у вкладці «Настройки» на сайті');
-  }
-
-  console.log('║  Защита: пароль через env variable   ║');
-  console.log('╚══════════════════════════════════════╝\n');
-}
-
-bootstrap();
+loadState();
+connect();
