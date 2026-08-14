@@ -8,10 +8,10 @@ import crypto from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Настройки ──────────────────────────────────────────────
-// Нікнейм каналу Kick, під яким має працювати бот — задається через
-// Environment Variables (Render Dashboard → Environment → KICK_CHANNEL = свій-нік).
-// chatroom_id визначається автоматично при старті — не треба шукати його вручну.
-const KICK_CHANNEL = process.env.KICK_CHANNEL || '';
+// Нікнейм каналу Kick, під яким має працювати бот. За замовчуванням береться
+// з Environment Variables (KICK_CHANNEL), але його можна змінити прямо на сайті
+// бота (вкладка «Настройки») — новий нік зберігається і застосовується без редеплою.
+let kickChannel = process.env.KICK_CHANNEL || '';
 let CHATROOM_ID = null; // заповнюється в resolveChatroomId() перед підключенням
 const STATE_FILE  = path.join(__dirname, 'marble_state.json');
 
@@ -28,7 +28,7 @@ async function resolveChatroomId(slug) {
   const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, {
     headers: { 'Accept': 'application/json' }
   });
-  if (!res.ok) throw new Error(`Канал "${slug}" не знайдено (HTTP ${res.status}) — перевір нікнейм у KICK_CHANNEL`);
+  if (!res.ok) throw new Error(`Канал "${slug}" не знайдено (HTTP ${res.status}) — перевір нікнейм`);
   const data = await res.json();
   const id = data?.chatroom?.id;
   if (!id) throw new Error(`Канал "${slug}" знайдено, але у відповіді немає chatroom.id`);
@@ -116,6 +116,7 @@ function saveState() {
   const state = {
     rafflePlayers, raffleAccepting, raffleJoinCmd,
     savedWinners, savedChatgameWinners,
+    kickChannel,
     savedAt: new Date().toISOString()
   };
   try {
@@ -135,6 +136,7 @@ function loadState() {
     raffleJoinCmd   = state.raffleJoinCmd || '';
     savedWinners    = Array.isArray(state.savedWinners) ? state.savedWinners : [];
     savedChatgameWinners = Array.isArray(state.savedChatgameWinners) ? state.savedChatgameWinners : [];
+    if (state.kickChannel) kickChannel = state.kickChannel;
     console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей, ${savedChatgameWinners.length} в чат-режиме`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
@@ -1385,6 +1387,15 @@ const RAFFLE_HTML = () => `<!DOCTYPE html>
   <div class="col">
     <div class="col-title">Настройки</div>
 
+    <div class="field" style="margin-bottom:14px;">
+      <label class="field-label">Канал Kick <span id="kick-conn-dot" class="dot closed"></span></label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="kick-channel-input" placeholder="твой-ник-на-kick" style="flex:1;" onkeydown="if(event.key==='Enter')saveKickChannel()">
+        <button type="button" class="btn-dark" style="width:auto; white-space:nowrap; margin-bottom:0;" onclick="saveKickChannel()">Сохранить</button>
+      </div>
+      <span id="kick-channel-msg" style="font-size:11px; display:block; margin-top:4px;"></span>
+    </div>
+
     <div class="field-row">
       <div class="field" style="flex:1;">
         <label class="field-label">Слово для участия</label>
@@ -1867,6 +1878,51 @@ async function saveRaffleCmd() {
   setTimeout(() => el.textContent = '', 2000);
   return res.ok;
 }
+
+// Підвантажує поточний канал Kick і статус підключення (викликається на завантаженні і періодично)
+async function loadKickChannelStatus() {
+  try {
+    const res = await fetch('/api/settings/channel');
+    if (!res.ok) return;
+    const data = await res.json();
+    const input = document.getElementById('kick-channel-input');
+    // не затираємо те, що людина зараз друкує
+    if (document.activeElement !== input) input.value = data.channel || '';
+    document.getElementById('kick-conn-dot').className = 'dot ' + (data.connected ? 'open' : 'closed');
+  } catch (e) {}
+}
+
+// Зберігає новий канал Kick — бот одразу перепідключається, без редеплою
+async function saveKickChannel() {
+  const input = document.getElementById('kick-channel-input');
+  const msgEl = document.getElementById('kick-channel-msg');
+  const channel = input.value.trim();
+  if (!channel) { msgEl.style.color = '#ff4444'; msgEl.textContent = 'Введите никнейм канала'; return; }
+
+  msgEl.style.color = '#8b8f96';
+  msgEl.textContent = 'Подключаемся...';
+  try {
+    const res = await fetch('/api/settings/channel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel })
+    });
+    const data = await res.json();
+    if (data.error) {
+      msgEl.style.color = '#ff4444';
+      msgEl.textContent = '✗ ' + data.error;
+      document.getElementById('kick-conn-dot').className = 'dot closed';
+    } else {
+      msgEl.style.color = '#53fc18';
+      msgEl.textContent = '✓ Подключено к каналу «' + data.channel + '»';
+      document.getElementById('kick-conn-dot').className = 'dot open';
+    }
+  } catch (e) {
+    msgEl.style.color = '#ff4444';
+    msgEl.textContent = '✗ Ошибка сети';
+  }
+}
+loadKickChannelStatus();
+setInterval(loadKickChannelStatus, 5000);
 
 async function toggleRegistration() {
   if (!raffleOpen) {
@@ -5827,6 +5883,37 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Поточний канал Kick + статус підключення — для вкладки «Настройки» на сайті
+  if (req.url === '/api/settings/channel' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      channel: kickChannel,
+      chatroomId: CHATROOM_ID,
+      connected: !!(currentWs && currentWs.readyState === WebSocket.OPEN),
+    }));
+    return;
+  }
+
+  // Змінити канал Kick прямо із сайту — без редеплою
+  if (req.url === '/api/settings/channel' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', async () => {
+      try {
+        const { channel } = JSON.parse(body);
+        const slug = String(channel || '').trim().toLowerCase();
+        if (!slug) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введи нікнейм каналу' })); return; }
+        const chatroomId = await switchKickChannel(slug);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, channel: slug, chatroomId }));
+      } catch (err) {
+        res.writeHead(200, { 'Content-Type': 'application/json' }); // 200, щоб фронт спокійно прочитав .error
+        res.end(JSON.stringify({ error: err.message || 'Не вдалося підключитись до каналу' }));
+      }
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/csv') {
     res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
@@ -6099,8 +6186,12 @@ server.listen(process.env.PORT || 3000, () => {
 });
 
 // ── Kick WebSocket ──────────────────────────────────────────
+let currentWs = null;
+let switchingChannel = false; // true під час навмисної зміни каналу — щоб close-хендлер не плодив зайве авто-перепідключення
+
 function connect() {
   const ws = new WebSocket(PUSHER_WS);
+  currentWs = ws;
   let pingInterval = null;
 
   ws.on('open', () => {
@@ -6179,36 +6270,52 @@ function connect() {
 
   ws.on('close', () => {
     if (pingInterval) clearInterval(pingInterval);
+    if (switchingChannel) { switchingChannel = false; return; } // навмисна зміна каналу — новий connect() вже викликається окремо
     console.log('[WS] Соединение закрыто, переподключение через 5с...');
     setTimeout(connect, 5000);
   });
 }
 
+// Змінює канал, до якого підключений бот, «на льоту» — без редеплою.
+// Викликається з /api/settings/channel. Кидає помилку, якщо канал не знайдено.
+async function switchKickChannel(newSlug) {
+  const id = await resolveChatroomId(newSlug); // кине помилку, якщо канал не існує — виклик endpoint'у це обробить
+  kickChannel = newSlug;
+  CHATROOM_ID = id;
+  saveState();
+  if (currentWs && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
+    switchingChannel = true;
+    currentWs.close();
+  }
+  connect(); // одразу підключаємось до нового каналу, не чекаючи 5с
+  return id;
+}
+
 // ── Старт ───────────────────────────────────────────────────
 async function bootstrap() {
-  if (!KICK_CHANNEL) {
-    console.error('[КОНФІГ] Не задано KICK_CHANNEL в Environment Variables — вкажи нікнейм каналу Kick (наприклад, KICK_CHANNEL=g1bsi) і перезапусти бота.');
-    process.exit(1);
-  }
-
-  console.log(`[КОНФІГ] Шукаю канал "${KICK_CHANNEL}" на Kick...`);
-  try {
-    CHATROOM_ID = await resolveChatroomId(KICK_CHANNEL);
-  } catch (err) {
-    console.error('[КОНФІГ] Не вдалося визначити chatroom_id:', err.message);
-    process.exit(1);
-  }
+  loadState(); // може підвантажити kickChannel, збережений раніше через сайт
 
   console.log('╔══════════════════════════════════════╗');
   console.log('║   Kick Cash Hunt — Розыгрыш BOT      ║');
   console.log('╠══════════════════════════════════════╣');
-  console.log(`║  Канал: ${KICK_CHANNEL}`);
-  console.log(`║  Chatroom: ${CHATROOM_ID}`);
+
+  if (kickChannel) {
+    console.log(`[КОНФІГ] Шукаю канал "${kickChannel}" на Kick...`);
+    try {
+      CHATROOM_ID = await resolveChatroomId(kickChannel);
+      console.log(`║  Канал: ${kickChannel}`);
+      console.log(`║  Chatroom: ${CHATROOM_ID}`);
+      connect();
+    } catch (err) {
+      console.error('[КОНФІГ] Не вдалося підключитись до каналу:', err.message);
+      console.log('║  Канал не підключено — виправ нік у вкладці «Настройки» на сайті');
+    }
+  } else {
+    console.log('║  Канал не задано — вкажи нік Kick у вкладці «Настройки» на сайті');
+  }
+
   console.log('║  Защита: пароль через env variable   ║');
   console.log('╚══════════════════════════════════════╝\n');
-
-  loadState();
-  connect();
 }
 
 bootstrap();
