@@ -1,0 +1,2034 @@
+  /* ══════════════════════════════════════════════════════════
+     Панель керування — чорно-жовта мова з референсів:
+     великі скруглені чорні картки зі світлим кантом зверху,
+     один домінантний жовтий hero-блок, жовті pill-бейджі.
+     Палітра і шкали — у tokens.css.
+     Легасі-псевдоніми лишаються: старі імена змінних ще живуть
+     у секціях мініігор нижче.
+     ══════════════════════════════════════════════════════════ */
+  :root {
+    --kick:         var(--accent);
+    --kick-dark:    var(--accent-dim);
+    --bg-main:      var(--bg);
+    --panel-bg:     var(--surface-1);
+    --panel-border: var(--border);
+    --text-main:    var(--text);
+    --gold:         var(--accent-hi);
+    --red:          var(--danger);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    height: 100vh;
+    overflow: hidden;
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    background-image:
+      radial-gradient(120% 55% at 50% -12%, rgba(var(--accent-rgb), 0.07), transparent 60%);
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Дозволяємо виділяти лише нікнейми учасників, переможців і чат */
+  .participant-row span:last-child,
+  .w-name,
+  .wa-name,
+  .chat-msg,
+  input[type=text], input[type=number], input[type=password] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  /* Гарантуємо що кнопки клікаються незважаючи на user-select:none */
+  button, input, select, label, a, [onclick], summary, details {
+    pointer-events: auto !important;
+    cursor: pointer;
+  }
+  :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+  /* ── Топбар ─────────────────────────────── */
+  .topbar {
+    max-width: 1750px; width: 100%; margin: 0 auto var(--space-3);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: var(--space-3); }
+  .brand-badge {
+    width: 40px; height: 40px; border-radius: var(--r-md);
+    background: var(--accent-fill);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: var(--bloom-accent);
+  }
+  .brand-name {
+    font-size: 20px; font-weight: var(--fw-black); letter-spacing: 1px;
+    color: var(--text);
+  }
+  .brand-name em { font-style: normal; color: var(--accent); }
+  .status-pill {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--r-full);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-bold);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    display: flex; align-items: center;
+    box-shadow: var(--shadow-1);
+  }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:var(--space-2); background:var(--surface-4); transition: var(--t-base); }
+  .dot.open   { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .dot.closed { background: var(--danger); box-shadow: var(--glow-danger); }
+
+  /* ── Сітка Layout ──────────────────────── */
+  .layout {
+    max-width: 1750px; width: 100%; margin: 0 auto;
+    display: grid;
+    grid-template-columns: 340px minmax(320px, 1fr) 380px;
+    gap: var(--space-4);
+    flex: 1;
+    min-height: 0;
+  }
+  @media (max-width: 1200px) {
+    .layout { grid-template-columns: 340px 1fr; }
+    #chat-col { display: none; }
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; overflow-y: auto; }
+    body { overflow: auto; height: auto; }
+  }
+
+  .stack { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  .stack::-webkit-scrollbar { display: none; }
+
+  /* ── Картки ─────────────────────────────── */
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: var(--space-4) var(--space-4);
+    display: flex; flex-direction: column;
+    min-height: 0;
+    box-shadow: var(--shadow-2);
+    flex-shrink: 0;
+  }
+  .card.grow { flex: 1; min-height: 180px; }
+  main.card, aside.card { flex-shrink: 1; }
+
+  .card-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: var(--space-3);
+    flex-shrink: 0;
+  }
+  .card-chip {
+    width: 32px; height: 32px; border-radius: var(--r-sm);
+    background: var(--accent-fill);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.25);
+  }
+  .card-head h2 {
+    font-size: var(--fs-md); font-weight: var(--fw-black);
+    text-transform: uppercase; letter-spacing: 0.8px;
+    display: flex; align-items: center; gap: var(--space-2);
+    flex: 1; min-width: 0;
+  }
+  .count-badge {
+    background: var(--accent); color: var(--on-accent);
+    font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: var(--fw-bold);
+    padding: 2px 10px; border-radius: var(--r-full);
+    letter-spacing: 0;
+  }
+  .btn-icon {
+    width: 30px; height: 30px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2); color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: var(--r-sm);
+    font-size: var(--fs-sm);
+  }
+  .btn-icon:hover { background: var(--surface-3); color: var(--text); border-color: var(--border-strong); }
+
+  /* ── Поля вводу ──────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+  .field-row { display: flex; gap: var(--space-2); }
+  .field.small { flex: 0 0 96px; }
+  .subfield { margin-top: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
+  label.field-label { font-size: var(--fs-micro); color: var(--text-muted); font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.6px; }
+
+  input[type=text], input[type=number] {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 11px var(--space-3); color: var(--text); font-family: var(--font-mono);
+    font-size: var(--fs-md); outline: none; width: 100%;
+    transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+  }
+  input[type=text]::placeholder, input[type=number]::placeholder { color: var(--text-faint); }
+  input:focus { border-color: var(--accent); background: var(--surface-3); box-shadow: var(--focus-ring); }
+  input:disabled { opacity: 0.5; }
+
+  #raffle-cmd { color: var(--accent); font-weight: var(--fw-bold); }
+  #winners-count, #confirm-seconds { text-align: center; }
+
+  /* ── Перемикач режиму гри (карусель) ─────────────────── */
+  .mode-carousel {
+    display: flex; align-items: stretch; gap: var(--space-2);
+    background: var(--surface-2); padding: 6px; border-radius: var(--r-lg);
+    border: 1px solid var(--border);
+  }
+  .mode-arrow {
+    flex: 0 0 auto; width: 44px; border: none; border-radius: var(--r-md);
+    background: transparent; color: var(--text-faint);
+    font-size: var(--fs-xl); font-weight: var(--fw-black); line-height: 1; cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-ui);
+  }
+  .mode-arrow:hover  { background: var(--surface-3); color: var(--text); }
+  .mode-arrow:active { transform: scale(0.93); }
+  /* Поточний режим — маленька жовта картка, як тайли на референсах */
+  .mode-current {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; text-align: center;
+    padding: 10px var(--space-2); min-height: 62px; border-radius: var(--r-md); user-select: none;
+    background: var(--accent-fill); color: var(--on-accent);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.22);
+  }
+  .mode-current .mc-icon  { font-size: 22px; line-height: 1; }
+  .mode-current .mc-label { font-size: var(--fs-sm); font-weight: var(--fw-black); text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.15; }
+  .mode-current .mc-beta  { font-size: 9px; font-weight: var(--fw-bold); opacity: 0.55; text-transform: uppercase; letter-spacing: 1px; }
+  .mode-carousel.slim { padding: 4px; border-radius: var(--r-md); }
+  .mode-carousel.slim .mode-arrow { width: 38px; font-size: var(--fs-lg); border-radius: var(--r-sm); }
+  .time-current {
+    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center;
+    padding: 8px var(--space-2); min-height: 38px; border-radius: var(--r-sm); user-select: none;
+    background: var(--accent-dim); color: var(--accent);
+    border: 1px solid rgba(var(--accent-rgb), 0.25);
+    font-family: var(--font-mono);
+    font-size: var(--fs-md); font-weight: var(--fw-bold); letter-spacing: 0.5px;
+  }
+
+  /* ── Кнопки ──────────────────────────────
+     solid (головна дія) / tonal (альтернатива) / danger / ghost */
+  button {
+    padding: 10px var(--space-3); border: 1px solid transparent; border-radius: var(--r-md);
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-black); cursor: pointer; font-family: var(--font-ui);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast),
+                box-shadow var(--t-fast), transform var(--t-fast);
+    flex-shrink: 0;
+  }
+  button:hover  { transform: translateY(-1px); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-primary {
+    background: var(--accent-fill); color: var(--on-accent);
+    padding: 13px var(--space-5); font-size: var(--fs-md);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.20);
+  }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 10px 30px rgba(var(--accent-rgb), 0.35); }
+
+  .btn-gold, .btn-orange, .btn-green {
+    background: var(--accent-dim); color: var(--accent);
+    border-color: rgba(var(--accent-rgb), 0.30);
+  }
+  .btn-gold:hover:not(:disabled),
+  .btn-orange:hover:not(:disabled),
+  .btn-green:hover:not(:disabled) {
+    background: rgba(var(--accent-rgb), 0.16);
+    border-color: rgba(var(--accent-rgb), 0.55);
+    color: var(--accent-hi);
+  }
+
+  .btn-red {
+    background: var(--danger-dim); color: var(--danger);
+    border-color: rgba(var(--danger-rgb), 0.35); width: 100%;
+  }
+  .btn-red:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.18); border-color: rgba(var(--danger-rgb), 0.6); }
+  .btn-red.fit { width: auto; }
+
+  .btn-dark {
+    background: var(--surface-2); color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .btn-dark:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+
+  .btn-small { padding: 6px 10px; font-size: var(--fs-xs); border-radius: var(--r-sm); }
+
+  .btn-row { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+  .btn-row button { margin: 0; flex: 1; }
+
+  /* Кнопка реєстрації: стан задає JS через className, тому стилі — на id */
+  #btn-reg-toggle { width: 100%; padding: 12px; font-size: var(--fs-sm); }
+
+  #saved-msg, #test-msg { font-size: var(--fs-micro); font-family: var(--font-mono); margin-top: var(--space-1); display: block; height: 14px; }
+
+  /* ── Hero: головна дія ───────────────────── */
+  .hero-actions { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
+  .hero-start {
+    width: 100%;
+    padding: 18px;
+    font-size: 19px;
+    letter-spacing: 2px;
+    border-radius: var(--r-lg);
+    box-shadow: var(--bloom-accent);
+  }
+  .hero-start:hover:not(:disabled) { box-shadow: 0 22px 70px rgba(var(--accent-rgb), 0.32), 0 0 0 1px rgba(var(--accent-rgb), 0.4); }
+  .hero-secondary { display: flex; gap: var(--space-2); }
+  .hero-secondary button { flex: 1; }
+
+  /* ── Тестова панель ──────────────────────── */
+  .test-section-fixed {
+    position: fixed; bottom: 10px; left: 10px; z-index: var(--z-panel-tools);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--space-1) var(--space-2);
+    opacity: 0.3;
+    transition: opacity var(--t-base) var(--ease-out);
+    max-width: 220px;
+  }
+  .test-section-fixed:hover,
+  .test-section-fixed[open] { opacity: 1; }
+  .test-section-fixed summary {
+    font-size: var(--fs-sm); cursor: pointer; outline: none; list-style: none;
+    color: var(--text-muted); text-align: center;
+  }
+  .test-section-fixed summary::-webkit-details-marker { display: none; }
+  .test-section-fixed .field-row { margin-top: var(--space-2); gap: var(--space-1); }
+  .test-section-fixed input { font-size: var(--fs-micro); padding: 4px 6px; }
+  .test-section-fixed .btn-small { font-size: var(--fs-micro); padding: 4px 8px; }
+  .test-section-fixed #test-msg { font-size: 10px; }
+
+  /* ── Списки / Бокси ───────────────── */
+  .box {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg);
+    flex: 1; min-height: 50px; overflow-y: auto; overflow-x: hidden;
+    padding: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-4) transparent;
+  }
+  .box::-webkit-scrollbar { width: 6px; }
+  .box::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: var(--r-full); }
+  .box::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+  .box::-webkit-scrollbar-track { background: transparent; }
+
+  .participants-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .participant-row {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 7px 12px; border-radius: var(--r-full); font-size: var(--fs-sm); font-weight: var(--fw-medium);
+    color: var(--text); background: var(--surface-3);
+    border: 1px solid transparent;
+    transition: background var(--t-fast), border-color var(--t-fast);
+    min-width: 0; overflow: hidden;
+  }
+  .participant-row:hover { background: var(--surface-4); border-color: rgba(var(--accent-rgb), 0.25); }
+  .participant-row .p-num { color: var(--accent); font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-bold); width: 20px; flex-shrink: 0; }
+  .participant-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-faint); font-size: var(--fs-sm); font-family: var(--font-mono); text-align: center; padding: var(--space-5); }
+
+  /* ── Чат ─────────────────────────────────── */
+  .chat-flow { display: flex; flex-direction: column; gap: 6px; }
+  .chat-msg {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.45;
+    word-wrap: break-word;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border-radius: var(--r-md);
+    border-left: 3px solid rgba(var(--accent-rgb), 0.35);
+    transition: background var(--t-fast);
+  }
+  .chat-msg:hover { background: var(--surface-3); }
+  .chat-emote {
+    height: 1.6em; width: auto; vertical-align: middle;
+    margin: 0 1px; display: inline-block;
+  }
+  .kick-badge {
+    height: 1.2em; width: auto; vertical-align: middle;
+    margin-right: 2px; display: inline-block;
+  }
+
+  /* ── Список переможців ──────────────────── */
+  .winner-row {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 10px 12px; margin-bottom: var(--space-2);
+    animation: rowPop var(--t-slow) var(--ease-spring);
+    transition: transform var(--t-fast), border-color var(--t-fast);
+  }
+  .winner-row:hover { transform: translateX(4px); border-color: var(--border-strong); }
+  @keyframes rowPop {
+    from { transform: translateX(-20px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+  .winner-row.confirmed { border-left: 4px solid var(--accent); }
+  .winner-row.expired   { border-left: 4px solid var(--danger); opacity: 0.7; }
+
+  .winner-top { display: flex; align-items: center; gap: 10px; }
+  .w-status { font-size: var(--fs-sm); width: 20px; text-align: center; flex-shrink: 0; }
+  .w-status.ok { color: var(--accent); text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.4); }
+  .w-status.pending { color: var(--accent-hi); font-family: var(--font-mono); font-size: var(--fs-xs); width: auto; font-weight: var(--fw-bold); }
+  .w-status.bad { color: var(--danger); }
+  .w-name { font-weight: var(--fw-bold); color: var(--text); flex: 1; font-size: var(--fs-sm); letter-spacing: 0.5px; }
+  .w-num {
+    font-size: 10px; color: var(--on-accent); font-family: var(--font-mono); font-weight: var(--fw-bold);
+    background: var(--accent); border-radius: var(--r-full);
+    min-width: 22px; padding: 2px 0; text-align: center; flex-shrink: 0;
+  }
+  .w-time { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); }
+
+  .w-msg {
+    margin-top: 6px; font-size: var(--fs-xs); color: var(--accent); font-family: var(--font-mono);
+    background: rgba(var(--accent-rgb), 0.06); border-radius: var(--r-sm); padding: 6px 10px;
+    border: 1px dashed rgba(var(--accent-rgb), 0.25);
+  }
+  .w-msg.empty { color: var(--text-faint); font-style: italic; background: var(--surface-3); border-color: transparent; }
+  .w-edit-btn, .w-del-btn {
+    background: transparent; border: 1px solid var(--border-strong); color: var(--text-faint);
+    border-radius: var(--r-xs); width: 26px; height: 26px; font-size: var(--fs-sm);
+    cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; padding: 0; margin-left: 3px;
+  }
+  .w-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .w-del-btn:hover  { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Дрібнота нової розмітки ─────────────── */
+  .beta-tag { font-size: var(--fs-sm); color: var(--text-faint); letter-spacing: 1px; vertical-align: middle; }
+  .form-title {
+    font-size: var(--fs-micro); color: var(--accent); text-transform: uppercase;
+    letter-spacing: 1px; font-weight: var(--fw-bold);
+  }
+
+/* ── Сітка Cash Hunt ─────────────────────── */
+  /* Панельні hint/progress (стрічка слотів у головній картці) */
+  #hint {
+    text-align: center; font-size: var(--fs-sm); color: var(--text-muted);
+    margin: 8px 0 4px; font-family: var(--font-mono);
+    min-height: 18px; flex-shrink: 0;
+  }
+  #hint b { color: var(--accent); font-size: var(--fs-md); }
+  #progress {
+    text-align: center; font-size: var(--fs-sm); color: var(--text-muted);
+    margin-bottom: 8px; font-family: var(--font-mono);
+    min-height: 18px; flex-shrink: 0;
+  }
+  #progress b { color: var(--accent); font-weight: var(--fw-bold); }
+
+  /* «Фізичний борд» Cash Hunt — товста темна рама з шатром
+     жовтих лампочок по периметру, як борд Crazy Time.
+     Базова геометрія (#cashhunt-area: position/width/flex/gap)
+     задається в секції оверлеїв нижче — тут лише «корпус». */
+  #cashhunt-area {
+    padding: 32px;
+    border-radius: var(--r-xl);
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-3), var(--bloom-accent);
+  }
+  /* Ряди лампочок: чотири смуги точок, кожна прив'язана до свого
+     краю рами — стабільно за будь-якого розміру борда. */
+  #cashhunt-area::before {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image:
+      radial-gradient(circle at center, var(--accent-hi) 0 2px, var(--accent) 2px 3.5px, rgba(var(--accent-rgb), 0.30) 3.5px 6.5px, transparent 7px),
+      radial-gradient(circle at center, var(--accent-hi) 0 2px, var(--accent) 2px 3.5px, rgba(var(--accent-rgb), 0.30) 3.5px 6.5px, transparent 7px),
+      radial-gradient(circle at center, var(--accent-hi) 0 2px, var(--accent) 2px 3.5px, rgba(var(--accent-rgb), 0.30) 3.5px 6.5px, transparent 7px),
+      radial-gradient(circle at center, var(--accent-hi) 0 2px, var(--accent) 2px 3.5px, rgba(var(--accent-rgb), 0.30) 3.5px 6.5px, transparent 7px);
+    background-size: 24px 24px;
+    background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+    background-position: left 4px top 4px, left 4px bottom 4px, left 4px top 4px, right 4px top 4px;
+    animation: chLampGlow 1.8s var(--ease-in-out) infinite alternate;
+  }
+  @keyframes chLampGlow {
+    from { opacity: 0.7; }
+    to   { opacity: 1; }
+  }
+  /* Заглиблення ігрового поля всередині рами (решта стилів
+     #cashhunt-grid-wrap — у секції оверлеїв) */
+  #cashhunt-grid-wrap { box-shadow: inset 0 0 42px rgba(0,0,0,0.55); }
+
+  .grid {
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    padding: 4px;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    width: 100%;
+    position: relative;
+    cursor: pointer;
+    perspective: 800px;
+    user-select: none; -webkit-user-select: none;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell-inner {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform var(--t-slow) var(--ease-spring);
+    user-select: none; -webkit-user-select: none;
+  }
+  .cell.flipped .cell-inner { transform: rotateY(180deg); }
+  .cell-face {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--r-md);
+    backface-visibility: hidden;
+    font-family: var(--font-ui);
+    font-weight: var(--fw-black);
+    text-align: center;
+    overflow: hidden;
+    padding: 2px;
+    user-select: none; -webkit-user-select: none;
+    pointer-events: none;
+  }
+  /* Лицьова сторона — чорний тайл зі стікером */
+  .cell-front {
+    background: linear-gradient(160deg, var(--surface-3), var(--surface-2) 60%);
+    border: 1px solid var(--border-strong);
+    color: var(--accent);
+    font-size: 24px;
+    box-shadow: var(--shadow-1);
+    transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+  }
+  .cell-front:hover {
+    border-color: rgba(var(--accent-rgb), 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 0 14px rgba(var(--accent-rgb), 0.18);
+  }
+  /* Зворот — нік учасника, моноширинний, контрастний */
+  .cell-back {
+    transform: rotateY(180deg);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-weight: var(--fw-bold);
+    font-size: 12px;
+    line-height: 1.25;
+    word-break: break-word;
+    box-shadow: inset 0 0 18px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .cell.selected .cell-front {
+    border-color: var(--accent);
+    background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.07) 60%), var(--surface-2);
+    box-shadow: var(--glow-accent), inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+    transform: translateY(-2px) scale(1.04);
+  }
+  /* Кульмінація: переможна клітинка — жовта заливка, чорний текст */
+  .cell.winner .cell-back {
+    background: var(--accent-fill);
+    border-color: var(--accent-hi);
+    color: var(--on-accent);
+    font-weight: var(--fw-black);
+    font-size: 14px;
+    animation: winnerGlow 1s var(--ease-in-out) infinite alternate;
+  }
+  @keyframes winnerGlow {
+    from { box-shadow: var(--glow-accent); }
+    to   { box-shadow: var(--glow-accent-strong); }
+  }
+  .cell.revealed { cursor: default; }
+  .selecting .cell:not(.selected):hover .cell-inner { transform: scale(1.05); }
+  .selecting .cell { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .selecting .cell.selected { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  /* Прибираємо прицільний курсор та будь-яке виділення тексту у клітинках */
+  .selecting * { user-select: none !important; -webkit-user-select: none !important; outline: none !important; }
+  /* В режимі вибору клітинок — знімаємо паддінг/скрол з box,
+     щоб fitGridColumns рахував точну площу і клітинки не обрізались */
+  .box.selecting { padding: 6px; overflow: hidden; }
+
+  /* Мішень у клітинці — згенерований спрайт.
+     Фон спрайтів непрозоро-чорний, тому лицьова сторона клітинки
+     теж майже чорна — квадрат зливається з тайлом. */
+  .cell-target {
+    width: 88%; height: 88%;
+    object-fit: contain;
+    pointer-events: none;
+    border-radius: var(--r-sm);
+  }
+  .cell-front { background: var(--bg); }
+  .cell.selected .cell-front { background: var(--bg); }
+
+  /* ── Пушка Cash Hunt ─────────────────────────
+     Мінімалістична турель під бордом: чорна основа, жовтий ствол.
+     Кут прицілювання задає JS через --aim, довжину лазера — --laser-len. */
+  /* Гармата — згенеровані спрайти в стилі табла (cannon-barrel/base.png):
+     чорний глянець із золотом. Ствол крутиться навколо казенної кулі,
+     що сидить у «колисці» лафета (лафет малюється ПОВЕРХ ствола) */
+  #cannon {
+    position: relative;
+    height: 78px;
+    margin-top: 0;   /* кожен зайвий піксель колонки — мінус кнопкам знизу */
+    display: flex; flex-direction: column; align-items: center;
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+  #cannon-base {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 116px; height: 52px;
+    background: url('/assets/cannon-base.png') center bottom / contain no-repeat;
+    border: none; border-radius: 0; box-shadow: none;
+    z-index: 3;
+  }
+  #cannon-base::before, #cannon-base::after { content: none; }
+
+  #cannon-barrel {
+    position: absolute; bottom: 30px; left: 50%;
+    width: 27px; height: 72px;
+    margin-left: -13.5px;
+    transform-origin: 50% 100%;   /* pivot = центр казенної кулі внизу спрайта */
+    transform: rotate(var(--aim, 0deg));
+    transition: transform 0.42s var(--ease-out);
+    background: url('/assets/cannon-barrel.png') center / contain no-repeat;
+    border-radius: 0; box-shadow: none;
+    filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.18));
+    z-index: 2;
+  }
+  /* живий супровід курсора: коротший перехід, ніж у «важкого» довороту
+     на ціль (0.42s лишається для лока після вибору і пострілу) */
+  #cannon.tracking #cannon-barrel,
+  #cannon.tracking #cannon-laser { transition: transform 0.1s linear; }
+  /* Розкриття переможної клітинки: зростання → повільний перекид →
+     лишається збільшеною над сусідами (fill forwards перекриває .flipped) */
+  #cashhunt-grid .cell.winner-reveal { z-index: 5; }
+  #cashhunt-grid .cell.winner-reveal .cell-inner {
+    animation: chWinFlip 1.25s var(--ease-spring) forwards;
+  }
+  @keyframes chWinFlip {
+    0%   { transform: rotateY(0) scale(1); }
+    38%  { transform: rotateY(0) scale(1.3); }
+    100% { transform: rotateY(180deg) scale(1.34); }
+  }
+  #cashhunt-grid .cell.winner-reveal .cell-back {
+    box-shadow: 0 0 0 2px var(--accent), 0 0 34px 10px rgba(var(--accent-rgb), 0.5);
+  }
+  /* мітка влучання: клітинка, в яку щойно вистрілила гармата */
+  #cashhunt-grid .cell.shot {
+    z-index: 2;
+    animation: chShotPulse 0.8s var(--ease-in-out) infinite alternate;
+  }
+  @keyframes chShotPulse {
+    from { box-shadow: 0 0 0 2px var(--accent), 0 0 10px 2px rgba(var(--accent-rgb), 0.35); }
+    to   { box-shadow: 0 0 0 3px var(--accent-hi), 0 0 26px 8px rgba(var(--accent-rgb), 0.7); }
+  }
+  /* сам «блок дула» намальований у спрайті — елемент лишається якорем спалаху */
+  #cannon-muzzle {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 27px; height: 8px;
+    background: none; border: none;
+  }
+  /* Спалах пострілу на дулі */
+  #cannon.firing #cannon-barrel { animation: cannonRecoil 0.30s var(--ease-out); }
+  @keyframes cannonRecoil {
+    0%   { transform: rotate(var(--aim, 0deg)) translateY(0); }
+    25%  { transform: rotate(var(--aim, 0deg)) translateY(9px); }
+    100% { transform: rotate(var(--aim, 0deg)) translateY(0); }
+  }
+  #cannon.firing #cannon-muzzle::after {
+    content: ''; position: absolute; left: 50%; top: -26px; transform: translateX(-50%);
+    width: 34px; height: 34px; border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, var(--accent-hi) 35%, var(--accent) 60%, transparent 75%);
+    mix-blend-mode: screen;
+    animation: cannonFlash 0.25s ease-out forwards;
+  }
+  @keyframes cannonFlash {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.4); }
+    30%  { opacity: 1; transform: translateX(-50%) scale(1.15); }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.8); }
+  }
+
+  /* Лазер-приціл: пунктирна жовта лінія від дула до цілі */
+  #cannon-laser {
+    position: absolute; bottom: 30px; left: 50%;   /* якір = pivot ствола */
+    width: 2px; height: var(--laser-len, 0px);
+    margin-left: -1px;
+    transform-origin: 50% 100%;
+    transform: rotate(var(--aim, 0deg));
+    transition: transform 0.42s var(--ease-out), height 0.42s var(--ease-out);
+    background: repeating-linear-gradient(
+      to top,
+      rgba(var(--accent-rgb), 0.85) 0 6px,
+      transparent 6px 12px);
+    opacity: 0;
+    z-index: 1;
+  }
+  #cannon.aiming #cannon-laser { opacity: 0.55; }
+
+  /* Влучання: клітинка здригається і спалахує жовтим */
+  .cell.hit .cell-inner { animation: cellHit 0.4s var(--ease-out); }
+  @keyframes cellHit {
+    0%   { transform: scale(1); }
+    30%  { transform: scale(0.86); box-shadow: 0 0 0 3px var(--accent), var(--glow-accent-strong); }
+    100% { transform: scale(1); }
+  }
+/* ── Гонка & Рулетка (Оверлеї) ───────────────────────────── */
+  /* Повноекранні оверлеї для глядачів: глибокий чорний скрим з легким
+     жовтим bloom зверху, один акцент, моно-ніки. Рулетка — кейс-опенінг:
+     чорна капсула-трек, жовтий променевий вказівник по центру. */
+  #race-overlay, #roulette-overlay, #cashhunt-overlay {
+    position: fixed; inset: 0; z-index: var(--z-overlay);
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(var(--accent-rgb), 0.06), transparent 60%),
+      linear-gradient(rgba(8,8,10,0.92), rgba(8,8,10,0.92));
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px;
+    backdrop-filter: blur(10px);
+  }
+  #race-overlay.visible, #roulette-overlay.visible, #cashhunt-overlay.visible { display: flex; }
+
+  #race-overlay-hint, #roulette-overlay-hint {
+    font-family: var(--font-ui);
+    font-size: var(--fs-xl); font-weight: 800; color: var(--accent);
+    letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35);
+  }
+
+  /* display:flex вмикає JS інлайном — CSS дає лише геометрію проміжків */
+  #race-overlay-controls, #roulette-overlay-controls { display: flex; gap: 10px; }
+
+  /* Cash Hunt overlay */
+  #cashhunt-area {
+    position: relative;
+    width: min(98vw, 1400px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* Ховаємо системний курсор в оверлеї під час вибору (заміняємо на кастомний прицільний) */
+  #cashhunt-overlay.selecting-mode { cursor: none; }
+  #cashhunt-overlay.selecting-mode * { cursor: none !important; }
+
+  /* ── Кастомний приціл (DOM, генерується в app.js) ─────────
+     Позиція left/top ставиться з mousemove; сам елемент центрується
+     і масштабується через transform, тому transition тільки на ньому */
+  #cashhunt-crosshair {
+    position: fixed; top: 0; left: 0;
+    width: 52px; height: 52px;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+    transform: translate(-50%, -50%);
+    transition: transform 0.16s ease-out;
+    filter: drop-shadow(0 0 9px rgba(255, 217, 61, 0.55));
+  }
+  #cashhunt-crosshair.on { display: block; }
+  /* «Захоплення цілі» над клітинкою — приціл стискається */
+  #cashhunt-crosshair.locked { transform: translate(-50%, -50%) scale(0.76); }
+
+  #cashhunt-crosshair .xh-ring {
+    position: absolute; inset: 9px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 10px rgba(255, 217, 61, 0.65), inset 0 0 8px rgba(255, 217, 61, 0.35);
+    animation: xh-pulse 1.6s ease-in-out infinite;
+  }
+  /* Насічки на 4 сторони; контейнер повільно обертається */
+  #cashhunt-crosshair .xh-ticks {
+    position: absolute; inset: 0;
+    animation: xh-spin 6s linear infinite;
+  }
+  #cashhunt-crosshair .xh-ticks i {
+    position: absolute;
+    width: 2.5px; height: 8px;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(255, 217, 61, 0.8);
+  }
+  #cashhunt-crosshair .xh-ticks i:nth-child(1) { top: 0;    left: 50%; transform: translateX(-50%); }
+  #cashhunt-crosshair .xh-ticks i:nth-child(2) { bottom: 0; left: 50%; transform: translateX(-50%); }
+  #cashhunt-crosshair .xh-ticks i:nth-child(3) { left: 0;   top: 50%;  transform: translateY(-50%) rotate(90deg); }
+  #cashhunt-crosshair .xh-ticks i:nth-child(4) { right: 0;  top: 50%;  transform: translateY(-50%) rotate(90deg); }
+  #cashhunt-crosshair .xh-dot {
+    position: absolute; top: 50%; left: 50%;
+    width: 5px; height: 5px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px 2px rgba(255, 217, 61, 0.9);
+  }
+  @keyframes xh-spin { to { transform: rotate(360deg); } }
+  @keyframes xh-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  /* підказку прибрано з макета («ВЫБЕРИТЕ N ЯЧЕЕК…» затуляла кнопки при
+     100% зумі); JS далі пише в елемент — він просто прихований */
+  #cashhunt-hint { display: none; }
+  /* рядок «Найдено победителей…» прибраний із макета — JS-очистки
+     елемента лишаються, він просто прихований */
+  #cashhunt-progress-overlay { display: none; }
+  #cashhunt-grid-wrap {
+    background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: var(--r-lg);
+    overflow: hidden; flex: 1;
+    max-height: 75vh;
+    padding: 6px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-2);
+  }
+  #cashhunt-controls {
+    display: flex; gap: 12px; justify-content: center; flex-shrink: 0;
+  }
+
+  #race-track-area {
+    width: min(98vw, 1560px);
+    aspect-ratio: 12 / 7;
+    max-height: 85vh;
+    position: relative;
+    background: #000;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-3);
+  }
+
+  #roulette-track-area {
+    width: min(90vw, 1100px);
+    position: relative;
+    padding: 40px 0;
+  }
+  /* Центральна зона треку — ледь помітне жовте світло під вказівником */
+  #roulette-track-area::after {
+    content: ''; position: absolute; left: 0; right: 0; top: 40px; bottom: 40px;
+    border-radius: var(--r-xl);
+    background: radial-gradient(150px 130% at 50% 50%, rgba(var(--accent-rgb), 0.10), transparent 70%);
+    z-index: 5; pointer-events: none;
+  }
+
+  #roulette-track {
+    width: 100%; height: 160px;
+    background: linear-gradient(180deg, var(--surface-1), var(--bg));
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      inset 0 0 60px rgba(0,0,0,0.9),
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 24px 60px rgba(0,0,0,0.85);
+  }
+
+  #roulette-track::before, #roulette-track::after {
+    content: ''; position: absolute; top: 0; bottom: 0; width: 120px; z-index: 5; pointer-events: none;
+  }
+  #roulette-track::before { left: 0;  background: linear-gradient(90deg,  var(--bg), transparent); }
+  #roulette-track::after  { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
+
+  /* transition стрічки задає JS інлайном — у CSS його не задаємо */
+  #roulette-strip {
+    display: flex; align-items: center; height: 100%;
+    position: absolute; left: 0; top: 0;
+    will-change: transform;
+  }
+
+  /* КРИТИЧНО: ширина клітинки рівно 200px — JS хардкодить cellWidth=200 */
+  .roulette-cell {
+    flex: 0 0 200px; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-weight: var(--fw-bold); font-size: 20px;
+    color: var(--text); letter-spacing: 0.5px;
+    border-right: 1px solid var(--border);
+    text-align: center; padding: 0 16px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: var(--surface-2);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .roulette-cell.win {
+    color: var(--on-accent); background: var(--accent-fill);
+    font-weight: var(--fw-black); font-size: 24px;
+    animation: winnerGlow 0.8s ease infinite alternate;
+    border: none;
+    box-shadow: var(--glow-accent-strong);
+  }
+
+  /* Вказівник — жовтий промінь: вертикальна лінія з glow
+     і два трикутники, зверху і знизу треку */
+  #roulette-pointer {
+    position: absolute; left: 50%; top: 6px; bottom: 6px;
+    width: 2px; transform: translateX(-50%);
+    background: linear-gradient(180deg, var(--accent), rgba(var(--accent-rgb), 0.45) 50%, var(--accent));
+    z-index: 6; border-radius: var(--r-full);
+    box-shadow: var(--glow-accent-strong);
+    pointer-events: none;
+  }
+  #roulette-pointer::before, #roulette-pointer::after {
+    content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+    border-left: 11px solid transparent; border-right: 11px solid transparent;
+    filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.55));
+  }
+  #roulette-pointer::before { top: -2px;    border-top: 14px solid var(--accent); }
+  #roulette-pointer::after  { bottom: -2px; border-bottom: 14px solid var(--accent); }
+  /* ── 🔫 Режим Револьвер ─────────────────── */
+  /* ── 💬 Режим Чат ──────────────────────────── */
+  /* ── 🪂 БАТЛ РОЯЛЬ ── */
+  #royale-overlay {
+    position: fixed; inset: 0; z-index: var(--z-overlay);
+    background: rgba(8, 8, 10, 0.92); backdrop-filter: blur(10px);
+    display: none; flex-direction: column; align-items: center;
+    padding: 16px; gap: 10px; overflow: hidden;
+  }
+  #royale-overlay.visible { display: flex; }
+  #royale-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  #royale-top h2 {
+    font-size: var(--fs-lg); margin: 0;
+    font-family: var(--font-ui); font-weight: var(--fw-black);
+    text-transform: uppercase; letter-spacing: 2px;
+    color: var(--accent);
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35);
+  }
+  #royale-status {
+    font-size: var(--fs-sm); font-weight: var(--fw-bold);
+    font-family: var(--font-mono); color: var(--accent-hi);
+    min-height: 18px; text-align: center; letter-spacing: 0.5px;
+  }
+  #royale-main { flex: 1; display: flex; gap: 12px; width: 100%; min-height: 0; align-items: stretch; justify-content: center; }
+  .royale-side {
+    flex: 1 1 0; min-width: 180px; max-width: 620px;
+    background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-2);
+    padding: 10px; overflow: hidden; display: flex; flex-direction: column; gap: 4px;
+  }
+  @media (max-width: 760px) {
+    .royale-side { min-width: 100px; padding: 6px; }
+    #royale-top h2 { font-size: 14px; }
+    #royale-status { font-size: var(--fs-xs); }
+  }
+  .royale-side h3 {
+    font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 1px;
+    font-weight: var(--fw-black); color: var(--accent); margin: 0 0 6px;
+  }
+  /* список заповнює колонку в кілька стовпців якщо широка */
+  .royale-list {
+    flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 4px; align-content: start; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--surface-4) transparent;
+  }
+  /* чорна пілюля: моно-нік + жовтий номер */
+  .royale-pill {
+    font-size: var(--fs-xs); font-family: var(--font-mono);
+    padding: 4px 10px; border-radius: var(--r-full);
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text);
+    display: flex; justify-content: space-between; gap: 6px;
+    transition: background var(--t-fast), border-color var(--t-fast), opacity var(--t-base);
+  }
+  .royale-pill .nk { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .royale-pill .pos { flex: 0 0 auto; color: var(--accent); font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: var(--fw-bold); }
+  .royale-pill.dead {
+    opacity: 0.45; color: var(--text-faint);
+    text-decoration: line-through;
+    text-decoration-color: var(--danger);
+    text-decoration-thickness: 2px;
+  }
+  .royale-pill.dead .pos { color: var(--text-faint); }
+  #royale-stage { position: relative; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+  #royale-map-bg { position: absolute; inset: 0; border-radius: var(--r-md); overflow: hidden; opacity: 0.5; pointer-events: none; z-index: 0; }
+  #royale-map-bg svg, #royale-map-bg img { width: 100%; height: 100%; display: block; object-fit: cover; }
+  /* оболонка сітки; grid-template будує JS — не чіпати */
+  #royale-grid {
+    position: relative; z-index: 1; display: grid; gap: 2px; padding: 8px;
+    border-radius: var(--r-lg); border: 1px solid var(--border);
+    background: rgba(10, 10, 10, 0.45);
+    box-shadow: var(--shadow-2);
+  }
+  /* клітинка — surface-2, але напівпрозора, щоб мапа читалась крізь сітку */
+  .rcell {
+    position: relative;
+    background: rgba(26, 26, 28, 0.55);
+    border: 1px solid var(--border); border-radius: var(--r-xs);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: var(--fw-bold); color: var(--text);
+    overflow: hidden;
+    transition: background 0.5s, opacity 0.5s, border-color 0.5s;
+  }
+  .rcell .rcoord {
+    position: absolute; top: 2px; left: 3px;
+    font-size: 11px; font-weight: var(--fw-bold); font-family: var(--font-mono);
+    color: var(--accent); pointer-events: none;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.9);
+  }
+  .rcell .rocc { font-size: 10px; line-height: 1.1; text-align: center; padding: 1px; word-break: break-all; font-family: var(--font-mono); }
+  .rcell .rbadge { background: var(--accent); color: var(--on-accent); border-radius: var(--r-full); padding: 0 4px; font-size: 9px; font-weight: var(--fw-bold); margin-top: 1px; }
+  /* клітинка поза колом зони — затемнення з червоним відтінком */
+  .rcell.danger {
+    background: linear-gradient(rgba(var(--danger-rgb), 0.14), rgba(var(--danger-rgb), 0.14)) rgba(8, 8, 10, 0.72);
+    border-color: rgba(var(--danger-rgb), 0.4);
+  }
+  .rcell.danger .rcoord { color: rgba(var(--danger-rgb), 0.75); }
+  /* @keyframes redWarn ніде не було визначено — клітинка, яка мала блимати
+     перед ударом червоної зони, стояла нерухомо, і глядач не отримував
+     жодного попередження. */
+  .rcell.redzone-warn { animation: redWarn 0.5s infinite alternate; }
+  @keyframes redWarn {
+    from { background: rgba(var(--danger-rgb), 0.12); box-shadow: inset 0 0 0 1px rgba(var(--danger-rgb), 0.35); }
+    to   { background: rgba(var(--danger-rgb), 0.45); box-shadow: inset 0 0 0 2px var(--danger), var(--glow-danger); }
+  }
+  .rcell.redzone-blast {
+    background: rgba(var(--danger-rgb), 0.65) !important;
+    border-color: rgba(255, 255, 255, 0.9) !important;
+    box-shadow: var(--glow-danger);
+  }
+  .rcell.rwinner {
+    background: var(--accent-fill) !important;
+    border-color: var(--accent-hi) !important;
+    color: var(--on-accent); font-weight: var(--fw-black);
+    animation: winnerGlow 0.8s ease infinite alternate;
+  }
+  .rcell.rwinner .rcoord { color: var(--on-accent); text-shadow: none; }
+  #royale-controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .royale-pill.highlight {
+    background: var(--accent-dim);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    color: var(--accent-hi);
+    outline: 1px solid var(--accent);
+    box-shadow: var(--glow-accent);
+  }
+  .rcell.cell-hover { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 2; box-shadow: var(--glow-accent); }
+  /* непомітна тестова кнопка (олівець) — проявляється при наведенні */
+  #roy-test-btn {
+    position: absolute; left: 12px; bottom: 12px;
+    width: 26px; height: 26px; border-radius: 50%; font-size: 12px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-faint); cursor: pointer; z-index: 5; opacity: 0.3; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity var(--t-base), color var(--t-base), border-color var(--t-base);
+  }
+  #roy-test-btn:hover { opacity: 1; color: var(--text-muted); border-color: var(--border-strong); }
+  /* тестова форма (display:none лишається інлайном у HTML, JS перемикає на flex) */
+  #roy-test-form {
+    position: absolute; left: 14px; bottom: 64px; z-index: 6;
+    flex-direction: column; gap: 6px;
+    width: 230px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-2);
+  }
+  /* перестрілка */
+  #royale-shootout {
+    position: fixed; inset: 0; z-index: var(--z-overlay-top);
+    background: rgba(8, 8, 10, 0.92); backdrop-filter: blur(8px);
+    display: none; flex-direction: column; align-items: center; padding: 20px;
+  }
+  #royale-shootout.visible { display: flex; }
+  #royale-shootout h2 {
+    font-size: var(--fs-xl); letter-spacing: 3px; margin: 4px 0 10px;
+    font-weight: var(--fw-black); text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35);
+  }
+  /* нейтрально-чорна арена замість зеленого градієнта */
+  #rso-arena {
+    position: relative; flex: 1; width: 100%; max-width: 1100px;
+    background: radial-gradient(120% 90% at 50% 0%, var(--surface-2), var(--bg) 75%);
+    border: 1px solid var(--border); border-radius: var(--r-xl);
+    box-shadow: var(--shadow-3);
+    overflow: hidden;
+  }
+  #rso-canvas { display: block; width: 100%; height: 100%; }
+  #rso-winner {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(8, 8, 10, 0.88); backdrop-filter: blur(4px);
+    z-index: 5; gap: 4px;
+  }
+  #rso-winner.show { display: flex; }
+  #rso-winner .crown {
+    font-size: 64px; margin-bottom: 4px;
+    filter: drop-shadow(0 0 18px rgba(var(--accent-rgb), 0.55));
+    animation: winnerGlow 0.8s infinite alternate;
+  }
+  #rso-winner .label {
+    font-size: var(--fs-sm); font-weight: var(--fw-black); letter-spacing: 6px;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  #rso-winner .big {
+    font-size: var(--fs-display); font-weight: var(--fw-black); letter-spacing: 1px;
+    font-family: var(--font-mono); line-height: 1.1;
+    padding: 12px 48px; margin-top: 8px; border-radius: var(--r-lg);
+    background: var(--accent-fill); color: var(--on-accent);
+    box-shadow: var(--glow-accent-strong), var(--bloom-accent);
+    max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #rso-winner .big.draw { background: var(--surface-3); color: var(--text-muted); box-shadow: none; font-size: var(--fs-2xl); }
+  /* панель камер під ареною */
+  .rso-cam-bar { display: flex; gap: 10px; margin-top: 8px; align-items: center; }
+  #rso-cam-label {
+    font-size: var(--fs-sm); color: var(--text-muted);
+    min-width: 120px; text-align: center; font-family: var(--font-mono);
+  }
+  /* ── Бонусбуря з чатом — фулскрін-оверлей у три колонки:
+     переможці · поточний переможець · живий чат стріму.
+     Механіка незмінна: display:none → .visible ставить grid 1fr 1fr 1fr. */
+  #chatgame-overlay {
+    position: fixed; inset: 0;
+    z-index: calc(var(--z-overlay) + 2);   /* над гонкою (+0) та револьвером (+1) */
+    background: rgba(8,8,10,0.92);
+    display: none; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+    backdrop-filter: blur(10px);
+  }
+  #chatgame-overlay.visible { display: grid; }
+
+  /* Спільні тонкі скролбари трьох стрічок */
+  #chatgame-winners-list, #chatgame-msgs, #chatgame-chat-box {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-4) transparent;
+  }
+  #chatgame-winners-list::-webkit-scrollbar,
+  #chatgame-msgs::-webkit-scrollbar,
+  #chatgame-chat-box::-webkit-scrollbar { width: 6px; }
+  #chatgame-winners-list::-webkit-scrollbar-thumb,
+  #chatgame-msgs::-webkit-scrollbar-thumb,
+  #chatgame-chat-box::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: var(--r-full); }
+
+  /* Центральна колонка — поточний переможець */
+  #chatgame-left {
+    display: flex; flex-direction: column;
+    padding: 28px 24px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    gap: 14px;
+    background:
+      radial-gradient(90% 42% at 50% -6%, rgba(var(--accent-rgb), 0.10), transparent 65%),
+      rgba(0,0,0,0.35);
+    overflow: hidden;
+  }
+  #chatgame-winner-name {
+    font-family: var(--font-ui);
+    font-size: clamp(34px, 4.2vw, 72px);
+    font-weight: var(--fw-black);
+    line-height: 1.05;
+    color: var(--text);
+    text-align: center; word-break: break-word;
+    text-shadow: 0 0 28px rgba(255,255,255,0.28), 0 0 70px rgba(var(--accent-rgb), 0.18);
+  }
+  #chatgame-timer-block { text-align: center; }
+  #chatgame-timer {
+    font-family: var(--font-mono);
+    font-size: var(--fs-display);
+    font-weight: var(--fw-bold);
+    letter-spacing: -2px;
+    color: var(--accent); line-height: 1;
+    text-shadow: var(--glow-accent-strong);
+  }
+  #chatgame-timer.expiring {
+    color: var(--danger);
+    text-shadow: 0 0 12px rgba(var(--danger-rgb), 0.55), 0 0 48px rgba(var(--danger-rgb), 0.22);
+    animation: timerBlink 0.5s infinite alternate;
+  }
+  #chatgame-sub {
+    font-family: var(--font-ui); font-size: var(--fs-xs); font-weight: var(--fw-black);
+    color: var(--text-muted); letter-spacing: 4px; text-transform: uppercase; margin-top: 6px;
+  }
+  #chatgame-msgs-label {
+    font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 2px; font-family: var(--font-mono); font-weight: var(--fw-bold);
+    border-top: 1px solid var(--border); padding-top: 12px;
+  }
+  #chatgame-msgs {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+  }
+  .chatgame-msg-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 8px 10px;
+    font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text);
+    box-shadow: var(--shadow-1);
+  }
+  .chatgame-msg-text { flex: 1; word-break: break-word; line-height: 1.45; }
+  .chatgame-msg-save {
+    flex-shrink: 0; font-size: var(--fs-xs); font-weight: var(--fw-black);
+    text-transform: uppercase; letter-spacing: 0.4px;
+    padding: 5px 12px; border-radius: var(--r-sm);
+    background: var(--accent-fill); color: var(--on-accent); border: none; cursor: pointer;
+    white-space: nowrap;
+    transition: box-shadow var(--t-fast), transform var(--t-fast);
+  }
+  .chatgame-msg-save:hover { box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35); transform: translateY(-1px); }
+  #chatgame-no-msgs {
+    color: var(--text-faint); font-family: var(--font-mono);
+    font-size: var(--fs-xs); text-align: center; padding: 20px;
+  }
+  #chatgame-controls {
+    display: flex; gap: 12px; flex-shrink: 0; flex-wrap: wrap;
+    justify-content: center; padding-top: 8px;
+  }
+  #chatgame-controls button {
+    font-size: var(--fs-md); padding: 13px 28px; min-width: 200px;
+    border-radius: var(--r-lg);
+  }
+
+  /* Ліва колонка — список переможців */
+  #chatgame-right {
+    display: flex; flex-direction: column;
+    padding: 28px 24px; gap: 12px; overflow: hidden;
+    background: rgba(0,0,0,0.35);
+  }
+  #chatgame-right-title {
+    font-family: var(--font-ui); font-size: var(--fs-lg); font-weight: var(--fw-black);
+    color: var(--accent); text-transform: uppercase; letter-spacing: 2px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.30);
+  }
+  #chatgame-count { font-family: var(--font-mono); }
+  #chatgame-winners-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  }
+  .chatgame-winner-row {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+    box-shadow: var(--shadow-1);
+    animation: rowPop var(--t-slow) var(--ease-spring);
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+  .chatgame-winner-row:hover { border-color: rgba(var(--accent-rgb), 0.30); background: var(--surface-3); }
+  .chatgame-winner-row .cg-num {
+    min-width: 26px; height: 26px; padding: 0 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: var(--fs-xs); font-weight: var(--fw-bold); font-family: var(--font-mono);
+    color: var(--on-accent); background: var(--accent);
+    border-radius: var(--r-full); flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.25);
+  }
+  .chatgame-winner-info { flex: 1; min-width: 0; }
+  .chatgame-winner-info .cg-nick {
+    font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--text);
+    font-family: var(--font-mono); letter-spacing: 0.3px; word-break: break-word;
+    user-select: text; -webkit-user-select: text; cursor: text;
+  }
+  .chatgame-winner-info .cg-slot {
+    font-size: var(--fs-sm); color: var(--accent); font-family: var(--font-mono);
+    margin-top: 3px; word-break: break-word;
+    user-select: text; -webkit-user-select: text; cursor: text;
+  }
+  .chatgame-winner-info .cg-slot.empty { color: var(--text-faint); font-style: italic; }
+  .chatgame-delete-btn {
+    flex-shrink: 0; background: transparent; border: 1px solid var(--border-strong);
+    color: var(--text-faint); border-radius: var(--r-sm); width: 30px; height: 30px;
+    font-size: var(--fs-md); cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1; padding: 0;
+  }
+  .chatgame-delete-btn:hover {
+    border-color: var(--danger); color: var(--danger);
+    background: rgba(var(--danger-rgb), 0.10);
+  }
+
+  /* Форми ручного додавання/редагування:
+     display:none інлайном у розмітці, JS вмикає flex */
+  #cg-add-form, #cg-edit-form {
+    flex-direction: column; gap: 6px; margin-top: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px;
+    flex-shrink: 0;
+  }
+  #cg-edit-form {
+    background: var(--accent-dim);
+    border-color: rgba(var(--accent-rgb), 0.30);
+  }
+  #cg-add-form input, #cg-edit-form input { padding: 8px 10px; font-size: var(--fs-sm); }
+  .cg-form-row { display: flex; gap: 6px; }
+  .cg-form-row button { flex: 1; margin: 0; font-size: var(--fs-xs); padding: 8px 10px; }
+  .cg-add-btn { margin-top: 8px; width: 100%; flex-shrink: 0; }
+  .cg-empty {
+    color: var(--text-faint); font-size: var(--fs-xs);
+    font-family: var(--font-mono); text-align: center; padding: 20px;
+  }
+
+  /* ── Чат-панель оверлею Бонусбурі ─────── */
+  #chatgame-chat-panel {
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--border);
+    background: rgba(0,0,0,0.35);
+    overflow: hidden;
+  }
+  #chatgame-chat-title {
+    font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: var(--fw-black);
+    color: var(--accent); letter-spacing: 2px; text-transform: uppercase;
+    padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #chatgame-chat-box {
+    flex: 1; overflow-y: auto; padding: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #chatgame-chat-box .chat-msg { font-size: var(--fs-xs); }
+  /* ── Револьвер: оверлей рулетки ─────────────────────────────
+     Чорний граніт замість сталі, латунь камор → жовтий акцент.
+     Розміри area/frame/cylinder/chamber і position-механіку міряє
+     та крутить JS — їх не чіпаємо, тільки матеріал і світло. */
+  #revolver-overlay {
+    position: fixed; inset: 0; z-index: var(--z-overlay);
+    background: rgba(8,8,10,0.92);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--space-5); backdrop-filter: blur(10px);
+  }
+  #revolver-overlay.visible { display: flex; }
+  #revolver-overlay-hint {
+    font-family: var(--font-ui); font-size: var(--fs-xl); font-weight: var(--fw-black);
+    color: var(--accent); letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.45); text-align: center;
+  }
+  #revolver-area {
+    position: relative; width: 520px; height: 520px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  @keyframes recoilShake {
+    0%   { transform: translate(0,0) rotate(0deg) scale(1); }
+    8%   { transform: translate(-4px, 18px) rotate(-2deg) scale(1.03); }
+    20%  { transform: translate(6px, -12px) rotate(1.5deg) scale(0.97); }
+    40%  { transform: translate(-3px, 7px) rotate(-1deg) scale(1.01); }
+    65%  { transform: translate(2px, -3px) rotate(0.5deg) scale(0.99); }
+    100% { transform: translate(0,0) rotate(0deg) scale(1); }
+  }
+  .shake-anim { animation: recoilShake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+
+  /* Зовнішнє кільце (рама барабана) — шліфований чорний граніт:
+     нейтральні сірі без синяви, світлий кант зверху, ледь помітний
+     жовтий bloom навколо, щоб рама жила в одному світлі з панеллю */
+  #revolver-frame {
+    position: absolute;
+    width: 430px; height: 430px; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      var(--surface-1) 0%, var(--surface-4) 8%, #0d0d0e 15%, var(--surface-4) 22%,
+      #101011 30%, var(--surface-3) 38%, #0b0b0c 45%, var(--border-strong) 52%,
+      var(--surface-1) 60%, var(--surface-4) 68%, #0d0d0e 75%, var(--surface-4) 82%,
+      #101011 90%, var(--surface-3) 97%, var(--surface-1) 100%);
+    border: 3px solid var(--border-strong);
+    box-shadow:
+      0 0 0 2px #0a0a0b,
+      0 0 0 5px var(--surface-3),
+      0 25px 70px rgba(0,0,0,0.95),
+      0 0 90px rgba(var(--accent-rgb), 0.07),
+      inset 0 2px 0 rgba(255,255,255,0.06);
+    z-index: 1;
+  }
+
+  /* Сам барабан (обертається) */
+  #revolver-cylinder {
+    width: 380px; height: 380px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 38% 35%, var(--surface-4) 0%, var(--surface-1) 35%, #060607 65%, #000 100%);
+    border: 6px solid var(--surface-3);
+    box-shadow:
+      inset 0 3px 8px rgba(255,255,255,0.06),
+      inset 0 -3px 8px rgba(0,0,0,0.9),
+      inset 0 0 50px #000,
+      0 0 0 2px #0a0a0b;
+    position: relative; z-index: 2;
+  }
+  /* Центральна вісь (шпиндель) */
+  #revolver-cylinder::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--border-strong) 0%, var(--surface-2) 50%, #000 100%);
+    border: 3px solid var(--surface-3);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.9), inset 0 1px 2px rgba(255,255,255,0.14);
+  }
+
+  /* Дуло (трикутник-вказівник) — жовтий, зі світінням акценту */
+  #revolver-barrel-indicator {
+    position: absolute; top: 52px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-top: 22px solid var(--accent);
+    filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.9)) drop-shadow(0 0 20px rgba(var(--accent-rgb), 0.5));
+    z-index: 5;
+    animation: pulseMuzzle 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes pulseMuzzle {
+    from { filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.7)); opacity: 0.85; }
+    to   { filter: drop-shadow(0 0 16px rgba(var(--accent-rgb), 1)) drop-shadow(0 0 34px rgba(var(--accent-rgb), 0.5)); opacity: 1; }
+  }
+
+  /* Камора патрону — латунне кільце нашого жовтого навколо
+     темного «порохового» нутра */
+  .rev-chamber {
+    width: 88px; height: 88px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 40% 38%, rgba(var(--accent-rgb), 0.26) 0%, rgba(var(--accent-rgb), 0.10) 40%, rgba(0,0,0,0) 72%),
+      radial-gradient(circle, #141414 0%, #000 100%);
+    border: 3px solid var(--accent-deep);
+    box-shadow:
+      inset 0 2px 6px rgba(var(--accent-rgb), 0.25),
+      inset 0 0 20px rgba(0,0,0,0.85),
+      0 0 12px rgba(0,0,0,0.9),
+      inset 0 -2px 4px rgba(var(--accent-rgb), 0.12);
+    position: absolute; left: 50%; top: 50%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; transition: all 0.35s var(--ease-out);
+  }
+  /* Відблиск всередині камори */
+  .rev-chamber::before {
+    content: '';
+    position: absolute; top: 8%; left: 15%;
+    width: 30%; height: 25%;
+    background: radial-gradient(ellipse, rgba(var(--accent-rgb), 0.22) 0%, transparent 100%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .rev-chamber-inner {
+    color: var(--accent-hi); font-family: var(--font-mono);
+    font-size: var(--fs-xs); font-weight: var(--fw-bold); text-align: center;
+    word-break: break-word; padding: 6px; z-index: 2; line-height: 1.15;
+    text-transform: uppercase;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(var(--accent-rgb), 0.35);
+    transition: all 0.35s var(--ease-in-out);
+  }
+  /* Вигоріла камора: чорне обвуглене нутро + червоний хрест */
+  .rev-chamber.eliminated {
+    background: radial-gradient(circle, #050505 0%, #000 100%);
+    border-color: var(--surface-2);
+    box-shadow:
+      inset 0 0 30px #000,
+      inset 0 0 10px rgba(var(--danger-rgb), 0.22),
+      0 0 4px rgba(0,0,0,0.5);
+  }
+  .rev-chamber.eliminated::before { opacity: 0; }
+  .rev-chamber.eliminated::after {
+    content: '✕';
+    position: absolute; inset: 0; z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-ui); font-size: 34px; font-weight: var(--fw-black);
+    color: var(--danger); opacity: 0.9;
+    text-shadow: 0 0 14px rgba(var(--danger-rgb), 0.55);
+    pointer-events: none;
+    animation: revCrossIn var(--t-slow) var(--ease-out) both;
+  }
+  @keyframes revCrossIn {
+    from { opacity: 0; transform: scale(2.2) rotate(-30deg); }
+    to   { opacity: 0.9; transform: scale(1) rotate(0deg); }
+  }
+  .rev-chamber.eliminated .rev-chamber-inner { opacity: 0; transform: scale(0.3); }
+  /* Камора-переможець: суцільна жовта заливка + сильне світіння */
+  .rev-chamber.winner {
+    background: radial-gradient(circle at 40% 35%, var(--accent-hi) 0%, var(--accent) 50%, var(--accent-deep) 100%);
+    box-shadow:
+      var(--glow-accent-strong),
+      0 0 70px rgba(var(--accent-rgb), 0.35),
+      inset 0 0 15px rgba(255,255,255,0.45);
+    border-color: var(--accent-hi); z-index: 4;
+  }
+  .rev-chamber.winner .rev-chamber-inner {
+    color: var(--on-accent); font-size: var(--fs-xs); font-weight: var(--fw-bold); text-shadow: none;
+  }
+
+  /* Ефект вистрілу — вищий (над барабаном), жовто-білий спалах */
+  .muzzle-flash {
+    position: absolute;
+    top: 40px;
+    left: 50%; transform: translateX(-50%);
+    width: 180px; height: 180px;
+    background: radial-gradient(circle,
+      #fff 0%, #fff 8%,
+      var(--accent-hi) 16%,
+      var(--accent) 30%,
+      var(--accent-deep) 48%,
+      transparent 70%);
+    opacity: 0; z-index: 100; pointer-events: none; border-radius: 50%;
+    mix-blend-mode: screen;
+    animation: flashBurst 0.22s ease-out forwards;
+  }
+  @keyframes flashBurst {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.3); }
+    15%  { opacity: 1; transform: translateX(-50%) scale(1.1); }
+    50%  { opacity: 0.85; transform: translateX(-50%) scale(1.0); }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  }
+  /* Іскри після пострілу */
+  .spark {
+    position: absolute; top: -60px; left: 50%;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--accent-hi);
+    box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.8);
+    pointer-events: none; z-index: 99;
+    animation: sparkFly 0.4s ease-out forwards;
+  }
+  @keyframes sparkFly {
+    0%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+  }
+
+  .race-close-btn {
+    position: absolute; top: -50px; right: 0; z-index: 4;
+    background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-muted);
+    width: 44px; height: 44px; border-radius: var(--r-sm);
+    font-size: 20px; line-height: 1; cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  }
+  .race-close-btn:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-dim); }
+  /* ── Оголошення переможця (кінематографічний оверлей) ──────── */
+  /* Головний кадр продукту: майже чорний скрим із легким жовтим
+     «диханням» по центру, ім'я переможця — величезним білим
+     із подвійним сяйвом, таймер — моно. Шари — з токенів. */
+  #winner-announce {
+    position: fixed; inset: 0; z-index: var(--z-announce);
+    background:
+      radial-gradient(120% 80% at 50% 42%, rgba(var(--accent-rgb), 0.07), transparent 65%),
+      rgba(8, 8, 10, 0.94);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--space-5);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--t-slow) var(--ease-out);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  #winner-announce.visible { opacity: 1; pointer-events: auto; }
+
+  /* Стаггерна поява заставки: лейбл → нік (пружина) → таймер → підпис → кнопка.
+     forwards тримає кінцевий стан; при повторному показі анімації стартують знову */
+  #winner-announce .wa-label, #winner-announce .wa-name, #winner-announce .wa-timer,
+  #winner-announce .wa-sub, #winner-announce .wa-msg, #winner-announce .wa-close { opacity: 0; }
+  #winner-announce.visible .wa-label { animation: waIn 0.5s var(--ease-out) 0.08s forwards; }
+  #winner-announce.visible .wa-name  { animation: waNameIn 0.65s var(--ease-spring) 0.26s forwards; }
+  #winner-announce.visible .wa-timer { animation: waIn 0.45s var(--ease-out) 0.6s forwards; }
+  #winner-announce.visible .wa-sub   { animation: waIn 0.45s var(--ease-out) 0.72s forwards; }
+  #winner-announce.visible .wa-msg   { animation: waIn 0.45s var(--ease-out) 0.3s forwards; }
+  #winner-announce.visible .wa-close { animation: waIn 0.45s var(--ease-out) 0.9s forwards; }
+  @keyframes waIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes waNameIn {
+    0%   { opacity: 0; transform: scale(0.55); }
+    60%  { opacity: 1; transform: scale(1.07); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  #winner-announce .wa-label {
+    font-family: var(--font-ui);
+    font-size: var(--fs-xl); font-weight: var(--fw-black);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 9px; text-indent: 9px; /* компенсуємо трекінг, щоб центр не з'їжджав */
+    text-shadow: var(--glow-accent);
+  }
+
+  #winner-announce .wa-name {
+    font-family: var(--font-ui);
+    font-size: var(--fs-display);
+    font-weight: var(--fw-black);
+    color: #fff;
+    /* подвійне сяйво: біле ядро + тепле жовте гало */
+    text-shadow:
+      0 0 28px rgba(255, 255, 255, 0.25),
+      0 0 96px rgba(var(--accent-rgb), 0.30);
+    letter-spacing: 4px;
+    text-align: center;
+    max-width: 90vw;
+    word-break: break-word;
+    animation: waNameIn 0.7s var(--ease-spring) both;
+  }
+  /* Кульмінація: ім'я вилітає з глибини — scale + blur → у фокус */
+  @keyframes waNameIn {
+    from { transform: scale(0.72) translateY(36px); opacity: 0; filter: blur(16px); }
+    60%  { filter: blur(0); }
+    to   { transform: scale(1) translateY(0); opacity: 1; filter: blur(0); }
+  }
+
+  #winner-announce .wa-timer {
+    font-family: var(--font-mono);
+    font-size: clamp(44px, 6vw, 72px);
+    font-weight: var(--fw-bold);
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-hi);
+    letter-spacing: 2px;
+    min-width: 120px;
+    text-align: center;
+    text-shadow: var(--glow-accent);
+  }
+  #winner-announce .wa-timer.expiring {
+    color: var(--danger);
+    text-shadow: var(--glow-danger);
+    animation: timerBlink 0.5s infinite alternate;
+  }
+  @keyframes timerBlink {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0.45; transform: scale(0.94); }
+  }
+
+  /* Повідомлення переможця — чорна картка з жовтим dash-бордером,
+     як w-msg у панелі, але в масштабі кіно-кадру */
+  #winner-announce .wa-msg {
+    font-family: var(--font-mono);
+    font-size: clamp(26px, 3.6vw, 56px);
+    font-weight: var(--fw-bold);
+    color: var(--accent);
+    background: var(--surface-1);
+    border: 2px dashed rgba(var(--accent-rgb), 0.45);
+    border-radius: var(--r-xl);
+    padding: var(--space-5) var(--space-6);
+    max-width: 85vw; text-align: center;
+    letter-spacing: 1px;
+    box-shadow: var(--shadow-3), 0 0 60px rgba(var(--accent-rgb), 0.10);
+    animation: waMsgIn 0.5s var(--ease-spring) both;
+  }
+  @keyframes waMsgIn {
+    from { transform: translateY(24px) scale(0.9); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  #winner-announce .wa-sub {
+    font-family: var(--font-ui);
+    font-size: var(--fs-md); font-weight: var(--fw-black);
+    color: var(--text-muted);
+    letter-spacing: 5px; text-indent: 5px;
+    text-transform: uppercase;
+  }
+
+  /* Ghost-кнопка: тиха, поки не наведеш — тоді жовтіє */
+  #winner-announce .wa-close {
+    margin-top: var(--space-4);
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    padding: 12px 36px; border-radius: var(--r-md);
+    font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: var(--fw-black);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast),
+                background var(--t-fast), box-shadow var(--t-fast);
+    text-transform: uppercase; letter-spacing: 3px;
+  }
+  #winner-announce .wa-close:hover {
+    border-color: rgba(var(--accent-rgb), 0.6);
+    color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: var(--glow-accent);
+  }
+
+  /* Частинки */
+  /* Було z-index 9997 — нижче за #winner-announce з його скримом
+     і backdrop-filter. Конфеті горіли крізь затемнення на ~15%
+     яскравості й були розмиті. Тепер — var(--z-particle), поверх
+     оверлея оголошення. */
+  .wa-particle {
+    position: fixed; pointer-events: none; border-radius: 50%; z-index: var(--z-particle);
+    animation: waPart 2s var(--ease-out) forwards;
+    box-shadow: 0 0 10px currentColor;
+  }
+  @keyframes waPart {
+    0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+  }
+
+  /* ── Гонка: 3D-оверлей (позиції/z-index локальні всередині
+     контейнера гонки — не чіпаємо, лише поверхневу мову) ─────── */
+  #race-overlay-controls, #roulette-overlay-controls { display: flex; gap: var(--space-3); margin-top: 10px; }
+
+  #race-standings {
+    position: absolute; top: 16px; left: 16px; z-index: 4;
+    width: 220px; max-height: calc(100% - 32px);
+    background: rgba(8, 8, 10, 0.82);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--r-lg);
+    padding: var(--space-4);
+    font-family: var(--font-ui);
+    overflow-y: auto;
+    pointer-events: none;
+    box-shadow: var(--shadow-2);
+  }
+  .standings-title {
+    font-size: var(--fs-md); font-weight: var(--fw-black); color: var(--text);
+    text-transform: uppercase; letter-spacing: 1.5px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-3); margin-bottom: var(--space-3);
+  }
+  .standing-row {
+    display: flex; align-items: center;
+    padding: 8px 0;
+    font-weight: var(--fw-bold); font-size: var(--fs-sm); color: var(--text);
+  }
+  .standing-row.winner {
+    color: var(--accent); font-weight: var(--fw-black);
+    text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.35);
+  }
+  .standing-pos { width: 24px; color: var(--text-faint); font-size: var(--fs-xs); font-family: var(--font-mono); font-weight: var(--fw-bold); }
+  .standing-swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: var(--space-3); flex-shrink: 0; }
+  .standing-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .standing-lap { font-size: var(--fs-xs); color: var(--text-faint); font-family: var(--font-mono); font-weight: var(--fw-bold); }
+
+  .car-label-3d {
+    position: absolute; transform: translate(-50%, -100%);
+    background: rgba(8, 8, 10, 0.78); color: var(--text);
+    padding: 6px 12px; border-radius: var(--r-sm);
+    font-size: var(--fs-sm); font-weight: var(--fw-black);
+    font-family: var(--font-ui);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 3px solid var(--car-color, #888);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+    transition: left 0.05s linear, top 0.05s linear;
+    backdrop-filter: blur(4px);
+  }
+  .car-label-3d.winner {
+    background: var(--accent-fill); color: var(--on-accent);
+    border-bottom-color: #fff;
+    box-shadow: var(--glow-accent-strong);
+    animation: winnerGlow 0.6s ease infinite alternate;
+  }
+
+  #race-countdown {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(96px, 16vw, 150px); font-weight: var(--fw-black); color: var(--accent);
+    font-family: var(--font-ui);
+    text-shadow: 0 0 50px rgba(var(--accent-rgb), 0.55);
+    z-index: 3; pointer-events: none;
+  }
+
+  /* Підказки керування 3D */
+  #race-controls-hint {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(8, 8, 10, 0.82);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--fs-xs);
+    font-family: var(--font-ui);
+    color: var(--text-muted);
+    z-index: 10;
+    pointer-events: none;
+    line-height: 1.6;
+    text-align: right;
+    box-shadow: var(--shadow-1);
+    backdrop-filter: blur(6px);
+  }
+  #race-controls-hint b { color: var(--accent); font-weight: var(--fw-black); }
+
+
+  /* ── Табло Cash Hunt: згенерована 3D-рама ───────────────────
+     board.png — фронтальний рендер корпусу з лампами (16:9).
+     Внутрішня чиста зона виміряна по пікселях: паддінги нижче
+     садять сітку точно в «екран» рами. Сітка завжди заповнює
+     зону повністю (rows×cols рахує fitGridColumns, хвіст
+     добивають .dummy-заглушки). */
+  #cashhunt-area {
+    display: block;
+    position: relative;
+    aspect-ratio: 16 / 9;
+    /* 132vh: щоб при 100% зумі під табло влазили пушка і кнопки
+       (борд-height + прогрес + пушка + слот кнопок + gaps ≈ 92vh) */
+    width: min(96vw, 132vh);
+    max-height: none;
+    background: url('/assets/board.png') center / 100% 100% no-repeat;
+    border: none;
+    box-shadow: none;               /* фон картинки прозорий — прямокутна тінь виказала б межі */
+    border-radius: 0;
+  }
+  /* CSS-лампочки і стара рама вимкнені — все це вже намальовано в board.png */
+  #cashhunt-area::before { content: none; }
+
+  /* ── Живі вогники поверх намальованих лампочок ─────────────
+     div-и генерує initCashhuntBulbs() (app.js): координати у % від
+     табло, тому при ресайзі вогники лишаються на своїх лампочках */
+  .ch-bulb {
+    position: absolute;
+    width: 1.5%;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(circle,
+      rgba(255, 244, 200, 0.95) 0%,
+      rgba(255, 217, 61, 0.8) 38%,
+      rgba(255, 217, 61, 0) 72%);
+    box-shadow: 0 0 8px 2px rgba(255, 217, 61, 0.4);
+    opacity: 0.5;
+    animation: ch-twinkle calc(var(--tw-dur, 1.8s) * var(--tw-rate, 1)) ease-in-out infinite alternate;
+    will-change: opacity;
+  }
+  /* «біжучий вогонь»: вікно з трьох вогників, що котиться по колу */
+  .ch-bulb.ch-run { animation: none; opacity: 1; }
+  @keyframes ch-twinkle { from { opacity: 0.15; } to { opacity: 0.85; } }
+  /* у фазі reveal мерехтіння швидшає */
+  #cashhunt-area.bulbs-fast { --tw-rate: 0.45; }
+
+  #cashhunt-grid-wrap {
+    /* Відсотки inset рахуються від самої рами — сітка сидить точно в «екрані» */
+    position: absolute;
+    inset: 10.7% 14.1% 12% 14.1%;
+    width: auto; height: auto;
+    max-height: none;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cashhunt-grid { gap: 6px; }
+  /* Клітинки розтягуються у свої грід-треки (ледь прямокутні — це ок) */
+  #cashhunt-grid .cell { aspect-ratio: auto; width: 100%; height: 100%; }
+
+  /* Вивіска — на верхньому барі рами */
+  #cashhunt-title {
+    position: absolute;
+    top: 1.6%; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-ui);
+    font-size: clamp(14px, 2.4vh, 24px);
+    font-weight: var(--fw-black);
+    letter-spacing: 8px; text-indent: 8px;
+    color: var(--accent);
+    text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.5);
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* ── Інтро табло: слот-прокрутка колонками ─────────────────── */
+  /* Стрічка в клітинці: 4 сегменти (перший = останній), їде вниз
+     безшовним лупом. Однакова фаза в колонці → колонка читається
+     як суцільний барабан. */
+  .slot-reel {
+    position: absolute; top: 0; bottom: 0; left: 0;
+    width: 400%;
+    display: flex; flex-direction: row;
+    animation: reelScroll 0.3s linear infinite;
+    filter: blur(1.4px);
+    will-change: transform;
+    pointer-events: none;
+  }
+  .reel-seg { flex: 0 0 25%; display: flex; align-items: center; justify-content: center; }
+  .reel-seg img { width: 86%; height: 86%; object-fit: contain; }
+  @keyframes reelScroll {
+    from { transform: translateX(-75%); }
+    to   { transform: translateX(0); }
+  }
+  /* Під стрічкою власну мішень ховаємо */
+  .reeling .cell-front .cell-target { visibility: hidden; }
+  .cell.stopped .cell-target { visibility: visible; }
+
+  /* Зупинка колонки — пружний «стук» досадки */
+  .cell.stopped .cell-target {
+    animation: slotStop 0.34s var(--ease-spring);
+  }
+  @keyframes slotStop {
+    0%   { transform: translateX(-14%); }
+    55%  { transform: translateX(5%); }
+    100% { transform: translateX(0); }
+  }
+
+  /* ── Звороти з ніками: охайні плашки ─────────────────────────
+     Нік масштабується від розміру клітинки (cqw), максимум 2 рядки
+     з трикрапкою — жодних обрізаних посередині літер. */
+  .cell { container-type: size; }
+  .cell-back {
+    font-size: clamp(8px, 24cqw, 15px);
+    line-height: 1.2;
+    padding: 5%;
+    letter-spacing: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cell-back .nick {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-all;
+    text-align: center;
+  }
+
+  /* ── Револьвер: згенеровані 3D-моделі ─────────────────────────
+     Барабан — revolver/cylinder.png (6 камор, перша на 12 годин),
+     патрони/гільзи/курок/куля — спрайти з revolver/. Геометрія камор
+     виміряна по пікселях і задається JS (REV_RING / REV_CH). */
+  #revolver-area {
+    width: min(66vh, 560px); height: min(66vh, 560px);
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* м'яке світло за барабаном замість старої CSS-рами */
+  #revolver-frame {
+    position: absolute; inset: 4%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(var(--accent-rgb), 0.16) 0%, rgba(var(--accent-rgb), 0.05) 45%, transparent 70%);
+    border: none; box-shadow: none;
+    filter: blur(6px);
+    z-index: 0;
+  }
+  #revolver-cylinder {
+    width: 92%; height: 92%;
+    border-radius: 50%;
+    border: none;
+    background: url('/assets/revolver/cylinder.png') center / contain no-repeat;
+    box-shadow: 0 30px 70px rgba(0,0,0,0.85), 0 0 60px rgba(var(--accent-rgb), 0.08);
+    position: relative; z-index: 2;
+  }
+  #revolver-cylinder::after { content: none; }   /* вісь уже на моделі */
+
+  /* Курок над каморою 12 годин; при пострілі б'є вниз */
+  #revolver-barrel-indicator {
+    position: absolute;
+    top: -2%; left: 50%;
+    width: 13%; height: 17%;
+    margin-left: -6.5%;
+    border: none; transform: none;
+    background: url('/assets/revolver/hammer.png') center bottom / contain no-repeat;
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,0.8)) drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.25));
+    transform-origin: 50% 90%;
+    animation: none;
+    z-index: 5;
+    transition: transform 0.12s var(--ease-out);
+  }
+  #revolver-barrel-indicator.strike { animation: hammerStrike 0.42s var(--ease-out); }
+  @keyframes hammerStrike {
+    0%   { transform: rotate(0deg) translateY(0); }
+    18%  { transform: rotate(-18deg) translateY(-4%); }
+    34%  { transform: rotate(6deg) translateY(7%); }
+    100% { transform: rotate(0deg) translateY(0); }
+  }
+
+  /* Куля: невидима, при пострілі пролітає від курка в камору 12 годин */
+  #revolver-bullet {
+    position: absolute;
+    top: 6%; left: 50%;
+    width: 13%; height: auto;
+    margin-left: -6.5%;
+    transform: rotate(90deg) translateX(-20%);
+    opacity: 0; pointer-events: none; z-index: 6;
+  }
+  #revolver-bullet.flying { animation: bulletFly 0.22s linear forwards; }
+  @keyframes bulletFly {
+    0%   { opacity: 0; transform: rotate(90deg) translateX(-30%) scale(0.9); }
+    20%  { opacity: 1; }
+    100% { opacity: 0; transform: rotate(90deg) translateX(95%) scale(0.7); }
+  }
+
+  /* Камора = патрон-спрайт з ніком на латунному денці */
+  .rev-chamber {
+    background: url('/assets/revolver/live.png') center / contain no-repeat !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 50%;
+    overflow: visible;
+    transition: transform 0.35s var(--ease-out), opacity 0.3s, filter 0.35s;
+  }
+  .rev-chamber::before { content: none; }
+  /* Заряджання: патрон з'являється, «сідаючи» в камору */
+  .rev-chamber.loading { opacity: 0; }
+  .rev-chamber.loaded  { animation: chamberLoad 0.32s var(--ease-spring); }
+  @keyframes chamberLoad {
+    0%   { opacity: 0; filter: brightness(1.6); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; filter: brightness(1); }
+  }
+  .rev-chamber-inner {
+    color: #1a1400;
+    font-family: var(--font-mono);
+    font-size: clamp(9px, 12cqw, 14px);
+    font-weight: var(--fw-black);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    text-transform: none;
+    line-height: 1.15;
+    padding: 18%;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; word-break: break-all;
+    overflow: hidden;
+  }
+  .rev-chamber { container-type: size; }
+
+  /* Вибито: гільза замість патрона, нік зникає */
+  .rev-chamber.eliminated {
+    background-image: url('/assets/revolver/spent.png') !important;
+    filter: brightness(0.75) saturate(0.6);
+  }
+  .rev-chamber.eliminated::after { content: none; }
+  .rev-chamber.eliminated .rev-chamber-inner { opacity: 0; transform: none; }
+
+  /* Переможець: патрон горить жовтим */
+  .rev-chamber.winner {
+    background-image: url('/assets/revolver/live.png') !important;
+    filter: brightness(1.15) drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.9)) drop-shadow(0 0 40px rgba(var(--accent-rgb), 0.45));
+  }
+  .rev-chamber.winner .rev-chamber-inner { color: #000; font-size: clamp(9px, 12cqw, 14px); }
+
+  /* Спалах — біля курка (дула), не по центру */
+  .muzzle-flash { top: -4%; }
+
+  /* ── Револьвер: правки після перегляду ───────────────────────── */
+  /* Барабан не стрибає: оверлей складається зверху, слот під кнопки
+     має фіксовану висоту незалежно від display кнопок */
+  #revolver-overlay { justify-content: flex-start; padding-top: 6vh; gap: 14px; }
+  #revolver-overlay-hint { min-height: 1.4em; }
+  .rev-controls-slot {
+    min-height: 84px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #revolver-overlay-controls { margin-top: 0 !important; }
+
+  /* Нік — темна плашка з білим текстом поверх латунного денця:
+     чорний текст на латуні не читався */
+  .rev-chamber-inner {
+    width: 64%; height: 64%;
+    margin: 18%;
+    padding: 6%;
+    border-radius: 50%;
+    background: rgba(10, 10, 12, 0.78);
+    border: 1px solid rgba(var(--accent-rgb), 0.45);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+    font-size: clamp(8px, 11.5cqw, 13px);
+    box-sizing: border-box;
+  }
+  .rev-chamber.winner .rev-chamber-inner {
+    color: var(--accent-hi);
+    border-color: var(--accent);
+    text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.7);
+  }
+
+  /* ── Cash Hunt: правки після перегляду ───────────────────────── */
+  /* Табло не стрибає: компонуємо згори, під кнопки — слот фіксованої висоти */
+  #cashhunt-overlay { justify-content: flex-start; padding-top: 3vh; gap: 10px; }
+  .ch-controls-slot {
+    min-height: 56px;   /* кнопки ~44px; вище — слот виштовхував себе за 100vh */
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cashhunt-controls { margin-top: 0 !important; }
+
+  /* Вивіска — точно в барі рами. Бар на board.png займає по висоті
+     ~3.5%..9% табло; розміри шрифту — від ШИРИНИ табло (cqw), тому
+     текст завжди вміщується в бар незалежно від розміру вікна. */
+  #cashhunt-area { container-type: inline-size; }
+  #cashhunt-title {
+    top: 3.4%;
+    height: 5.6%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.75cqw;
+    letter-spacing: 0.55cqw; text-indent: 0.55cqw;
+    line-height: 1;
+  }

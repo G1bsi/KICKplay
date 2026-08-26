@@ -1,0 +1,81 @@
+  /* Сторінка входу. Палітра — з tokens.css, свого :root тут більше немає:
+     раніше логін і панель мали дві злегка розбіжні палітри (#070907 проти
+     #060806), і ребрендинг довелось би робити двічі. */
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(90% 55% at 50% 0%, rgba(var(--accent-rgb), 0.10), transparent 65%);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none; -webkit-user-select: none;
+  }
+
+  .box {
+    background: var(--surface-1);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: var(--space-7) var(--space-6);
+    width: 340px;
+    text-align: center;
+    box-shadow: var(--shadow-3);
+  }
+
+  h1 {
+    font-size: var(--fs-xl); font-weight: var(--fw-black); color: var(--accent);
+    margin-bottom: var(--space-1); text-transform: uppercase; letter-spacing: 1px;
+  }
+  .sub { color: var(--text-faint); font-size: var(--fs-xs); margin-bottom: var(--space-6); letter-spacing: 0.5px; }
+
+  .pw-label {
+    font-size: var(--fs-micro); font-weight: var(--fw-bold); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 1px; text-align: left; margin-bottom: var(--space-1);
+  }
+
+  input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-md);
+    margin-bottom: var(--space-4);
+    outline: none;
+    transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+    user-select: text; -webkit-user-select: text;
+  }
+  input::placeholder { color: var(--text-faint); }
+  input:focus { border-color: var(--accent); background: var(--surface-3); box-shadow: var(--focus-ring); }
+
+  button {
+    width: 100%;
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    border: none;
+    border-radius: var(--r-sm);
+    padding: 14px;
+    font-family: var(--font-ui);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-black);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: box-shadow var(--t-base) var(--ease-out), transform var(--t-fast);
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.20);
+  }
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 32px rgba(var(--accent-rgb), 0.35);
+  }
+  button:active { transform: translateY(0) scale(0.98); }
+
+  .err { color: var(--danger); font-size: var(--fs-xs); margin-top: var(--space-3); min-height: 16px; }

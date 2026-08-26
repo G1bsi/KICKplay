@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "type": "module",
   "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js --dev",
+    "preview": "node tools/preview.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "ws": "^8.18.0"
   }

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>БОТЯРА</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/login.css">
+</head>
+<body>
+<div class="box">
+  <div class="pw-label">Пароль</div>
+  <input type="password" id="pw" placeholder="юзер лох" onkeydown="if(event.key==='Enter')login()">
+  <button onclick="login()">Подключиться</button>
+  <div class="err" id="err"></div>
+</div>
+<script src="/assets/login.js"></script>
+</body>
+</html>

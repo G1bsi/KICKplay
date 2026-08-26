@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KICKPLAY</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ffd93d'/%3E%3Cpath d='M36 8 16 38h12l-4 18 24-32H34l6-16z' fill='%230a0a0c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/assets/royale.css">
+<link rel="stylesheet" href="/assets/shootout.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/assets/vendor/GLTFLoader.js"></script>
+<script src="/assets/vendor/SkeletonUtils.js"></script>
+</head>
+<body>
+
+<!-- ── Топбар: бренд + статус бота ─────────────────────────── -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-badge">⚡</span>
+    <span class="brand-name">KICK<em>PLAY</em></span>
+  </div>
+  <div id="floating-status" class="status-pill">
+    bot status <span class="dot closed" id="conn-dot"></span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Ліва колонка: керування ─────────────────────────── -->
+  <aside class="stack">
+
+    <section class="card">
+      <div class="card-head">
+        <span class="card-chip">🎟</span>
+        <h2>Регистрация</h2>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <label class="field-label">Слово для участия</label>
+          <input type="text" id="raffle-cmd" value="" placeholder="!join" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+        </div>
+        <div class="field small">
+          <label class="field-label">Победителей</label>
+          <input type="number" id="winners-count" value="1" min="1" max="200">
+        </div>
+      </div>
+      <button type="button" id="btn-reg-toggle" class="btn-green" onclick="toggleRegistration()">▶ Начать регистрацию</button>
+      <span id="saved-msg"></span>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span class="card-chip">🕹</span>
+        <h2>Режим игры</h2>
+      </div>
+      <div class="mode-carousel">
+        <button type="button" class="mode-arrow" onclick="cycleGameMode(-1)" aria-label="Предыдущий режим">&#8249;</button>
+        <div class="mode-current" id="mode-current">
+          <span class="mc-icon">🎰</span><span class="mc-label">Дефолт</span>
+        </div>
+        <button type="button" class="mode-arrow" onclick="cycleGameMode(1)" aria-label="Следующий режим">&#8250;</button>
+      </div>
+
+      <div id="race-count-field" style="display:none;">
+        <div class="field-row" style="margin-top:8px;">
+          <div class="field">
+            <label class="field-label">Участников гонки</label>
+            <input type="number" id="race-count" value="10" min="2" max="300">
+          </div>
+          <div class="field small">
+            <label class="field-label">Кругов</label>
+            <input type="number" id="race-laps" value="3" min="1" max="20">
+          </div>
+        </div>
+      </div>
+
+      <div class="subfield">
+        <label class="field-label">⏱ Время на ответ</label>
+        <div class="mode-carousel slim">
+          <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(-1)" aria-label="Меньше времени">&#8249;</button>
+          <div class="time-current" id="confirm-display">1 мин</div>
+          <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(1)" aria-label="Больше времени">&#8250;</button>
+        </div>
+        <input type="number" id="confirm-seconds" value="60" min="0" max="600" style="display:none;">
+        <input type="checkbox" id="toggle-confirm" checked style="display:none;">
+      </div>
+    </section>
+
+    <!-- Головна дія — жовтий hero-блок -->
+    <section class="hero-actions">
+      <button class="btn-primary hero-start" onclick="startGame()">▶&nbsp; СТАРТ</button>
+      <div class="hero-secondary">
+        <button class="btn-dark" onclick="downloadCSV()">🎱 Шарики</button>
+        <button class="btn-dark" onclick="resetRaffle()">🗑 Сброс</button>
+      </div>
+    </section>
+
+    <section class="card grow">
+      <div class="card-head">
+        <span class="card-chip">🏆</span>
+        <h2>Победители <span class="count-badge" id="winners-count-title">0</span></h2>
+        <button class="btn-icon" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
+      </div>
+      <div class="box" id="winners-box">
+        <div class="empty-box">Победителей пока нет</div>
+      </div>
+    </section>
+
+    <!-- Приховані службові вузли: JS чистить їх при скиданні гри -->
+    <span id="hint" hidden></span>
+    <span id="progress" hidden></span>
+  </aside>
+
+  <!-- ── Центр: учасники ─────────────────────────────────── -->
+  <main class="card" id="participants-col">
+    <div class="card-head">
+      <span class="card-chip">👥</span>
+      <h2>Участники <span class="count-badge" id="participants-count-title">0</span></h2>
+    </div>
+    <div class="box" id="main-box">
+      <div class="empty-box">Ожидание регистрации...</div>
+    </div>
+    <div class="btn-row" id="game-controls" style="display:none;">
+      <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🔫 Выстрел</button>
+      <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
+    </div>
+  </main>
+
+  <!-- ── Права колонка: живий чат ────────────────────────── -->
+  <aside class="card" id="chat-col">
+    <div class="card-head">
+      <span class="card-chip">💬</span>
+      <h2>Чат</h2>
+    </div>
+    <div class="box chat-flow" id="chat-box">
+      <div class="empty-box">Ожидание сообщений...</div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Тестові учасники — невелика непомітна панель у лівому нижньому куті -->
+<details class="test-section-fixed" id="test-section-fixed">
+  <summary>🧪</summary>
+  <div class="field-row">
+    <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
+    <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
+    <button class="btn-dark btn-small" onclick="addBulkTest()">+10</button>
+  </div>
+  <div style="margin-top:6px;">
+    <input type="file" id="csv-upload" accept=".csv,.txt" style="display:none" onchange="uploadCSVParticipants(this)">
+    <button class="btn-dark btn-small" style="width:100%;" onclick="document.getElementById('csv-upload').click()">📂 CSV учасники</button>
+  </div>
+  <span id="test-msg"></span>
+</details>
+
+<!-- Оголошення переможця -->
+<div id="winner-announce">
+  <div class="wa-label">Победитель</div>
+  <div class="wa-name" id="wa-name">—</div>
+  <div class="wa-timer" id="wa-timer"></div>
+  <div class="wa-msg" id="wa-msg" style="display:none;"></div>
+  <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
+  <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+</div>
+
+<!-- Оверлей Cash Hunt -->
+<div id="cashhunt-overlay">
+  <!-- Табло: згенерована 3D-рама (board.png), сітка живе у її внутрішній зоні -->
+  <div id="cashhunt-area">
+    <div id="cashhunt-title">CASH&nbsp;HUNT</div>
+    <div id="cashhunt-grid-wrap">
+      <div class="grid" id="cashhunt-grid"></div>
+    </div>
+  </div>
+  <div id="cashhunt-hint"></div>
+  <div id="cashhunt-progress-overlay"></div>
+  <!-- Прицільна пушка: ствол повертається на вибрану клітинку і стріляє при розкритті -->
+  <div id="cannon" aria-hidden="true">
+    <div id="cannon-laser"></div>
+    <div id="cannon-barrel">
+      <div id="cannon-muzzle"></div>
+    </div>
+    <div id="cannon-base"></div>
+  </div>
+  <!-- Слот фіксованої висоти: кнопки з'являються/зникають, а табло не стрибає -->
+  <div class="ch-controls-slot">
+    <div id="cashhunt-controls" style="display:none;">
+      <button class="btn-orange" onclick="reroll()">🔄 Рерол</button>
+      <button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- Оверлей гонки -->
+<div id="race-overlay">
+  <div id="race-overlay-hint"></div>
+  <div id="race-track-area">
+    <button class="race-close-btn" onclick="closeRaceOverlay()">✕</button>
+    <div id="race-standings"></div>
+    <!-- Підказки генеруються динамічно в JS -->
+  </div>
+  <div id="race-overlay-controls" style="display:none;">
+    <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-primary" onclick="closeRaceOverlay()">Завершить</button>
+  </div>
+</div>
+
+<!-- Оверлей рулетки -->
+<div id="roulette-overlay">
+  <div id="roulette-overlay-hint"></div>
+  <div id="roulette-track-area">
+    <div id="roulette-pointer"></div>
+    <div id="roulette-track">
+      <div id="roulette-strip"></div>
+    </div>
+  </div>
+  <div id="roulette-overlay-controls" style="display:none;">
+    <button class="btn-dark" onclick="reroll()">🔄 Рерол</button>
+    <button class="btn-orange" onclick="fastReroll()">⚡ Фаст рерол</button>
+    <button class="btn-primary" onclick="closeRouletteOverlay()">Завершить</button>
+  </div>
+</div>
+
+<div id="royale-overlay">
+  <!-- Верхній HUD: ALIVE, фаза зони, стан входу, статус -->
+  <div class="rl-hud">
+    <div class="rl-title">🪂 БАТЛ РОЯЛЬ</div>
+    <div class="rl-chips">
+      <span class="rl-chip rl-alive">ALIVE <b id="rl-alive-n">0</b></span>
+      <span class="rl-chip" id="rl-zone-chip">ЗОНА <b>ОЖИДАНИЕ</b></span>
+      <span class="rl-chip rl-lock-open" id="rl-lock-chip">🔓 <b>ВХОД ОТКРЫТ</b></span>
+    </div>
+    <div class="rl-status" id="rl-status">Зрители пишут координаты (A1, G4…) чтобы занять клетку</div>
+  </div>
+
+  <div class="rl-main">
+    <aside class="rl-side rl-alive-side">
+      <div class="rl-side-head"><span class="rl-dot"></span>Живые<span class="rl-cnt" id="rl-alive-cnt">0</span></div>
+      <div class="rl-list" id="rl-alive-list"></div>
+    </aside>
+
+    <!-- Мінімапа: SVG будує royale.js -->
+    <div class="rl-stage" id="rl-stage">
+      <div class="rl-map" id="rl-map"></div>
+      <div class="rl-tip" id="rl-tip"></div>
+      <div class="rl-banner" id="rl-banner">
+        <div class="rl-banner-c">👑</div>
+        <div class="rl-banner-k">Winner winner chicken dinner</div>
+        <div class="rl-banner-n" id="rl-banner-nick"></div>
+      </div>
+    </div>
+
+    <aside class="rl-side rl-dead-side">
+      <div class="rl-side-head"><span class="rl-dot"></span>Выбыли<span class="rl-cnt" id="rl-dead-cnt">0</span></div>
+      <div class="rl-list" id="rl-dead-list"></div>
+    </aside>
+  </div>
+
+  <!-- Кнопки стрімера -->
+  <div class="rl-controls">
+    <button class="btn-gold" id="rl-zone-btn" onclick="royaleShrinkZone()">🌀 ЗОНА</button>
+    <button class="btn-red" id="rl-red-btn" onclick="royaleRedZone()">💥 КРАСНАЯ ЗОНА</button>
+    <button class="btn-primary" id="rl-fight-btn" onclick="royLaunchFight()">⚔️ НАЧАТЬ ФИНАЛ</button>
+    <button class="btn-dark" onclick="royNewGame()">🆕 НОВАЯ</button>
+    <button class="btn-dark" onclick="closeRoyaleOverlay()">ЗАКРЫТЬ</button>
+  </div>
+
+  <!-- Тестова панель-олівець: заливка ніків без стріма -->
+  <button class="rl-test-btn" onclick="royToggleTestForm()" title="Тест: загрузить игроков без стрима">✏️</button>
+  <div class="rl-test-form" id="rl-test-form">
+    <div class="form-title">Тест без стрима</div>
+    <textarea id="rl-test-area" placeholder="Ники — по одному в строке или через запятую"></textarea>
+    <div class="rl-test-row">
+      <button class="btn-dark btn-small" onclick="royTestAddList()">＋ Добавить</button>
+      <button class="btn-dark btn-small" onclick="document.getElementById('rl-test-file').click()">📂 Файл</button>
+    </div>
+    <button class="btn-dark btn-small" id="rl-test-part-btn" onclick="royTestFromParticipants()">👥 Из участников</button>
+    <input type="file" id="rl-test-file" accept=".txt,.csv" style="display:none;" onchange="royTestLoadFile(event)">
+    <div class="rl-test-msg" id="rl-test-msg"></div>
+  </div>
+</div>
+
+<!-- Екран перестрілки БР (фінал, PUBG) — canvas + DOM-HUD, керує shootout.js -->
+<div id="royale-shootout">
+  <canvas id="so-canvas"></canvas>
+  <div class="so-hud-top">
+    <div class="so-hud-box so-alive-box"><span class="so-hud-lbl">Alive</span><span class="so-hud-val" id="so-alive">0</span></div>
+    <div class="so-hud-box" id="so-zone-box"><span class="so-hud-lbl" id="so-zone-lbl">Зона</span><span class="so-hud-val" id="so-zone-timer">—</span></div>
+  </div>
+  <div class="so-killfeed" id="so-killfeed"></div>
+  <!-- Нижня панель «гравець у кадрі» (PUBG player bar): номер/колір, нік, HP, кіли -->
+  <div class="so-focus" id="so-focus">
+    <div class="so-focus-team" id="so-focus-num">1</div>
+    <div class="so-focus-main">
+      <div class="so-focus-nick" id="so-focus-nick"></div>
+      <div class="so-focus-hpbar"><div class="so-focus-hpfill" id="so-focus-hp"></div><span class="so-focus-hptxt" id="so-focus-hptxt">100/100</span></div>
+    </div>
+    <div class="so-focus-kills"><span class="so-focus-kl">Убито</span><span class="so-focus-kv" id="so-focus-kills">0</span></div>
+  </div>
+  <div class="so-cambar">
+    <button class="so-cambtn" onclick="rsoFocusNext(-1)" title="Предыдущий игрок">◀</button>
+    <div class="so-camlabel"><span class="so-cam-prefix">камера</span><span id="so-cam-chip"></span><span id="so-cam-name">авто</span></div>
+    <button class="so-cambtn" onclick="rsoFocusNext(1)" title="Следующий игрок">▶</button>
+    <button class="so-cambtn" id="so-fly-btn" onclick="rsoToggleFly()" title="Свободный полёт">🚁 Полёт</button>
+    <button class="so-cambtn" id="so-overview-btn" onclick="rsoToggleOverview()" title="К бою">⚔ К бою</button>
+  </div>
+  <div class="so-flyhint" id="so-flyhint">WASD — движение · мышь — обзор · Space/C — вверх/вниз · колесо — скорость</div>
+  <div id="so-countdown"></div>
+  <div class="so-winner" id="so-winner">
+    <div class="so-winner-crown">👑</div>
+    <div class="so-winner-title">Winner Winner</div>
+    <div class="so-winner-sub">Chicken Dinner</div>
+    <div class="so-winner-name" id="so-winner-name"></div>
+    <div class="so-winner-stats" id="so-winner-stats"></div>
+    <button class="btn-primary so-winner-close" onclick="RSO.stop()">Закрыть</button>
+  </div>
+</div>
+
+<!-- Оверлей режима ЧАТ (Бонусбуря) -->
+<div id="chatgame-overlay">
+  <!-- Ліва колонка: список переможців -->
+  <div id="chatgame-right">
+    <div id="chatgame-right-title">
+      <span>🏆 Победители (<span id="chatgame-count">0</span>)</span>
+      <button class="btn-icon" onclick="deleteAllChatgameWinners()" title="Удалить всех победителей">🗑</button>
+    </div>
+    <div id="chatgame-winners-list">
+      <div class="cg-empty">Победителей пока нет</div>
+    </div>
+    <button class="btn-dark cg-add-btn" onclick="showCGAddForm()">＋ Добавить вручную</button>
+    <div id="cg-add-form" style="display:none;">
+      <input type="text" id="cg-add-nick" placeholder="Никнейм">
+      <input type="text" id="cg-add-msg" placeholder="Колл">
+      <div class="cg-form-row">
+        <button class="btn-primary" onclick="submitCGAdd()">Добавить</button>
+        <button class="btn-dark" onclick="hideCGAddForm()">Отмена</button>
+      </div>
+    </div>
+    <div id="cg-edit-form" style="display:none;">
+      <div class="form-title">✎ Редактирование</div>
+      <input type="text" id="cg-edit-nick" placeholder="Никнейм">
+      <input type="text" id="cg-edit-msg" placeholder="Сообщение">
+      <div class="cg-form-row">
+        <button class="btn-primary" onclick="submitCGEdit()">Сохранить</button>
+        <button class="btn-dark" onclick="hideCGEditForm()">Отмена</button>
+      </div>
+    </div>
+  </div>
+  <!-- Центральна колонка: поточний переможець + його повідомлення + кнопки -->
+  <div id="chatgame-left">
+    <div id="chatgame-winner-name">—</div>
+    <div id="chatgame-timer-block">
+      <div id="chatgame-timer">—</div>
+      <div id="chatgame-sub">ВРЕМЯ НА ОТВЕТ</div>
+    </div>
+    <div id="chatgame-msgs-label">Сообщения в чат:</div>
+    <div id="chatgame-msgs">
+      <div id="chatgame-no-msgs"></div>
+    </div>
+    <div id="chatgame-controls">
+      <button class="btn-orange" onclick="chatgameNextWinner()">🎰 Следующий</button>
+      <button class="btn-dark" onclick="closeChatgameOverlay()">Закрыть</button>
+    </div>
+  </div>
+  <!-- Права колонка: живий чат стріму -->
+  <div id="chatgame-chat-panel">
+    <div id="chatgame-chat-title">💬 Чат</div>
+    <div id="chatgame-chat-box">
+      <div class="empty-box">Ожидание сообщений...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Оверлей Револьвера -->
+<div id="revolver-overlay">
+  <div id="revolver-overlay-hint">Заряжаем барабан...</div>
+  <!-- Барабан — згенерований 3D-рендер (revolver/cylinder.png), камори-патрони
+       накладаються поверх отворів; курок зверху б'є при пострілі -->
+  <div id="revolver-area">
+    <div id="revolver-frame"></div>
+    <div id="revolver-cylinder"></div>
+    <div id="revolver-barrel-indicator"></div>
+    <img id="revolver-bullet" src="/assets/revolver/bullet.png" alt="" draggable="false">
+  </div>
+  <!-- Слот фіксованої висоти: кнопки з'являються/зникають, а барабан не стрибає -->
+  <div class="rev-controls-slot">
+    <div id="revolver-overlay-controls" style="display:none;">
+      <button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>
+      <button class="btn-primary" onclick="closeRevolverOverlay()">Завершить</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/app.js"></script>
+<script src="/assets/royale.js"></script>
+<script src="/assets/shootout.js"></script>
+</body>
+</html>
