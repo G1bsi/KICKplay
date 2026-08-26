@@ -105,7 +105,7 @@ http.createServer((req, res) => {
         fetch('https://api.random.org/json-rpc/4/invoke', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method: 'generateSignedIntegers', id: 1,
-            params: { apiKey: key, n: num, min: 0, max: max - 1, replacement: true, userData: { app: 'KICKplay preview' } } }),
+            params: { apiKey: key, n: num, min: 1, max: max, replacement: true, userData: { app: 'KICKplay preview' } } }),
         })
           .then(r => r.json())
           .then(j => {
@@ -113,7 +113,8 @@ http.createServer((req, res) => {
             const r = j.result;
             const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
             res.end(JSON.stringify({
-              ints: r.random.data, source: 'random.org',
+              ints: r.random.data.map(v => v - 1),   // 1..max на сайті → 0..max-1 у коді
+              source: 'random.org',
               proof: {
                 url: 'https://api.random.org/signatures/form?format=json&random=' +
                      encodeURIComponent(rnd64) + '&signature=' + encodeURIComponent(r.signature),
@@ -126,13 +127,13 @@ http.createServer((req, res) => {
       }
       const ac = new AbortController();
       const t = setTimeout(() => ac.abort(), 2500);
-      fetch('https://www.random.org/integers/?num=' + num + '&min=0&max=' + (max - 1) +
+      fetch('https://www.random.org/integers/?num=' + num + '&min=1&max=' + max +
             '&col=1&base=10&format=plain&rnd=new', { signal: ac.signal })
         .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
         .then(txt => {
           const ints = txt.trim().split(/\s+/).map(Number);
           if (ints.length !== num || ints.some(v => !Number.isInteger(v))) throw new Error('bad');
-          res.end(JSON.stringify({ ints, source: 'random.org' }));
+          res.end(JSON.stringify({ ints: ints.map(v => v - 1), source: 'random.org' }));
         })
         .catch(() => res.end(JSON.stringify(fallback())))
         .finally(() => clearTimeout(t));

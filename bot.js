@@ -662,11 +662,13 @@ async function randomOrgInts(num, min, max) {
 async function rollInts(num, max) {
   lastRollProof = null;
   if (max <= 1) { lastRollSource = 'crypto'; return new Array(num).fill(0); }
-  // 1) підписаний ролл (перевірка на сайті), 2) відкритий API, 3) crypto
-  const signed = await randomOrgSigned(num, 0, max - 1);
-  if (signed) { lastRollSource = 'random.org'; return signed; }
-  const got = await randomOrgInts(num, 0, max - 1);
-  if (got) { lastRollSource = 'random.org'; return got; }
+  /* На random.org просимо діапазон 1..max — щоб число у підписаному записі
+     збігалося з номером учасника у списку (людям зрозуміло: випало 29 —
+     дивись 29-го). Всередині коду індекси лишаються 0-базовані. */
+  const signed = await randomOrgSigned(num, 1, max);
+  if (signed) { lastRollSource = 'random.org'; return signed.map(v => v - 1); }
+  const got = await randomOrgInts(num, 1, max);
+  if (got) { lastRollSource = 'random.org'; return got.map(v => v - 1); }
   lastRollSource = 'crypto';
   return Array.from({ length: num }, () => crypto.randomInt(0, max));
 }
