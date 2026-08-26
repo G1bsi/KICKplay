@@ -1915,7 +1915,9 @@ function updateHud() {
     focusKey = fk;
     const box = document.getElementById('so-focus');
     if (box) {
-      if (!focusP) box.classList.remove('show');
+      /* під вінер-скріном панель гравця не потрібна: вона накривала нижню
+         половину кнопки «Закрыть» — глядач цілився в неї і не влучав */
+      if (!focusP || winnerShown) box.classList.remove('show');
       else {
         box.classList.add('show');
         const hp = clamp(Math.round(focusP.hp), 0, 100);
