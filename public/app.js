@@ -2421,6 +2421,10 @@ function updateAnnounceMsg(name, message) {
 
 function closeAnnounce() {
   document.getElementById('winner-announce').classList.remove('visible');
+  /* прибираємо посилання перевірки: інакше воно лишалось невидимим,
+     але клікабельним, і кнопки під ним відкривали random.org */
+  const src = document.getElementById('wa-source');
+  if (src) { src.removeAttribute('href'); src.classList.remove('is-link'); src.blur(); }
   if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
   document.getElementById('wa-timer').style.color = '';
 }

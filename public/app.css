@@ -1506,6 +1506,11 @@
     -webkit-backdrop-filter: blur(14px);
   }
   #winner-announce.visible { opacity: 1; pointer-events: auto; }
+  /* Поки заставка схована, ніщо в ній не клікається. Потрібен !important:
+     глобальне правило button/a/[onclick] {pointer-events:auto !important}
+     інакше лишає всередині живі «привиди» поверх сторінки */
+  #winner-announce:not(.visible),
+  #winner-announce:not(.visible) * { pointer-events: none !important; }
 
   /* Стаггерна поява заставки: лейбл → нік (пружина) → таймер → підпис → кнопка.
      forwards тримає кінцевий стан; при повторному показі анімації стартують знову */
