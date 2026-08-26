@@ -1978,10 +1978,11 @@ function flyStart() {
   updFlyBtn(); updOverviewBtn();
 }
 function flyStop(toAuto) {
-  if (!fly.on) return;
   fly.on = false; fly.drag = false;
   if (toAuto) { camMode = 'auto'; manualUntil = 0; }
-  if (document.pointerLockElement === cv) { try { document.exitPointerLock(); } catch (e) {} }
+  /* мишу віддаємо БЕЗУМОВНО (навіть якщо режим уже вимкнено): захоплений
+     курсор, що пережив бій, зникав у користувача на всьому сайті */
+  if (document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) {} }
   updFlyBtn(); updOverviewBtn();
 }
 function flyLook(mx, my) {
@@ -3672,6 +3673,9 @@ function updateVictory(dt, now) {
 }
 function finishFight() {
   winnerShown = true;
+  /* бій скінчився — віддаємо мишу назад: у польоті вона захоплена (курсора
+     не видно) і глядач не міг би клікнути «Закрыть» на вінер-скріні */
+  flyStop(false);
   /* рендер НЕ зупиняємо: під напівпрозорим вінер-скріном живе сцена
      перемоги; повний стоп — лише RSO.stop() (кнопка «Закрыть») */
   victory = true;
@@ -3737,6 +3741,11 @@ window.addEventListener('keyup', function (e) {
 window.addEventListener('blur', function () {
   /* чому: без цього затиснута клавіша «залипає» після Alt-Tab */
   if (fly.on) { fly.kW = fly.kA = fly.kS = fly.kD = fly.kUp = fly.kDn = fly.kBoost = fly.drag = false; }
+});
+/* остання страховка: оверлей перестрілки закрився (або сховався) будь-яким
+   шляхом — миша має повернутись користувачу, а не лишитись захопленою */
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden && document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) {} }
 });
 /* Миша польоту: pointer lock → movementX/Y; фолбек — drag-look затиснутою ЛКМ.
    Слухачі на document, бо cv зʼявляється лише після start(). */

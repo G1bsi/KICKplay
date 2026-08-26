@@ -516,7 +516,9 @@ function resetGameUI() {
   raceQualifiers = [];
   hideRaceOverlay();
   hideRouletteOverlay();
-  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  /* selecting-mode ховає системний курсор (cursor:none) — знімаємо разом
+     з оверлеєм, інакше клас доживає до наступної гри і курсор зникає */
+  document.getElementById('cashhunt-overlay').classList.remove('visible', 'selecting-mode');
   document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
@@ -581,7 +583,9 @@ function resetGameUIKeepMode() {
   raceQualifiers = [];
   hideRaceOverlay();
   hideRouletteOverlay();
-  document.getElementById('cashhunt-overlay').classList.remove('visible');
+  /* selecting-mode ховає системний курсор (cursor:none) — знімаємо разом
+     з оверлеєм, інакше клас доживає до наступної гри і курсор зникає */
+  document.getElementById('cashhunt-overlay').classList.remove('visible', 'selecting-mode');
   document.getElementById('cashhunt-grid').innerHTML = '';
   document.getElementById('game-controls').style.display = 'none';
   document.getElementById('hint').textContent = '';
@@ -2648,6 +2652,7 @@ function initCashhuntBulbs() {
   document.body.appendChild(xh);
 
   let visible = false;
+  let lastX = -1, lastY = -1;   // остання позиція миші — щоб приціл зʼявився одразу
 
   function show() { xh.classList.add('on'); visible = true; }
   function hide() { xh.classList.remove('on', 'locked'); visible = false; }
@@ -2655,6 +2660,7 @@ function initCashhuntBulbs() {
   const overlayEl = document.getElementById('cashhunt-overlay');
 
   document.addEventListener('mousemove', e => {
+    lastX = e.clientX; lastY = e.clientY;
     xh.style.left = e.clientX + 'px';
     xh.style.top  = e.clientY + 'px';
     // Показуємо приціл лише всередині cashhunt-overlay під час вибору
@@ -2678,6 +2684,17 @@ function initCashhuntBulbs() {
 
   // Коли виходимо з оверлею — ховаємо курсор
   overlayEl.addEventListener('mouseleave', () => { if (visible) hide(); });
+
+  /* selecting-mode вмикає cursor:none — приціл має зʼявитись ТОЇ Ж МИТІ,
+     інакше поки глядач не зрушить мишу, на екрані нема ні курсора, ні прицілу.
+     І навпаки: клас зняли — приціл ховаємо, навіть без руху миші */
+  new MutationObserver(() => {
+    const sel = overlayEl.classList.contains('selecting-mode');
+    if (sel && !visible && lastX >= 0) {
+      xh.style.left = lastX + 'px'; xh.style.top = lastY + 'px';
+      show();
+    } else if (!sel && visible) hide();
+  }).observe(overlayEl, { attributes: true, attributeFilter: ['class'] });
 
   const boxEl = document.getElementById('main-box');
   const boxObs = new MutationObserver(() => {
