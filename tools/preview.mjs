@@ -93,7 +93,9 @@ http.createServer((req, res) => {
     // Перестановка 1..N — як у bot.js (підписана з ключем, інакше відкритий
     // сервіс послідовностей, у крайньому разі локальний крипто-шафл)
     if (url.startsWith('/api/random/perm')) {
-      const n = Math.min(Math.max(parseInt(new URL(req.url, 'http://x').searchParams.get('n')) || 2, 2), 10000);
+      const qp = new URL(req.url, 'http://x').searchParams;
+      const n = Math.min(Math.max(parseInt(qp.get('n')) || 2, 2), 10000);
+      const k = Math.min(Math.max(parseInt(qp.get('k')) || n, 1), n);
       const local = () => {
         const a = Array.from({ length: n }, (_, i) => i);
         for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [a[i], a[j]] = [a[j], a[i]]; }
@@ -104,7 +106,7 @@ http.createServer((req, res) => {
         fetch('https://api.random.org/json-rpc/4/invoke', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method: 'generateSignedIntegers', id: 1,
-            params: { apiKey: key, n, min: 1, max: n, replacement: false,
+            params: { apiKey: key, n: k, min: 1, max: n, replacement: false,
                       userData: { app: 'KICKplay preview',
                                   what: String(new URL(req.url, 'http://x').searchParams.get('what') || 'случайный порядок участников').slice(0, 200) } } }),
         })
@@ -114,7 +116,7 @@ http.createServer((req, res) => {
             const r = j.result;
             const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
             res.end(JSON.stringify({
-              order: r.random.data.map(v => v - 1),
+              order: r.random.data.map(v => v - 1),   // k номерів учасників (0-базовано)
               source: 'random.org',
               proof: {
                 url: 'https://api.random.org/signatures/form?format=json&random=' +

@@ -697,14 +697,14 @@ async function rollPick(arr, n, what) {
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 6000);
-    const res = await fetch('/api/random/perm?n=' + a.length +
+    const res = await fetch('/api/random/perm?n=' + a.length + '&k=' + n +
                             (what ? '&what=' + encodeURIComponent(what) : ''), { signal: ctl.signal });
     clearTimeout(t);
     const d = await res.json();
-    if (Array.isArray(d.order) && d.order.length === a.length) {
+    if (Array.isArray(d.order) && d.order.length >= n) {
       lastRollSource = d.source || 'random.org';
       lastRollProof = d.proof || null;
-      return d.order.map(i => a[i]).slice(0, n);
+      return d.order.slice(0, n).map(i => a[i]);
     }
   } catch (e) { /* тихо падаємо на локальний рандом */ }
   lastRollSource = 'crypto';

@@ -535,9 +535,11 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/random/perm')) {
     const q = new URL(req.url, 'http://x').searchParams;
     const n = Math.min(Math.max(parseInt(q.get('n')) || 2, 2), 10000);
+    // k — скільки треба вибрати (без k = перестановка всього списку)
+    const k = Math.min(Math.max(parseInt(q.get('k')) || n, 1), n);
     // опис призначення ролла — глядач бачить його на сторінці перевірки
     const what = String(q.get('what') || '').slice(0, 200) || undefined;
-    trueShuffle(Array.from({ length: n }, (_, i) => i), what).then(order => {
+    truePick(n, k, what).then(order => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ order, source: lastRollSource, proof: lastRollProof }));
     });
@@ -690,7 +692,7 @@ async function rollInts(num, max) {
 // Підписана ПЕРЕСТАНОВКА 1..N з random.org (replacement:false — кожне число
 // рівно раз). Саме її видно на сторінці перевірки: це і є порядок розсадки
 // по клітинках, читабельний людиною, а не тисячі службових чисел.
-async function randomOrgSignedPerm(n, what) {
+async function randomOrgSignedPerm(n, what, total) {
   if (!RANDOM_ORG_KEY) return null;
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), RANDOM_ORG_TIMEOUT * 2);
@@ -702,7 +704,7 @@ async function randomOrgSignedPerm(n, what) {
       body: JSON.stringify({
         jsonrpc: '2.0', method: 'generateSignedIntegers', id: Date.now(),
         params: {
-          apiKey: RANDOM_ORG_KEY, n, min: 1, max: n, replacement: false,
+          apiKey: RANDOM_ORG_KEY, n, min: 1, max: total || n, replacement: false,
           userData: { app: 'KICKplay', what: what || 'случайный порядок участников' },
         },
       }),
@@ -740,6 +742,26 @@ async function randomOrgPerm(n) {
     return null;
   } finally { clearTimeout(t); }
 }
+/* Вибір k учасників зі списку n: у random.org просимо рівно k чисел без
+   повторів у діапазоні 1..n. На сторінці перевірки видно саме тих, кого
+   набрали («5, 20, 128…» = учасники з такими номерами), а не перестановку
+   всього списку — коротко і зрозуміло. */
+async function truePick(total, k, what) {
+  lastRollProof = null;
+  if (k >= total) return trueShuffle(Array.from({ length: total }, (_, i) => i), what).then(a => a.slice(0, k));
+  const signed = await randomOrgSignedPerm(k, what, total);
+  if (signed) { lastRollSource = 'random.org'; return signed.map(v => v - 1); }
+  const perm = await randomOrgPerm(total);
+  if (perm) { lastRollSource = 'random.org'; return perm.slice(0, k).map(v => v - 1); }
+  lastRollSource = 'crypto';
+  const a = Array.from({ length: total }, (_, i) => i);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, k);
+}
+
 // Перемішування: перестановка з random.org, інакше Фішер-Йейтс на crypto
 async function trueShuffle(arr, what) {
   lastRollProof = null;
