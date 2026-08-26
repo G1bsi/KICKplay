@@ -37,7 +37,7 @@
 
     <section class="card">
       <div class="card-head">
-        <span class="card-chip">🎟</span>
+        <span class="card-chip"><i>🎟</i></span>
         <h2>Регистрация</h2>
       </div>
       <div class="field-row">
@@ -56,7 +56,7 @@
 
     <section class="card">
       <div class="card-head">
-        <span class="card-chip">🕹</span>
+        <span class="card-chip"><i>🕹</i></span>
         <h2>Режим игры</h2>
       </div>
       <div class="mode-carousel">
@@ -103,7 +103,7 @@
 
     <section class="card grow">
       <div class="card-head">
-        <span class="card-chip">🏆</span>
+        <span class="card-chip"><i>🏆</i></span>
         <h2>Победители <span class="count-badge" id="winners-count-title">0</span></h2>
         <button class="btn-icon" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
       </div>
@@ -120,7 +120,7 @@
   <!-- ── Центр: учасники ─────────────────────────────────── -->
   <main class="card" id="participants-col">
     <div class="card-head">
-      <span class="card-chip">👥</span>
+      <span class="card-chip"><i>👥</i></span>
       <h2>Участники <span class="count-badge" id="participants-count-title">0</span></h2>
     </div>
     <div class="box" id="main-box">
@@ -135,7 +135,7 @@
   <!-- ── Права колонка: живий чат ────────────────────────── -->
   <aside class="card" id="chat-col">
     <div class="card-head">
-      <span class="card-chip">💬</span>
+      <span class="card-chip"><i>💬</i></span>
       <h2>Чат</h2>
     </div>
     <div class="box chat-flow" id="chat-box">
@@ -167,6 +167,7 @@
   <div class="wa-timer" id="wa-timer"></div>
   <div class="wa-msg" id="wa-msg" style="display:none;"></div>
   <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
+  <a class="wa-source" id="wa-source" target="_blank" rel="noopener"></a>
   <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
 </div>
 

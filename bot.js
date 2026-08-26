@@ -516,10 +516,24 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Випадкові числа для клієнтських розіграшів (рулетка/револьвер/чат-режим):
+  // джерело — random.org, фолбек — crypto. Клієнт сам не ходить на random.org,
+  // бо там немає CORS-заголовків.
+  if (req.url.startsWith('/api/random/ints')) {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const num = Math.min(Math.max(parseInt(q.get('n')) || 1, 1), 200);
+    const max = Math.min(Math.max(parseInt(q.get('max')) || 2, 1), 1000000);
+    rollInts(num, max).then(ints => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ints, source: lastRollSource, proof: lastRollProof }));
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/start' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { winners } = JSON.parse(body);
         const n = parseInt(winners);
@@ -528,8 +542,8 @@ const server = http.createServer((req, res) => {
         if (!n || n < 1 || n > gridSize) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців (макс ' + gridSize + ')' })); return;
         }
-        raffleGame = buildRaffleGame(n);
-        console.log(`[РОЗІГРАШ] Гра запущена: ${n} переможців з ${rafflePlayers.length} учасників`);
+        raffleGame = await buildRaffleGame(n);
+        console.log(`[РОЗІГРАШ] Гра запущена: ${n} переможців з ${rafflePlayers.length} учасників (рандом: ${lastRollSource})`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, game: raffleGame }));
       } catch { res.writeHead(400); res.end(); }
@@ -540,10 +554,12 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/raffle/reroll' && req.method === 'POST') {
     if (!raffleGame) { res.writeHead(400); res.end(JSON.stringify({ error: 'Гра не запущена' })); return; }
     const n = raffleGame.winnersNeeded;
-    raffleGame = buildRaffleGame(n);
-    console.log(`[РОЗІГРАШ] Рерол: нова гра, ${n} переможців`);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, game: raffleGame }));
+    buildRaffleGame(n).then(g => {
+      raffleGame = g;
+      console.log(`[РОЗІГРАШ] Рерол: нова гра, ${n} переможців (рандом: ${lastRollSource})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, game: raffleGame }));
+    });
     return;
   }
 
@@ -552,7 +568,7 @@ const server = http.createServer((req, res) => {
       (() => { return null; })();
     let body = '';
     req.on('data', d => body += d);
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const parsed = body ? JSON.parse(body) : {};
         const count = parseInt(parsed.winners) || n;
@@ -560,12 +576,12 @@ const server = http.createServer((req, res) => {
         if (!count || count < 1 || count > rafflePlayers.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців' })); return;
         }
-        const shuffled = secureShuffleServer(rafflePlayers);
+        const shuffled = await trueShuffle(rafflePlayers);
         const winnersList = shuffled.slice(0, count);
         raffleGame = { winnersNeeded: count, cells: null, winners: winnersList, fast: true };
-        console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')}`);
+        console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')} (рандом: ${lastRollSource})`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, winners: winnersList }));
+        res.end(JSON.stringify({ ok: true, winners: winnersList, rollSource: lastRollSource }));
       } catch { res.writeHead(400); res.end(); }
     });
     return;
@@ -573,6 +589,99 @@ const server = http.createServer((req, res) => {
 
   sendAsset(req, res, 'index.html', 'no-cache');
 });
+
+// ── Справжня випадковість: random.org (з фолбеком на crypto) ──
+// Чому: розіграш має бути перевірюваним для глядачів — random.org видає
+// атмосферний шум, а не псевдовипадкові числа. Мережа може лежати або
+// вичерпатись квота, тому будь-який збій тихо падає назад на crypto.
+const RANDOM_ORG_TIMEOUT = 2500;
+// Ключ Signed API (безкоштовний на api.random.org) — Render → Environment →
+// RANDOM_ORG_KEY. Є ключ → числа приходять ПІДПИСАНИМИ, і глядач може
+// перевірити розіграш на офіційному сайті random.org. Немає — працює
+// звичайний відкритий API, лише без сторінки перевірки.
+const RANDOM_ORG_KEY = process.env.RANDOM_ORG_KEY || '';
+let lastRollSource = 'crypto';
+let lastRollProof = null;   // {url, serial} — сторінка перевірки на random.org
+
+// Підписаний ролл: JSON-RPC + посилання на форму перевірки random.org
+async function randomOrgSigned(num, min, max) {
+  if (!RANDOM_ORG_KEY) return null;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), RANDOM_ORG_TIMEOUT * 2);
+  try {
+    const res = await fetch('https://api.random.org/json-rpc/4/invoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ac.signal,
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'generateSignedIntegers', id: Date.now(),
+        params: {
+          apiKey: RANDOM_ORG_KEY, n: num, min, max, replacement: true,
+          userData: { app: 'KICKplay', chatroom: String(CHATROOM_ID) },
+        },
+      }),
+    });
+    const j = await res.json();
+    if (j.error) throw new Error(j.error.message || 'rpc error');
+    const r = j.result;
+    const data = r && r.random && r.random.data;
+    if (!Array.isArray(data) || data.length !== num) throw new Error('bad payload');
+    /* посилання на офіційну форму: random — base64(JSON об'єкта random),
+       signature — як прийшла (base64). Саме такий формат random.org
+       використовує у власних прикладах */
+    const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
+    lastRollProof = {
+      url: 'https://api.random.org/signatures/form?format=json&random=' +
+           encodeURIComponent(rnd64) + '&signature=' + encodeURIComponent(r.signature),
+      serial: r.random.serialNumber || null,
+    };
+    return data;
+  } catch (e) {
+    console.log('[ROLL] signed API не спрацював (' + (e && e.message) + ') → відкритий API');
+    return null;
+  } finally { clearTimeout(t); }
+}
+async function randomOrgInts(num, min, max) {
+  if (num < 1 || max < min) return null;
+  const url = 'https://www.random.org/integers/?num=' + num + '&min=' + min +
+              '&max=' + max + '&col=1&base=10&format=plain&rnd=new';
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), RANDOM_ORG_TIMEOUT);
+  try {
+    const res = await fetch(url, { signal: ac.signal, headers: { 'User-Agent': 'KICKplay raffle bot' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const out = (await res.text()).trim().split(/\s+/).map(Number);
+    if (out.length !== num || out.some(v => !Number.isInteger(v) || v < min || v > max)) throw new Error('bad payload');
+    return out;
+  } catch (e) {
+    console.log('[ROLL] random.org недоступний (' + (e && e.message) + ') → crypto');
+    return null;
+  } finally { clearTimeout(t); }
+}
+// n випадкових чисел [0, max) — з random.org, інакше crypto
+async function rollInts(num, max) {
+  lastRollProof = null;
+  if (max <= 1) { lastRollSource = 'crypto'; return new Array(num).fill(0); }
+  // 1) підписаний ролл (перевірка на сайті), 2) відкритий API, 3) crypto
+  const signed = await randomOrgSigned(num, 0, max - 1);
+  if (signed) { lastRollSource = 'random.org'; return signed; }
+  const got = await randomOrgInts(num, 0, max - 1);
+  if (got) { lastRollSource = 'random.org'; return got; }
+  lastRollSource = 'crypto';
+  return Array.from({ length: num }, () => crypto.randomInt(0, max));
+}
+// Перемішування Фішера-Йейтса на числах random.org (фолбек — crypto)
+async function trueShuffle(arr) {
+  const a = [...arr];
+  if (a.length < 2) { lastRollSource = 'crypto'; return a; }
+  // для кроку i потрібне число [0, i] → беремо пул під найбільший діапазон
+  const pool = await rollInts(a.length - 1, 1000000);
+  for (let i = a.length - 1, k = 0; i > 0; i--, k++) {
+    const j = pool[k] % (i + 1);   // залишок від великого діапазону — зміщення нехтовно мале
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 // Генерує сітку: кількість клітинок = кількості учасників, без обмежень
 // Криптографічно стійке перемішування (Фішер-Йейтс) на сервері
@@ -586,10 +695,10 @@ function secureShuffleServer(arr) {
   return a;
 }
 
-function buildRaffleGame(n) {
-  // Cash Hunt — звичайне перемішування для розкидання по клітинках,
-  // переможця вибирає сам стрімер кліком, тому крипто тут не потрібне
-  const shuffled = [...rafflePlayers].sort(() => Math.random() - 0.5);
+async function buildRaffleGame(n) {
+  // Cash Hunt: розкладку по клітинках робить random.org (атмосферний шум) —
+  // саме вона визначає, кому яка клітинка дістанеться
+  const shuffled = await trueShuffle(rafflePlayers);
   const gridSize = shuffled.length;
   const cells = shuffled.slice(0, gridSize);
 
@@ -597,6 +706,8 @@ function buildRaffleGame(n) {
     winnersNeeded: n,
     gridSize,
     cells,
+    rollSource: lastRollSource,   // 'random.org' або 'crypto' — показуємо глядачам
+    rollProof: lastRollProof,     // посилання на офіційну сторінку перевірки
   };
 }
 

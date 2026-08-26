@@ -9,6 +9,7 @@
    У прод це не їде — Render запускає лише bot.js.
    ══════════════════════════════════════════════════════════════ */
 import http from 'http';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -88,6 +89,55 @@ http.createServer((req, res) => {
       }));
     }
     if (url === '/api/raffle/check/state') return res.end(JSON.stringify({ checks: {} }));
+
+    // Числа для роллів — як у bot.js: пробуємо random.org, інакше crypto
+    if (url.startsWith('/api/random/ints')) {
+      const q = new URL(req.url, 'http://x').searchParams;
+      const num = Math.min(Math.max(parseInt(q.get('n')) || 1, 1), 200);
+      const max = Math.min(Math.max(parseInt(q.get('max')) || 2, 1), 1000000);
+      const fallback = () => ({
+        ints: Array.from({ length: num }, () => crypto.randomInt(0, max)),
+        source: 'crypto',
+      });
+      const key = process.env.RANDOM_ORG_KEY || '';
+      // з ключем — підписаний ролл із посиланням на офіційну перевірку (як у bot.js)
+      if (key) {
+        fetch('https://api.random.org/json-rpc/4/invoke', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'generateSignedIntegers', id: 1,
+            params: { apiKey: key, n: num, min: 0, max: max - 1, replacement: true, userData: { app: 'KICKplay preview' } } }),
+        })
+          .then(r => r.json())
+          .then(j => {
+            if (j.error) throw new Error(j.error.message);
+            const r = j.result;
+            const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
+            res.end(JSON.stringify({
+              ints: r.random.data, source: 'random.org',
+              proof: {
+                url: 'https://api.random.org/signatures/form?format=json&random=' +
+                     encodeURIComponent(rnd64) + '&signature=' + encodeURIComponent(r.signature),
+                serial: r.random.serialNumber || null,
+              },
+            }));
+          })
+          .catch(e => { console.log('[preview] signed API:', e.message); res.end(JSON.stringify(fallback())); });
+        return;
+      }
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 2500);
+      fetch('https://www.random.org/integers/?num=' + num + '&min=0&max=' + (max - 1) +
+            '&col=1&base=10&format=plain&rnd=new', { signal: ac.signal })
+        .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then(txt => {
+          const ints = txt.trim().split(/\s+/).map(Number);
+          if (ints.length !== num || ints.some(v => !Number.isInteger(v))) throw new Error('bad');
+          res.end(JSON.stringify({ ints, source: 'random.org' }));
+        })
+        .catch(() => res.end(JSON.stringify(fallback())))
+        .finally(() => clearTimeout(t));
+      return;
+    }
 
     // Чек-таймер переможця — поведінка bot.js, з навмисною затримкою 300мс,
     // щоб ловити гонку «poll обігнав check/start» (баг зеленої версії)

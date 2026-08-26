@@ -616,7 +616,7 @@ async function startRoulette(fast) {
   controls.style.display = 'none';
   overlayHint.textContent = 'Крутим барабан...';
 
-  const winner = eligible[secureRandomInt(eligible.length)];
+  const winner = eligible[await rollInt(eligible.length)];   // ролл через random.org
 
   const STRIP_LEN = 60;
   const WINNER_IDX = 52;
@@ -660,6 +660,62 @@ async function startRoulette(fast) {
 
 function closeRouletteOverlay() {
   resetGameUI();
+}
+
+// ── Ролл через random.org ─────────────────────────────────────
+// Джерело справжньої випадковості (атмосферний шум) — щоб розіграш був
+// чесним і перевірюваним. Ходимо через власний сервер: у random.org немає
+// CORS-заголовків, а сервер ще й тримає фолбек на crypto при збоях мережі.
+let lastRollSource = 'crypto';   // показуємо глядачам на екрані переможця
+let lastRollProof = null;        // {url, serial} — сторінка перевірки random.org
+async function rollInts(count, max) {
+  if (max <= 1) { lastRollSource = 'crypto'; return new Array(count).fill(0); }
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    const res = await fetch('/api/random/ints?n=' + count + '&max=' + max, { signal: ctl.signal });
+    clearTimeout(t);
+    const d = await res.json();
+    if (Array.isArray(d.ints) && d.ints.length === count) {
+      lastRollSource = d.source || 'random.org';
+      lastRollProof = d.proof || null;
+      return d.ints;
+    }
+  } catch (e) { /* мережа/сервер лягли — тихо на локальний крипто-рандом */ }
+  lastRollSource = 'crypto';
+  lastRollProof = null;
+  return Array.from({ length: count }, () => secureRandomInt(max));
+}
+// один випадковий індекс [0, max)
+async function rollInt(max) { return (await rollInts(1, max))[0]; }
+// n унікальних елементів списку — перемішування на числах random.org
+async function rollPick(arr, n) {
+  const a = [...arr];
+  if (a.length < 2) { lastRollSource = 'crypto'; return a.slice(0, n); }
+  const pool = await rollInts(a.length - 1, 1000000);
+  for (let i = a.length - 1, k = 0; i > 0; i--, k++) {
+    const j = pool[k] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, n);
+}
+
+/* Підпис під ніком переможця: чим саме розіграно. Якщо ролл підписаний
+   ключем Signed API — підпис стає КНОПКОЮ на офіційну сторінку random.org,
+   де глядач сам перевіряє автентичність числа (серійний номер, час, підпис). */
+function renderRollSource() {
+  const el = document.getElementById('wa-source');
+  if (!el) return;
+  const proof = lastRollProof && lastRollProof.url ? lastRollProof : null;
+  if (proof) {
+    el.textContent = '🎲 проверить на random.org' + (proof.serial ? ' #' + proof.serial : '');
+    el.href = proof.url;
+    el.classList.add('is-link');
+  } else {
+    el.textContent = lastRollSource === 'random.org' ? '🎲 random.org' : '🎲 crypto';
+    el.removeAttribute('href');
+    el.classList.remove('is-link');
+  }
 }
 
 // Криптографічно стійкий випадковий цілий [0, max) — без зміщення (rejection sampling)
@@ -1414,7 +1470,7 @@ let revolverQualifiers = [];
 async function startRevolverGame() {
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
   const n = Math.min(state.participants.length, 6);
-  revolverQualifiers = pickRandom(state.participants, n);
+  revolverQualifiers = await rollPick(state.participants, n);   // ролл через random.org
   runRevolver(revolverQualifiers);
 }
 
@@ -1528,7 +1584,7 @@ async function runRevolver(qualifiers) {
     if (phase !== 'racing') return;
     hint.textContent = 'Крутим барабан...';
 
-    const killIdx = secureRandomInt(remaining.length);
+    const killIdx = await rollInt(remaining.length);   // ролл через random.org
     const target = remaining[killIdx];
 
     // Докручуємо так, щоб камора цілі стала під курок (12 годин = -90°/270°)
@@ -1705,9 +1761,9 @@ let chatgameTimerSeconds = 0;
 
 
 
-function startChatgame() {
+async function startChatgame() {
   if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
-  const winner = pickRandom(state.participants, 1)[0];
+  const winner = (await rollPick(state.participants, 1))[0];   // ролл через random.org
   openChatgameOverlay(winner);
 }
 
@@ -1949,13 +2005,13 @@ function clearChatgameWinner() {
   chatgameCurrentNick = '';
 }
 
-function chatgameNextWinner() {
+async function chatgameNextWinner() {
   stopChatgameTimer();
   clearChatgameWinner();
   const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
   const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
   if (!pool.length) { alert('Все участники уже победили!'); return; }
-  const next = pickRandom(pool, 1)[0];
+  const next = (await rollPick(pool, 1))[0];   // ролл через random.org
   openChatgameOverlay(next);
 }
 
@@ -2112,6 +2168,8 @@ function closeCashhuntOverlay() {
 }
 
 function renderGame(game) {
+  /* Cash Hunt: розкладку робив сервер, тож джерело і доказ приходять з грою */
+  if (game && game.rollSource) { lastRollSource = game.rollSource; lastRollProof = game.rollProof || null; }
   currentGame = game;
   selected = new Set();
   phase = 'intro';                 // кліки заблоковані до кінця інтро
@@ -2418,6 +2476,7 @@ function addWinner(name) {
      або банер з короною на мапі) — загальна поверх неї дублювалась і зайва.
      Решта конвеєра (історія, сервер, чат-анонс, таймер підтвердження) працює як скрізь */
   if (gameMode !== 'royale') showAnnounce(name, seconds, confirmOn);
+  renderRollSource();
 
   if (confirmOn) {
     /* ГОНКА (стара, ще з зеленої версії): pollCheckState стартував ДО того,

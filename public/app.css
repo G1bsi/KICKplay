@@ -132,6 +132,10 @@
     font-size: 15px; flex-shrink: 0;
     box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.25);
   }
+  /* кольорові емодзі на жовтому читались погано — brightness(0) робить з них
+     суцільний чорний силует; фільтр на вкладеному <i>, бо на самій плитці
+     він зачорнив би і її жовтий фон */
+  .card-chip i { font-style: normal; filter: brightness(0); }
   .card-head h2 {
     font-size: var(--fs-md); font-weight: var(--fw-black);
     text-transform: uppercase; letter-spacing: 0.8px;
@@ -1605,6 +1609,27 @@
   }
 
   /* Ghost-кнопка: тиха, поки не наведеш — тоді жовтіє */
+  /* дрібний підпис джерела випадковості — прозорий доказ чесності розіграшу */
+  #winner-announce .wa-source {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 2px;
+    color: var(--text-faint); text-transform: uppercase; margin-top: 2px;
+    text-decoration: none;
+  }
+  /* коли ролл підписаний — підпис стає клікабельною кнопкою перевірки */
+  #winner-announce .wa-source.is-link {
+    color: var(--accent);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    border-radius: var(--r-full);
+    padding: 6px 14px;
+    margin-top: 6px;
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast);
+  }
+  #winner-announce .wa-source.is-link:hover {
+    background: rgba(var(--accent-rgb), 0.12);
+    border-color: var(--accent);
+  }
+  #winner-announce.visible .wa-source { animation: waIn 0.45s var(--ease-out) 0.8s both; }
   #winner-announce .wa-close {
     margin-top: var(--space-4);
     background: transparent;
