@@ -530,6 +530,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Перестановка 1..N для клієнтських розіграшів (револьвер, чат-режим):
+  // на сторінці перевірки видно зрозумілий порядок, а не службові числа
+  if (req.url.startsWith('/api/random/perm')) {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const n = Math.min(Math.max(parseInt(q.get('n')) || 2, 2), 10000);
+    // опис призначення ролла — глядач бачить його на сторінці перевірки
+    const what = String(q.get('what') || '').slice(0, 200) || undefined;
+    trueShuffle(Array.from({ length: n }, (_, i) => i), what).then(order => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ order, source: lastRollSource, proof: lastRollProof }));
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/start' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
@@ -576,7 +590,8 @@ const server = http.createServer((req, res) => {
         if (!count || count < 1 || count > rafflePlayers.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців' })); return;
         }
-        const shuffled = await trueShuffle(rafflePlayers);
+        const shuffled = await trueShuffle(rafflePlayers,
+          'Быстрый реролл: выбор ' + count + ' победителей из ' + rafflePlayers.length);
         const winnersList = shuffled.slice(0, count);
         raffleGame = { winnersNeeded: count, cells: null, winners: winnersList, fast: true };
         console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')} (рандом: ${lastRollSource})`);
@@ -672,14 +687,73 @@ async function rollInts(num, max) {
   lastRollSource = 'crypto';
   return Array.from({ length: num }, () => crypto.randomInt(0, max));
 }
-// Перемішування Фішера-Йейтса на числах random.org (фолбек — crypto)
-async function trueShuffle(arr) {
+// Підписана ПЕРЕСТАНОВКА 1..N з random.org (replacement:false — кожне число
+// рівно раз). Саме її видно на сторінці перевірки: це і є порядок розсадки
+// по клітинках, читабельний людиною, а не тисячі службових чисел.
+async function randomOrgSignedPerm(n, what) {
+  if (!RANDOM_ORG_KEY) return null;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), RANDOM_ORG_TIMEOUT * 2);
+  try {
+    const res = await fetch('https://api.random.org/json-rpc/4/invoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ac.signal,
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'generateSignedIntegers', id: Date.now(),
+        params: {
+          apiKey: RANDOM_ORG_KEY, n, min: 1, max: n, replacement: false,
+          userData: { app: 'KICKplay', what: what || 'случайный порядок участников' },
+        },
+      }),
+    });
+    const j = await res.json();
+    if (j.error) throw new Error(j.error.message || 'rpc error');
+    const r = j.result;
+    const data = r && r.random && r.random.data;
+    if (!Array.isArray(data) || data.length !== n) throw new Error('bad payload');
+    const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
+    lastRollProof = {
+      url: 'https://api.random.org/signatures/form?format=json&random=' +
+           encodeURIComponent(rnd64) + '&signature=' + encodeURIComponent(r.signature),
+      serial: r.random.serialNumber || null,
+    };
+    return data;
+  } catch (e) {
+    console.log('[ROLL] підписана перестановка не вийшла (' + (e && e.message) + ')');
+    return null;
+  } finally { clearTimeout(t); }
+}
+// Те саме без ключа: відкритий сервіс послідовностей random.org
+async function randomOrgPerm(n) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), RANDOM_ORG_TIMEOUT);
+  try {
+    const res = await fetch('https://www.random.org/sequences/?min=1&max=' + n +
+                            '&col=1&format=plain&rnd=new', { signal: ac.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const out = (await res.text()).trim().split(/\s+/).map(Number);
+    if (out.length !== n || out.some(v => !Number.isInteger(v) || v < 1 || v > n)) throw new Error('bad payload');
+    return out;
+  } catch (e) {
+    console.log('[ROLL] перестановка з random.org не вийшла (' + (e && e.message) + ') → crypto');
+    return null;
+  } finally { clearTimeout(t); }
+}
+// Перемішування: перестановка з random.org, інакше Фішер-Йейтс на crypto
+async function trueShuffle(arr, what) {
+  lastRollProof = null;
   const a = [...arr];
   if (a.length < 2) { lastRollSource = 'crypto'; return a; }
-  // для кроку i потрібне число [0, i] → беремо пул під найбільший діапазон
-  const pool = await rollInts(a.length - 1, 1000000);
-  for (let i = a.length - 1, k = 0; i > 0; i--, k++) {
-    const j = pool[k] % (i + 1);   // залишок від великого діапазону — зміщення нехтовно мале
+  const perm = (await randomOrgSignedPerm(a.length, what)) || (await randomOrgPerm(a.length));
+  if (perm) {
+    lastRollSource = 'random.org';
+    // perm[k] = який учасник (1-базовано) стає на k-ту клітинку
+    return perm.map(v => a[v - 1]);
+  }
+  lastRollSource = 'crypto';
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -700,7 +774,8 @@ function secureShuffleServer(arr) {
 async function buildRaffleGame(n) {
   // Cash Hunt: розкладку по клітинках робить random.org (атмосферний шум) —
   // саме вона визначає, кому яка клітинка дістанеться
-  const shuffled = await trueShuffle(rafflePlayers);
+  const shuffled = await trueShuffle(rafflePlayers,
+    'Cash Hunt: раскладка ' + rafflePlayers.length + ' участников по ячейкам табло');
   const gridSize = shuffled.length;
   const cells = shuffled.slice(0, gridSize);
 

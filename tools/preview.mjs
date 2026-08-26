@@ -90,6 +90,53 @@ http.createServer((req, res) => {
     }
     if (url === '/api/raffle/check/state') return res.end(JSON.stringify({ checks: {} }));
 
+    // Перестановка 1..N — як у bot.js (підписана з ключем, інакше відкритий
+    // сервіс послідовностей, у крайньому разі локальний крипто-шафл)
+    if (url.startsWith('/api/random/perm')) {
+      const n = Math.min(Math.max(parseInt(new URL(req.url, 'http://x').searchParams.get('n')) || 2, 2), 10000);
+      const local = () => {
+        const a = Array.from({ length: n }, (_, i) => i);
+        for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(0, i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+        return { order: a, source: 'crypto', proof: null };
+      };
+      const key = process.env.RANDOM_ORG_KEY || '';
+      if (key) {
+        fetch('https://api.random.org/json-rpc/4/invoke', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'generateSignedIntegers', id: 1,
+            params: { apiKey: key, n, min: 1, max: n, replacement: false,
+                      userData: { app: 'KICKplay preview',
+                                  what: String(new URL(req.url, 'http://x').searchParams.get('what') || 'случайный порядок участников').slice(0, 200) } } }),
+        })
+          .then(r => r.json())
+          .then(j => {
+            if (j.error) throw new Error(j.error.message);
+            const r = j.result;
+            const rnd64 = Buffer.from(JSON.stringify(r.random), 'utf8').toString('base64');
+            res.end(JSON.stringify({
+              order: r.random.data.map(v => v - 1),
+              source: 'random.org',
+              proof: {
+                url: 'https://api.random.org/signatures/form?format=json&random=' +
+                     encodeURIComponent(rnd64) + '&signature=' + encodeURIComponent(r.signature),
+                serial: r.random.serialNumber || null,
+              },
+            }));
+          })
+          .catch(e => { console.log('[preview] perm:', e.message); res.end(JSON.stringify(local())); });
+        return;
+      }
+      fetch('https://www.random.org/sequences/?min=1&max=' + n + '&col=1&format=plain&rnd=new')
+        .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then(txt => {
+          const seq = txt.trim().split(/\s+/).map(Number);
+          if (seq.length !== n) throw new Error('bad');
+          res.end(JSON.stringify({ order: seq.map(v => v - 1), source: 'random.org', proof: null }));
+        })
+        .catch(() => res.end(JSON.stringify(local())));
+      return;
+    }
+
     // Числа для роллів — як у bot.js: пробуємо random.org, інакше crypto
     if (url.startsWith('/api/random/ints')) {
       const q = new URL(req.url, 'http://x').searchParams;

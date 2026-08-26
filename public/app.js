@@ -688,13 +688,29 @@ async function rollInts(count, max) {
 }
 // один випадковий індекс [0, max)
 async function rollInt(max) { return (await rollInts(1, max))[0]; }
-// n унікальних елементів списку — перемішування на числах random.org
-async function rollPick(arr, n) {
+// n унікальних елементів списку — через ПЕРЕСТАНОВКУ з random.org
+// (на сторінці перевірки видно читабельний порядок 1..N, а не купу
+// службових чисел); мережа лягла — локальний крипто-фолбек
+async function rollPick(arr, n, what) {
   const a = [...arr];
-  if (a.length < 2) { lastRollSource = 'crypto'; return a.slice(0, n); }
-  const pool = await rollInts(a.length - 1, 1000000);
-  for (let i = a.length - 1, k = 0; i > 0; i--, k++) {
-    const j = pool[k] % (i + 1);
+  if (a.length < 2) { lastRollSource = 'crypto'; lastRollProof = null; return a.slice(0, n); }
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch('/api/random/perm?n=' + a.length +
+                            (what ? '&what=' + encodeURIComponent(what) : ''), { signal: ctl.signal });
+    clearTimeout(t);
+    const d = await res.json();
+    if (Array.isArray(d.order) && d.order.length === a.length) {
+      lastRollSource = d.source || 'random.org';
+      lastRollProof = d.proof || null;
+      return d.order.map(i => a[i]).slice(0, n);
+    }
+  } catch (e) { /* тихо падаємо на локальний рандом */ }
+  lastRollSource = 'crypto';
+  lastRollProof = null;
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = secureRandomInt(i + 1);
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a.slice(0, n);
@@ -1470,7 +1486,12 @@ let revolverQualifiers = [];
 async function startRevolverGame() {
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника!');
   const n = Math.min(state.participants.length, 6);
-  revolverQualifiers = await rollPick(state.participants, n);   // ролл через random.org
+  /* random.org відповідає лише за НАБІР учасників у барабан — це єдиний
+     ролл, який тут щось вирішує наосліп. Самі прокрути далі крутяться
+     локально: там під кінець лишається 2 гравці, і «випало 1 з 2» у звіті
+     перевірки виглядало б безглуздо */
+  revolverQualifiers = await rollPick(state.participants, n,
+    'Револьвер: набор ' + n + ' участников из ' + state.participants.length + ' зарегистрированных');
   runRevolver(revolverQualifiers);
 }
 
@@ -1584,7 +1605,7 @@ async function runRevolver(qualifiers) {
     if (phase !== 'racing') return;
     hint.textContent = 'Крутим барабан...';
 
-    const killIdx = await rollInt(remaining.length);   // ролл через random.org
+    const killIdx = secureRandomInt(remaining.length);   // прокрут барабана — локально
     const target = remaining[killIdx];
 
     // Докручуємо так, щоб камора цілі стала під курок (12 годин = -90°/270°)
@@ -1763,7 +1784,8 @@ let chatgameTimerSeconds = 0;
 
 async function startChatgame() {
   if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
-  const winner = (await rollPick(state.participants, 1))[0];   // ролл через random.org
+  const winner = (await rollPick(state.participants, 1,
+    'Бонусбуря: выбор участника из ' + state.participants.length))[0];
   openChatgameOverlay(winner);
 }
 
@@ -2011,7 +2033,8 @@ async function chatgameNextWinner() {
   const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
   const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
   if (!pool.length) { alert('Все участники уже победили!'); return; }
-  const next = (await rollPick(pool, 1))[0];   // ролл через random.org
+  const next = (await rollPick(pool, 1,
+    'Бонусбуря: следующий участник из ' + pool.length + ' оставшихся'))[0];
   openChatgameOverlay(next);
 }
 
