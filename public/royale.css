@@ -139,7 +139,7 @@
 .rl-map { position: absolute; inset: 0; }
 .rl-map svg { width: 100%; height: 100%; display: block; overflow: visible; }
 
-/* тло: плейсхолдер (якщо map.png ще нема) + картинка + легке притемнення */
+/* тло: плейсхолдер (якщо жодної мапи ще нема) + картинка + легке притемнення */
 .rl-map .rl-bg-ph { fill: var(--surface-2); }
 .rl-map .rl-ph-dot { fill: rgba(var(--accent-rgb), 0.16); }
 .rl-map .rl-bg-phtxt { fill: var(--text-faint); font-family: var(--font-mono); font-size: 30px; letter-spacing: 6px; text-anchor: middle; }

@@ -20,7 +20,55 @@ const RL_SHRINK_K = 0.62, RL_SHRINK_B = 0.3; // r' = r·0.62 − 0.3 (зі ст�
 const RL_ANCHOR_R = 1.2;               // маленька зона «чіпляється» за клітинку живого гравця
 const RL_FINAL_MAX = 8;                // стільки живих (і менше) — стрімер може запустити фінал вручну
 const RL_LABEL_MAX = 30;               // до стількох живих — підписуємо ніки прямо на мапі
-const RL_MAP_SRC = '/assets/pubg/map.png';
+/* Мапи лобі: щогри випадкова з map1/map2/map3. Розширення не фіксоване:
+   слот пробує png → jpg → jpeg → webp → gif, тож стрімер кладе файл у
+   будь-якому форматі. Слот без жодного файла поступається іншому;
+   коли не лишилось жодного — лобі показує плейсхолдер. */
+const RL_MAP_SLOTS = ['map1', 'map2', 'map3'];
+const RL_MAP_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const RL_EXT_KEY = 'royaleMapExts';
+const rlMapUrl = (slot, ext) => '/assets/pubg/' + slot + '.' + ext;
+/* памʼять форматів: коли слот один раз завантажився, його розширення
+   запамʼятовується — наступні ігри не смикають неіснуючі шляхи (без 404) */
+let rlExtMemo = {};
+try { rlExtMemo = JSON.parse(localStorage.getItem(RL_EXT_KEY) || '{}') || {}; } catch (e) { rlExtMemo = {}; }
+let rlMapSrc = null;        // мапа поточної гри (переживає F5 разом зі станом)
+let rlMapQueue = [], rlMapQi = 0;   // черга кандидатів на цю гру
+function rlSlotExts(slot) {
+  const memo = rlExtMemo[slot];
+  const rest = RL_MAP_EXTS.filter(e => e !== memo);
+  return memo ? [memo].concat(rest) : rest;
+}
+function rlPickMap() {
+  /* випадковий порядок слотів: перший — мапа гри, решта підстрахують,
+     якщо файла нема */
+  const order = RL_MAP_SLOTS.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = secureRandomInt(i + 1);
+    const t = order[i]; order[i] = order[j]; order[j] = t;
+  }
+  rlMapQueue = [];
+  order.forEach(slot => rlSlotExts(slot).forEach(ext => rlMapQueue.push(rlMapUrl(slot, ext))));
+  rlMapQi = 0;
+  rlMapSrc = rlMapQueue[0];
+}
+function rlNextMapCandidate() {
+  if (rlMapQi + 1 >= rlMapQueue.length) return false;
+  rlMapSrc = rlMapQueue[++rlMapQi];
+  return true;
+}
+function rlRememberMapExt(src) {
+  const m = String(src || '').match(/([a-z0-9]+)\.([a-z]+)$/i);
+  if (!m || rlExtMemo[m[1]] === m[2]) return;
+  rlExtMemo[m[1]] = m[2];
+  try { localStorage.setItem(RL_EXT_KEY, JSON.stringify(rlExtMemo)); } catch (e) {}
+}
+function rlApplyMap() {
+  if (!rlDom || !rlDom.mapImg) return;
+  if (!rlMapSrc) rlPickMap();
+  rlDom.map.classList.remove('rl-noimg');
+  rlDom.mapImg.setAttribute('href', rlMapSrc);
+}
 
 let rlPlayers = {};       // nick -> {nick, num, col, row, alive, dying, removed, died}
 let rlZone = null;        // {cx, cy, radius, stage, next:{cx,cy,radius}|null} у клітинкових координатах (центри 0..9)
@@ -119,9 +167,16 @@ function rlBuildSvg() {
   rlSvg('rect', { x: RL_PAD, y: RL_PAD, width: M, height: M, fill: 'url(#rl-ph)' }, bg);
   const t = rlSvg('text', { x: RL_VB / 2, y: RL_VB / 2, class: 'rl-bg-phtxt' }, bg); t.textContent = 'NO MAP';
   const img = rlSvg('image', { x: RL_PAD, y: RL_PAD, width: M, height: M, preserveAspectRatio: 'xMidYMid slice', class: 'rl-bg-img' }, bg);
-  img.setAttribute('href', RL_MAP_SRC);
-  // файла ще нема — показуємо плейсхолдер, без помилок у консолі
-  img.addEventListener('error', () => map.classList.add('rl-noimg'));
+  rlDom.mapImg = img;
+  if (!rlMapSrc) rlPickMap();
+  img.setAttribute('href', rlMapSrc);
+  /* мапи нема на диску — тихо пробуємо наступну; коли скінчились кандидати,
+     показуємо плейсхолдер (без помилок у консолі) */
+  img.addEventListener('error', () => {
+    if (rlNextMapCandidate()) img.setAttribute('href', rlMapSrc);
+    else map.classList.add('rl-noimg');
+  });
+  img.addEventListener('load', () => rlRememberMapExt(rlMapSrc));
   rlSvg('rect', { x: RL_PAD, y: RL_PAD, width: M, height: M, class: 'rl-bg-dim' }, bg);
 
   // клітинки поза зоною (динамічно)
@@ -230,6 +285,7 @@ function rlResetState() {
   rlPlayers = {}; rlZone = null; rlJoinLocked = false; rlPhase = 'playing';
   rlPendingFight = null; rlWinner = null; rlNextNum = 1; rlDeathSeq = 0;
   rlRecent.clear(); rlClearRed();
+  rlPickMap(); rlApplyMap();   // кожна нова гра — інша мапа
 }
 function rlAddPlayer(nick, col, row) {
   const p = { nick, num: rlNextNum++, col, row, alive: true, dying: false, removed: false, died: 0 };
@@ -252,6 +308,7 @@ function roySaveState(force) {
       v: 2, players: rlPlayers, zone: rlZone, joinLocked: rlJoinLocked,
       phase: rlPhase === 'finished' ? 'finished' : 'playing', // shootout → playing: після F5 фінал можна запустити знову
       pendingFight: rlPendingFight, winner: rlWinner, nextNum: rlNextNum, deathSeq: rlDeathSeq, savedAt: now,
+      mapSrc: rlMapSrc,   // після F5 гра лишається на тій самій мапі
     }));
   } catch (e) {}
 }
@@ -284,6 +341,17 @@ function royLoadState() {
     rlPhase = d.phase === 'finished' ? 'finished' : 'playing';
     rlPendingFight = Array.isArray(d.pendingFight) && d.pendingFight.length ? d.pendingFight : null;
     rlWinner = (d.winner && rlPlayers[d.winner]) ? d.winner : null;
+    /* мапа гри переживає F5: приймаємо лише свій формат шляху */
+    if (typeof d.mapSrc === 'string' && /^\/assets\/pubg\/[a-z0-9]+\.[a-z]+$/i.test(d.mapSrc)) {
+      const m = d.mapSrc.match(/([a-z0-9]+)\.([a-z]+)$/i);
+      if (RL_MAP_SLOTS.indexOf(m[1]) >= 0 && RL_MAP_EXTS.indexOf(m[2].toLowerCase()) >= 0) {
+        /* збережена мапа — перший кандидат, решта лишаються підстраховкою */
+        rlPickMap();
+        rlMapQueue = [d.mapSrc].concat(rlMapQueue.filter(u => u !== d.mapSrc));
+        rlMapQi = 0; rlMapSrc = d.mapSrc;
+        rlApplyMap();
+      }
+    }
     if (rlPhase === 'finished' && !rlWinner && rlAlive().length === 1) rlWinner = rlAlive()[0].nick;
     return true;
   } catch (e) { return false; }
