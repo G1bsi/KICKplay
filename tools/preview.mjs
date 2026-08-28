@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createPlayRelay } from '../ws-play.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = parseInt(process.env.PORT) || 4321;
@@ -65,7 +66,7 @@ const MOCK_CHAT = [
   ['Гриць',        'ну шо там',             '#53fc18'],
 ];
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
 
   // Живий чат (SSE) — щоб бачити, як виглядає панель чату під навантаженням
@@ -81,6 +82,21 @@ http.createServer((req, res) => {
 
   if (url.startsWith('/api/')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+
+    // Імітація повідомлення в чаті Kick: привʼязує код зі сторінки гравця
+    // до ніка — щоб тестувати мультиплеєр без живого чату
+    if (url === '/api/mock/bind' && req.method === 'POST') {
+      let body = '';
+      req.on('data', d => body += d);
+      req.on('end', () => {
+        try {
+          const { code, nick } = JSON.parse(body);
+          const ok = playRelay.chatCode(String(nick || '').trim(), String(code || ''));
+          res.end(JSON.stringify({ ok }));
+        } catch { res.end('{"ok":false}'); }
+      });
+      return;
+    }
     if (url === '/api/raffle/state') {
       return res.end(JSON.stringify({
         joinCmd: '!призи', accepting: true,
@@ -235,7 +251,10 @@ http.createServer((req, res) => {
     return res.end('{"ok":true}');
   }
 
-  const rel  = url === '/' ? 'index.html' : url.replace(/^\/assets\//, '/');
+  // /play — сторінка гравця (у проді bot.js теж віддає її без сесії)
+  const rel  = url === '/' ? 'index.html'
+             : url === '/play' ? 'play.html'
+             : url.replace(/^\/assets\//, '/');
   const file = path.resolve(ROOT, '.' + (rel.startsWith('/') ? rel : '/' + rel));
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end('403'); }
 
@@ -247,9 +266,15 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
-}).listen(PORT, () => {
+});
+
+// Те саме реле /ws/play, що в bot.js; у моці хост приймається БЕЗ куки
+const playRelay = createPlayRelay({ server, isHostReq: () => true });
+
+server.listen(PORT, () => {
   console.log('');
   console.log('  Дизайн-харнес:  http://localhost:' + PORT);
   console.log('  ' + MOCK_PLAYERS.length + ' підставних учасників, чат сиплеться сам, пароля немає.');
+  console.log('  WS-реле /ws/play активне; бінд: POST /api/mock/bind {code,nick}.');
   console.log('');
 });

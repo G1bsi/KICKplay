@@ -1,0 +1,214 @@
+/* ══════════════════════════════════════════════════════════════
+   play.css — публічна сторінка гравця (мобільна перш за все).
+   Палітра/розміри — з tokens.css, як на панелі стрімера.
+   ══════════════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  /* сторінка не скролиться: тач-жести належать грі, не браузеру */
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hidden { display: none !important; }
+
+/* ── Шапка ─────────────────────────────────────────────────── */
+.p-top {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  z-index: var(--z-status);
+  pointer-events: none;   /* шапка висить над канвасом — тачі йдуть у гру */
+}
+.p-brand { display: flex; align-items: center; gap: var(--space-2); }
+.p-brand-badge {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-sm);
+}
+.p-brand-name { font-weight: var(--fw-black); font-size: var(--fs-md); letter-spacing: .04em; }
+.p-brand-name em { font-style: normal; color: var(--accent); }
+
+.p-reconnect {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 6px 12px;
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
+  border-radius: var(--r-full);
+  color: var(--danger);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+/* ── Спінер ────────────────────────────────────────────────── */
+.p-spin {
+  width: 14px; height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: p-rot .8s linear infinite;
+}
+@keyframes p-rot { to { transform: rotate(360deg); } }
+
+/* ── Екрани-картки (код / лобі) ────────────────────────────── */
+.p-screen {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+.p-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-2);
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+.p-label {
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.p-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  letter-spacing: .12em;
+  color: var(--on-accent);
+  background: var(--accent-fill);
+  border-radius: var(--r-lg);
+  box-shadow: var(--bloom-accent);
+  padding: var(--space-4) var(--space-5);
+}
+.p-hint { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.5; }
+.p-hint b { color: var(--accent); }
+.p-wait {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+.p-nick {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-black);
+  color: var(--accent);
+  word-break: break-all;
+}
+.p-btn {
+  min-height: 60px;   /* тач-мішень на телефоні */
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  box-shadow: var(--bloom-accent);
+}
+.p-btn:active { background: var(--accent-deep); }
+
+/* ── Гра ───────────────────────────────────────────────────── */
+.p-game { position: fixed; inset: 0; background: var(--bg); }
+#p-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* тач-шар над канвасом: усі жести — сюди */
+.p-touch { position: absolute; inset: 0; touch-action: none; }
+
+/* віртуальний джойстик — зʼявляється під пальцем на лівій половині */
+.p-stick {
+  position: absolute;
+  width: 128px; height: 128px;
+  margin: -64px 0 0 -64px;   /* центр у точці дотику */
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .05);
+  border: 2px solid var(--border-strong);
+  pointer-events: none;
+}
+.p-knob {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 60px; height: 60px;
+  margin: -30px 0 0 -30px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), .85);
+  box-shadow: var(--glow-accent);
+}
+
+/* своє HP — велике внизу по центру */
+.p-hud {
+  position: absolute;
+  left: 50%; bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(70vw, 360px);
+  display: flex; align-items: center; gap: var(--space-3);
+  pointer-events: none;
+}
+.p-hpbar {
+  flex: 1;
+  height: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+.p-hpfill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent-fill);
+  border-radius: var(--r-full);
+  transition: width var(--t-base) var(--ease-out);
+}
+.p-hpfill.low { background: var(--danger); }
+.p-hptext {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--accent);
+  min-width: 58px;
+  text-align: right;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .8);
+}
+
+/* плашка спостерігача */
+.p-spec {
+  position: absolute;
+  left: 50%; bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: var(--surface-1);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-full);
+  box-shadow: var(--glow-accent);
+  color: var(--accent);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  pointer-events: none;
+}

@@ -31,8 +31,27 @@ function esc(s) {
   if (typeof escapeHtml === 'function') return escapeHtml(s);
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+/* пул плеєрів пострілу: playSfx клонує Audio на кожен виклик, а Chrome
+   обмежує кількість WebMediaPlayer (~75) — довгий бій засмічував консоль
+   «Blocked attempt to create a WebMediaPlayer». Пул із 6 багаторазових
+   клонів дає ті самі накладені постріли без нових плеєрів. */
+let _shotPool = null, _shotPoolI = 0;
 function sfx(name, vol, rate, maxMs) {
-  try { if (typeof playSfx === 'function') playSfx(name, vol, rate, maxMs); } catch (e) {}
+  /* тимчасово, на прохання власника: у перестрілці звучать ЛИШЕ постріли */
+  if (name !== 'pubg-shot') return;
+  try {
+    const base = (typeof SFX === 'object' && SFX) ? SFX[name] : null;
+    if (!base) return;
+    if (!_shotPool) {
+      _shotPool = [];
+      for (let i = 0; i < 6; i++) _shotPool.push(base.cloneNode());
+    }
+    const a = _shotPool[_shotPoolI = (_shotPoolI + 1) % _shotPool.length];
+    a.volume = vol == null ? 0.8 : vol;
+    if (rate) a.playbackRate = rate;
+    a.currentTime = 0;
+    a.play().catch(function () {});
+  } catch (e) {}
 }
 /* Реєструємо pubg-звуки в SFX app.js, якщо їх там ще нема (щоб не правити app.js).
    playSfx мовчки ігнорує невідомі імена, тож без цього пострілів не чути. */
@@ -68,6 +87,11 @@ function frnd() {
   return _rs / 4294967296;
 }
 function fint(n) { return (frnd() * n) | 0; }
+
+/* ── Персонаж: Toon Shooter Game Kit, Character_Soldier — ОДИН на всіх.
+   Ідентифікація гравця — колір костюма (матеріал 'Character_Main'
+   перефарбовується у p.color) + кільце під ногами + нік-плашка. */
+function charKeyOf(p) { return 'soldier'; }
 
 /* ── Рельєф арени: heightAt(x, y) у СВІТОВИХ 2D-координатах бою ──
    Рельєф суто ВІЗУАЛЬНИЙ (3D-шар): бій, LOS і колізії лишаються чесним 2D.
@@ -136,6 +160,7 @@ const COLORS = ['#ff453a', '#4a9bff', '#ffd93d', '#a0ff4a', '#c77dff', '#ff8a4a'
 let root = null, cv = null, ctx = null, vw = 0, vh = 0, dpr = 1;
 let running = false, raf = 0;
 let players = [], obstacles = [], medkits = [], bullets = [], grenades = [], explosions = [], killfeed = [];
+let dmgPops = [];   // циферки урону, що вилітають з гравця: {p, dmg, t0}
 let fires = [], smokes = [];               // калюжі вогню (молотов) і димові завіси (смок)
 let spawns = [];
 let onWinnerCb = null, winnerShown = false, winnerP = null, endAt = 0;
@@ -443,7 +468,7 @@ function initPlayers(finalists) {
       color: COLORS[i % COLORS.length],
       x: s.x, y: s.y, vx: 0, vy: 0,
       aim: Math.atan2(H / 2 - s.y, W / 2 - s.x),   // дивимось у центр
-      hp: clamp(Math.round(f.startHP || 100), 30, 100), maxHP: 100,
+      hp: 100, maxHP: 100,   // на прохання власника: старт завжди зі 100, без переносу з лобі
       armor: [0, 25, 50][fint(3)],                 // броня випадкова на старті
       alive: true, kills: 0, dmg: 0,
       ammo: GUN.mag, reloading: false, reloadEnd: 0, reloadT0: 0,
@@ -456,10 +481,52 @@ function initPlayers(finalists) {
       lastHurtAt: -1e9, grenades: 1, nadeAt: 0,
       specialUsed: false,   // молотов/смок — одноразовий на бійця (баланс: бій не затягується)
       bush: null, deadAt: 0, deadAng: 0, walk: frnd() * TAU,
-      /* «характер»: агресивність, влучність, швидкість реакції */
-      persona: { aggr: 0.2 + frnd() * 0.5, acc: 0.6 + frnd() * 0.4, react: 220 + fint(260) },
+      /* памʼять про ворогів (нік → {x,y,vx,vy,at}) — оновлюється лише тим, що САМ бачив */
+      mem: new Map(),
+      /* останній ПОЧУТИЙ постріл (без ніка — «звук звідти») */
+      memNoise: null, lastNoiseAt: 0,
+      /* ухиляння під вогнем і полювання за зниклою ціллю */
+      serpUntil: 0, searchUntil: 0,
+      /* відкладена перезарядка: спершу за укриття, потім reload */
+      wantReload: false, reloadForceAt: 0,
+      /* керування глядачем із телефону (hostNet): human=true — AI вимкнений,
+         inp — останній пакет вводу {mx,my,aim,fire,at} */
+      human: false, inp: null,
+      /* «характер»: агресивність, влучність, швидкість реакції (роль призначає assignRoles) */
+      persona: { aggr: 0.2 + frnd() * 0.5, acc: 0.6 + frnd() * 0.4, react: 220 + fint(260), role: 'RUSHER', spreadMul: 1 },
     };
   });
+  assignRoles();
+}
+/* ── Архетипи: роль на бій, детерміновано від сіда ──
+   Базова четвірка перемішується (щоб у малих боях були різні), решта
+   добирає випадково — у 2-3 бійців ролі можуть збігатись, це ок. */
+function assignRoles() {
+  const ROLES = ['RUSHER', 'CAMPER', 'SNIPER', 'SURVIVOR'];
+  const bag = ROLES.slice();
+  for (let i = bag.length - 1; i > 0; i--) { const j = fint(i + 1); const s = bag[i]; bag[i] = bag[j]; bag[j] = s; }
+  for (let i = 0; i < players.length; i++) {
+    const ps = players[i].persona;
+    const role = i < bag.length ? bag[i] : ROLES[fint(ROLES.length)];
+    ps.role = role;
+    if (role === 'RUSHER') {         // пре вперед, швидка реакція, гранати з ходу
+      /* CQB-профіль: влучний і купчастий впритул — інакше рашер, що біжить
+         під перехресний вогонь кемперів/снайперів, не виграє взагалі */
+      ps.aggr = 0.62 + frnd() * 0.25; ps.react = 150 + fint(140);
+      ps.acc = 0.8 + frnd() * 0.2; ps.spreadMul = 0.88;
+      /* пуш через відкрите поле під перехресний вогонь — без броні рашер
+         не доживає до клінчу; повний бронік вирівнює вінрейт ролі */
+      players[i].armor = 50;
+    } else if (role === 'CAMPER') {  // сидить, чекає, стріляє перший здалеку
+      ps.aggr = 0.12 + frnd() * 0.14; ps.react = 240 + fint(200);
+      ps.acc = 0.72 + frnd() * 0.2; ps.spreadMul = 0.92;
+    } else if (role === 'SNIPER') {  // довгі лінії, точніший, повільніше перерішує
+      ps.aggr = 0.25 + frnd() * 0.15; ps.react = 360 + fint(240);
+      ps.acc = 0.85 + frnd() * 0.15; ps.spreadMul = 0.8;
+    } else {                         // SURVIVOR: уникає боїв, у фіналі — агресія
+      ps.aggr = 0.12 + frnd() * 0.12; ps.react = 230 + fint(200); ps.spreadMul = 1;
+    }
+  }
 }
 
 /* ── Зона ── */
@@ -522,6 +589,26 @@ function hurt(v, dmg, attacker, opts) {
   dmg = Math.max(1, Math.round(dmg));
   v.hp -= dmg;
   v.lastHurtAt = perfNow;
+  /* Ухиляння: миттєвий перпендикулярний ривок від лінії вогню (без перевищення
+     спринту — просто різка зміна напрямку) + серпантин, доки біжить до укриття */
+  if (attacker && attacker !== v && v.hp > 0 && !v.human) {
+    v.strafeSide = -v.strafeSide;
+    const ax = v.x - attacker.x, ay = v.y - attacker.y, ad = hyp(ax, ay) || 1;
+    v.vx = -ay / ad * v.strafeSide * 150;
+    v.vy = ax / ad * v.strafeSide * 150;
+    v.serpUntil = perfNow + 1200;
+    /* під вогнем реагуємо швидше за звичайну «реакцію» */
+    if (v.decideAt > perfNow + 260) v.decideAt = perfNow + 140 + fint(140);
+  }
+  /* циферка урону над головою; швидкі тики (вогонь) зливаються в одну,
+     щоб не сипався дощ одиничок */
+  for (let i = dmgPops.length - 1; i >= 0; i--)
+    if (perfNow - dmgPops[i].t0 > 900) dmgPops.splice(i, 1);   // прострочені геть
+  let pop = null;
+  for (let i = dmgPops.length - 1; i >= 0; i--)
+    if (dmgPops[i].p === v && perfNow - dmgPops[i].t0 < 280) { pop = dmgPops[i]; break; }
+  if (pop) { pop.dmg += dmg; pop.redraw = true; }
+  else { dmgPops.push({ p: v, dmg: dmg, t0: perfNow, redraw: true }); if (dmgPops.length > 24) dmgPops.shift(); }
   if (attacker) attacker.dmg += dmg;
   if (v.hp <= 0) {
     // Гарантія переможця: останній живий померти не може — нічиїх не буває.
@@ -653,6 +740,14 @@ function canSee(p, e) {
   return true;
 }
 
+/* ПАМ'ЯТЬ: запамʼятати позицію/швидкість щойно ПОБАЧЕНОГО ворога.
+   Обʼєкт на нік створюється один раз і мутується — без сміття в гарячому циклі. */
+function memRemember(p, e) {
+  let m = p.mem.get(e.nick);
+  if (!m) { m = { x: 0, y: 0, vx: 0, vy: 0, at: 0 }; p.mem.set(e.nick, m); }
+  m.x = e.x; m.y = e.y; m.vx = e.vx; m.vy = e.vy; m.at = perfNow;
+}
+
 /* точка «сховатись за o від ворога (ex,ey)» */
 function coverPoint(o, ex, ey) {
   const dx = o.x - ex, dy = o.y - ey, d = hyp(dx, dy) || 1;
@@ -688,6 +783,7 @@ function pickCover(p, ex, ey) {
 function decide(p, aliveN) {
   const now = perfNow;
   p.decideAt = now + p.persona.react + fint(180);
+  const role = p.persona.role;
 
   /* 1. Поза зоною — все інше не важливе */
   if (outsideZone(p, 14)) {
@@ -712,8 +808,9 @@ function decide(p, aliveN) {
     p.decideAt = now + 300;   // у вогні перерішуємо частіше за звичайну реакцію
     return;
   }
-  /* 2. Лікування: мало HP, не під вогнем, аптечка досяжна */
-  if (p.hp < 45 && now - p.lastHurtAt > 1600 && p.state !== 'HEAL') {
+  /* 2. Лікування: поріг за характером (SURVIVOR береже себе, RUSHER терпить довше) */
+  const healHp = role === 'SURVIVOR' ? 60 : (role === 'RUSHER' ? 40 : 45);
+  if (p.hp < healHp && now - p.lastHurtAt > 1600 && p.state !== 'HEAL') {
     let kit = null, kd = 520;
     for (let i = 0; i < medkits.length; i++) {
       const k = medkits[i];
@@ -737,14 +834,15 @@ function decide(p, aliveN) {
   }
   if (p.state === 'HEAL' && p.healKit && !p.healKit.taken) return; // не смикаємось, доки лікуємось
 
-  /* 3. Ціль: видимий ворог → пам'ять → форсована агресія */
+  /* 3. Ціль серед ВИДИМИХ: пріоритет — найменше HP, далі найближчий */
   let vis = null, vd = 1e9;
   for (let i = 0; i < players.length; i++) {
     const e = players[i];
     if (e === p || !e.alive) continue;
     if (canSee(p, e)) {
+      memRemember(p, e);                      // бачу → оновлюю памʼять
       const d = hyp(e.x - p.x, e.y - p.y);
-      if (d < vd) { vd = d; vis = e; }
+      if (!vis || e.hp < vis.hp - 8 || (e.hp < vis.hp + 8 && d < vd)) { vd = d; vis = e; }
     }
   }
   if (vis) {
@@ -769,34 +867,151 @@ function decide(p, aliveN) {
   }
 
   if (!p.target || !p.target.alive) {
-    /* нікого не знаємо: йдемо на звук пострілів або тиняємось у зоні */
-    p.state = 'ROAM';
-    if (now - lastShotHeard < 3000) setGoal(p, lastShotX + (frnd() * 2 - 1) * 80, lastShotY + (frnd() * 2 - 1) * 80);
-    else {
-      const a = frnd() * TAU, rr = frnd() * zone.r * 0.55;
-      setGoal(p, zone.cx + Math.cos(a) * rr, zone.cy + Math.sin(a) * rr);
+    /* СЛУХ: свіжий звук пострілу (і не мертва тиша >8с) — реакція за характером */
+    const noise = p.memNoise;
+    const noiseFresh = noise && now - noise.at < 6000 && now - lastShotHeard < 8000;
+    if (noiseFresh && (role === 'RUSHER' || p.persona.aggr > 0.42)) {
+      /* агресивний іде перевіряти — обережно, від укриття до укриття.
+         Укриття беремо лише БЛИЖЧЕ до звуку за нас — інакше бот вічно
+         топчеться біля свого поточного укриття й ніколи не доходить */
+      p.state = 'SEARCH';
+      p.searchUntil = now + 6000;
+      const o = pickCover(p, noise.x, noise.y);
+      const dNoise = hyp(p.x - noise.x, p.y - noise.y);
+      let hopped = false;
+      if (o && hyp(o.x - noise.x, o.y - noise.y) > 160) {
+        const cp = coverPoint(o, noise.x, noise.y);
+        /* стрибок лише в укриття, що НАБЛИЖАЄ до звуку і не є поточним —
+           інакше бот вічно топчеться за своєю ж стіною й нікуди не йде */
+        if (hyp(cp.x - noise.x, cp.y - noise.y) < dNoise - 80 &&
+            hyp(cp.x - p.x, cp.y - p.y) > 40) {
+          setGoal(p, cp.x, cp.y);
+          hopped = true;
+        }
+      }
+      if (!hopped) setGoal(p, noise.x + (frnd() * 2 - 1) * 70, noise.y + (frnd() * 2 - 1) * 70);
+      return;
     }
+    if (noiseFresh) {
+      /* боязкий: позиція за укриттям ФРОНТОМ до звуку (доворот — у стані CAMP) */
+      p.state = 'CAMP';
+      const o = pickCover(p, noise.x, noise.y);
+      if (o) { const cp = coverPoint(o, noise.x, noise.y); setGoal(p, cp.x, cp.y); }
+      else setGoal(p, clamp(p.x - (noise.x - p.x) * 0.25, 60, W - 60),
+                      clamp(p.y - (noise.y - p.y) * 0.25, 60, H - 60));
+      p.decideAt = now + 900 + fint(600);
+      return;
+    }
+    /* ГРА ВІД ЗОНИ у фіналі: край кола, спина в «мертве» поле, фронт усередину.
+       CAMPER займає край раніше за всіх. */
+    if ((aliveN <= 3 && zone.r < 300) || (role === 'CAMPER' && (aliveN <= 4 || zone.r < 430))) {
+      p.state = 'EDGE';
+      const a = Math.atan2(p.y - zone.cy, p.x - zone.cx) + (frnd() * 2 - 1) * 0.4;
+      const rr = Math.max(40, zone.r - 55);
+      setGoal(p, zone.cx + Math.cos(a) * rr, zone.cy + Math.sin(a) * rr);
+      p.decideAt = now + 1200 + fint(800);
+      return;
+    }
+    if (role === 'CAMPER') {
+      /* кемпер сідає за укриття (між собою і центром — звідти зазвичай приходять) */
+      p.state = 'CAMP';
+      const ex = noise ? noise.x : zone.cx, ey = noise ? noise.y : zone.cy;
+      const o = pickCover(p, ex, ey);
+      if (o) { const cp = coverPoint(o, ex, ey); setGoal(p, cp.x, cp.y); }
+      else {
+        const a = frnd() * TAU;
+        setGoal(p, zone.cx + Math.cos(a) * zone.r * 0.5, zone.cy + Math.sin(a) * zone.r * 0.5);
+      }
+      p.decideAt = now + 1600 + fint(900);
+      return;
+    }
+    if (role === 'SURVIVOR') {
+      /* кружляє по краю зони, подалі від мʼясорубки в центрі */
+      p.state = 'ROAM';
+      const a = Math.atan2(p.y - zone.cy, p.x - zone.cx) + 0.6 + frnd() * 0.5;
+      setGoal(p, zone.cx + Math.cos(a) * zone.r * 0.72, zone.cy + Math.sin(a) * zone.r * 0.72);
+      return;
+    }
+    if (role === 'SNIPER') {
+      /* шукає відкриту позицію з довгими лініями обстрілу */
+      p.state = 'ROAM';
+      let bx = zone.cx, by = zone.cy, ok = false;
+      for (let k = 0; k < 4 && !ok; k++) {
+        const a = frnd() * TAU, rr = zone.r * (0.45 + frnd() * 0.3);
+        bx = zone.cx + Math.cos(a) * rr; by = zone.cy + Math.sin(a) * rr;
+        ok = inOpenField({ x: bx, y: by });
+      }
+      setGoal(p, bx, by);
+      return;
+    }
+    p.state = 'ROAM';
+    const a = frnd() * TAU, rr = frnd() * zone.r * 0.55;
+    setGoal(p, zone.cx + Math.cos(a) * rr, zone.cy + Math.sin(a) * rr);
     return;
   }
 
   const t = p.target;
   const los = canSee(p, t);
   p.losToTarget = los;
-  if (los) { p.noLosSince = 0; } else if (!p.noLosSince) p.noLosSince = now;
+  if (los) { memRemember(p, t); p.noLosSince = 0; } else if (!p.noLosSince) p.noLosSince = now;
   const noLosFor = p.noLosSince ? now - p.noLosSince : 0;
   const d = hyp(t.x - p.x, t.y - p.y);
-  const underFire = now - p.lastHurtAt < 1300;
-  /* настрій: характер + добивання + пізня гра */
+  /* RUSHER має «коротку памʼять страху» — швидше забуває, що по ньому стріляли */
+  const underFire = now - p.lastHurtAt < (role === 'RUSHER' ? 650 : 1300);
+  /* настрій: характер + роль + добивання + пізня гра */
   const mood = p.persona.aggr
     + (aliveN <= 2 ? 0.22 : 0)
     + (now < aggroUntil ? 0.55 : 0)
     + (t.hp < 35 ? 0.4 : 0)
-    + (zone.r < 230 ? 0.35 : 0);
+    + (zone.r < 230 ? 0.35 : 0)
+    + (role === 'RUSHER' ? 0.25 : 0)
+    + (role === 'SURVIVOR' ? (aliveN <= 2 ? 0.55 : -0.3) : 0)
+    + (role === 'CAMPER' ? -0.2 : 0);
 
   if (los) {
-    if (mood > 0.9 || d > 470) {
+    /* ВІДСТУП ПО HP: мало здоровʼя і ворог у контакті → рвемо LOS через укриття */
+    if (p.hp < 35 && d < 480) {
+      p.state = 'SEEK_COVER';
+      p.coverOb = pickCover(p, t.x, t.y);
+      if (p.coverOb) { const cp = coverPoint(p.coverOb, t.x, t.y); setGoal(p, cp.x, cp.y); }
+      else setGoal(p, clamp(p.x + (p.x - t.x) / (d || 1) * 200, 60, W - 60),
+                      clamp(p.y + (p.y - t.y) / (d || 1) * 200, 60, H - 60));
+      /* смок між собою і переслідувачем — прикриває відхід на лікування */
+      if (specialOk(p, aliveN) && d < 460 && frnd() < 0.85) {
+        const dd = d || 1, k = Math.min(90, dd * 0.4);
+        throwNade(p, p.x + (t.x - p.x) / dd * k, p.y + (t.y - p.y) / dd * k, 'smoke');
+      }
+      return;
+    }
+    /* SURVIVOR не лізе в перестрілку, поки бійців багато — тихо зникає */
+    if (role === 'SURVIVOR' && aliveN > 2 && d > 260 && !underFire && frnd() < 0.6) {
+      p.coverOb = pickCover(p, t.x, t.y);
+      if (p.coverOb) {
+        p.state = 'SEEK_COVER';
+        const cp = coverPoint(p.coverOb, t.x, t.y);
+        setGoal(p, cp.x, cp.y);
+        return;
+      }
+    }
+    /* SNIPER відступає при зближенні — тримає свою дистанцію */
+    if (role === 'SNIPER' && d < 250 && mood < 1.1) {
+      p.coverOb = pickCover(p, t.x, t.y);
+      if (p.coverOb) {
+        p.state = 'SEEK_COVER';
+        const cp = coverPoint(p.coverOb, t.x, t.y);
+        setGoal(p, cp.x, cp.y);
+        return;
+      }
+    }
+    /* CAMPER стріляє перший здалеку і не зривається в пуш без крайньої потреби */
+    if ((mood > 0.9 || d > 470) && !(role === 'CAMPER' && d < 540 && mood < 1.15)) {
       p.state = 'PUSH';
       setGoal(p, t.x, t.y);
+      /* RUSHER: фраг з ходу — з упередженням по вектору руху цілі */
+      if (role === 'RUSHER' && p.grenades > 0 && now > p.nadeAt && d > 130 && d < 360 && frnd() < 0.5) {
+        const fdur = clamp(d / 300, 0.7, 1.15);
+        throwNade(p, clamp(t.x + t.vx * fdur, 40, W - 40), clamp(t.y + t.vy * fdur, 40, H - 40), 'frag');
+      }
     } else if (underFire && p.hp < 72 && frnd() < 0.75) {
       p.state = 'SEEK_COVER';
       p.coverOb = pickCover(p, t.x, t.y);
@@ -814,32 +1029,60 @@ function decide(p, aliveN) {
       p.state = 'ENGAGE';
     }
   } else {
-    /* кидок по засілому ворогу — ТУТ вибирається тип: frag ~50% /
-       молотов ~25% (викурити з укриття — кидаємо В ЗОНУ, де сидить ціль) /
-       смок ~25% (пуш ворога в укритті: завіса на підході, йдемо крізь дим) */
-    if (noLosFor > 1800 && d > 120 && d < 380 && now > p.nadeAt && frnd() < 0.55) {
-      const ntx = p.lastSeenX + (frnd() * 2 - 1) * 30, nty = p.lastSeenY + (frnd() * 2 - 1) * 30;
+    /* ПАМ'ЯТЬ: передбачена точка = остання бачена позиція + вектор швидкості */
+    const m = p.mem.get(t.nick);
+    let px = p.lastSeenX, py = p.lastSeenY;
+    if (m) {
+      const lag = Math.min(1200, now - m.at) / 1000;
+      px = clamp(m.x + m.vx * lag, 40, W - 40);
+      py = clamp(m.y + m.vy * lag, 40, H - 40);
+      if (solidAt(px, py, PR)) { px = m.x; py = m.y; }   // передбачення вперлось у стіну
+    }
+    const dMem = hyp(px - p.x, py - p.y);
+    /* РОЗУМНІ ГРАНАТИ по засілому: молотов — ЗА укриття по памʼяті (ціль сидить),
+       фраг — з упередженням по вектору руху, смок — завіса для пушу */
+    const nadeReady = noLosFor > (role === 'RUSHER' ? 900 : 1800) && dMem > 120 && dMem < 380 && now > p.nadeAt;
+    if (nadeReady && frnd() < (role === 'RUSHER' ? 0.7 : 0.55)) {
+      const still = m && hyp(m.vx, m.vy) < 30;   // за памʼяттю ціль не рухалась — сидить
       const roll = frnd();
-      if (roll < 0.5) { if (p.grenades > 0) throwNade(p, ntx, nty, 'frag'); }
-      else if (roll < 0.75) { if (specialOk(p, aliveN)) throwNade(p, ntx, nty, 'molotov'); }
-      else if (specialOk(p, aliveN)) {
+      if (still && roll < (role === 'CAMPER' ? 0.55 : 0.35) && specialOk(p, aliveN)) {
+        throwNade(p, px, py, 'molotov');         // викурювання кемпера з укриття
+      } else if (roll < 0.7) {
+        if (p.grenades > 0) {
+          const fdur = clamp(dMem / 300, 0.7, 1.15);
+          const lvx = m ? m.vx : 0, lvy = m ? m.vy : 0;
+          throwNade(p, clamp(px + lvx * fdur, 40, W - 40), clamp(py + lvy * fdur, 40, H - 40), 'frag');
+        }
+      } else if (specialOk(p, aliveN)) {
         /* смок — на пів-дорозі до укриття ворога: за завісою і пушимо */
-        throwNade(p, p.x + (ntx - p.x) * 0.6, p.y + (nty - p.y) * 0.6, 'smoke');
+        throwNade(p, p.x + (px - p.x) * 0.6, p.y + (py - p.y) * 0.6, 'smoke');
       }
     }
     const nearCover = p.coverOb && p.coverOb.alive && hyp(p.coverOb.x - p.x, p.coverOb.y - p.y) < 120;
-    if (noLosFor > 3200 || mood > 0.85) {
+    if ((role === 'CAMPER' || role === 'SNIPER') && mood < 0.95 &&
+        (nearCover || (p.coverOb = pickCover(p, px, py)))) {
+      /* терплячі архетипи не бігають за зниклим — чекають на визирці */
+      p.state = 'PEEK';
+      p.peekPhase = 0; p.peekAt = now + 450 + fint(650);
+    } else if (noLosFor > 3200 || mood > 0.85) {
       /* ворог довго сидить — обходимо з флангу */
       p.state = 'FLANK';
-      const ang = Math.atan2(p.lastSeenY - p.y, p.lastSeenX - p.x) + p.peekSide * 1.25;
-      setGoal(p, clamp(p.lastSeenX - Math.cos(ang) * 240, 60, W - 60),
-                 clamp(p.lastSeenY - Math.sin(ang) * 240, 60, H - 60));
-    } else if (nearCover || (p.coverOb = pickCover(p, p.lastSeenX, p.lastSeenY))) {
+      const ang = Math.atan2(py - p.y, px - p.x) + p.peekSide * 1.25;
+      setGoal(p, clamp(px - Math.cos(ang) * 240, 60, W - 60),
+                 clamp(py - Math.sin(ang) * 240, 60, H - 60));
+    } else if (noLosFor > 600) {
+      /* ПОЛЮВАННЯ: до передбаченої точки заходимо ЗБОКУ, не в лоб через укриття */
+      p.state = 'SEARCH';
+      p.searchUntil = now + 6000;
+      const dxs = px - p.x, dys = py - p.y, ds = hyp(dxs, dys) || 1;
+      setGoal(p, clamp(px - dys / ds * p.peekSide * 110, 60, W - 60),
+                 clamp(py + dxs / ds * p.peekSide * 110, 60, H - 60));
+    } else if (nearCover || (p.coverOb = pickCover(p, px, py))) {
       p.state = 'PEEK';
       p.peekPhase = 0; p.peekAt = now + 450 + fint(650);
     } else {
-      p.state = 'PUSH';                      // укриттів нема — просто йдемо
-      setGoal(p, p.lastSeenX, p.lastSeenY);
+      p.state = 'PUSH';                      // щойно зник і укриттів нема — дотискаємо
+      setGoal(p, px, py);
     }
   }
 }
@@ -872,9 +1115,16 @@ function followGoal(p, dt, sprint) {
   } else { p.path = null; }
   const d = hyp(tx - p.x, ty - p.y) || 1;
   const sp = sprint ? 150 : 115;                     // px/с (повільніше — глядач встигає стежити)
+  let ddx = (tx - p.x) / d, ddy = (ty - p.y) / d;
+  /* серпантин після влучання: напрямок «гойдається», модуль швидкості той самий */
+  if (p.serpUntil > perfNow) {
+    const a = Math.sin(perfNow * 0.012 + p.idx * 2.1) * 0.75;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const nx = ddx * ca - ddy * sa; ddy = ddx * sa + ddy * ca; ddx = nx;
+  }
   const k = 1 - Math.exp(-dt * 6);                   // інерція розгону
-  p.vx += ((tx - p.x) / d * sp - p.vx) * k;
-  p.vy += ((ty - p.y) / d * sp - p.vy) * k;
+  p.vx += (ddx * sp - p.vx) * k;
+  p.vy += (ddy * sp - p.vy) * k;
 }
 /* колізії: гравець ↔ перешкоди ↔ гравці ↔ межі світу */
 function resolveCollisions(p) {
@@ -914,7 +1164,11 @@ function spreadOf(p, d) {
   const moving = hyp(p.vx, p.vy) / 235;
   /* штраф першої секунди контакту — «реакція» замість аімбота */
   const fresh = perfNow - p.firstLosAt < 650 ? 0.13 : 0;
-  return 0.09 + moving * 0.11 + p.recoil + (d / 900) * 0.14 + fresh;
+  /* RUSHER стріляє на бігу без великого штрафу (CQB-вишкіл) — інакше
+     роль, що завжди рухається, програє кожну дуель стоячим стрільцям */
+  const movK = p.persona.role === 'RUSHER' ? 0.045 : 0.11;
+  /* архетипний множник: снайпер купчастіший, рашер трохи «поливає» */
+  return (0.09 + moving * movK + p.recoil + (d / 900) * 0.14 + fresh) * (p.persona.spreadMul || 1);
 }
 function fire(p) {
   const now = perfNow;
@@ -922,6 +1176,19 @@ function fire(p) {
   p.recoil = Math.min(0.28, p.recoil + 0.025);
   lastShotHeard = now; lastShotX = p.x; lastShotY = p.y;
   if (now - lastShotSfx > 125) { lastShotSfx = now; sfx('pubg-shot', 0.35); } // ≤8 пострілів/с у звуці
+  /* СЛУХ: постріл чутно в радіусі ~650. Хто НЕ бачить стрільця — запамʼятовує
+     лише «звук звідти» (без ніка). Троттл раз на 400мс — не по кожній кулі. */
+  if (now - p.lastNoiseAt > 400) {
+    p.lastNoiseAt = now;
+    for (let i = 0; i < players.length; i++) {
+      const q = players[i];
+      if (q === p || !q.alive || q.human) continue;
+      if (hyp(q.x - p.x, q.y - p.y) > 650) continue;
+      if (canSee(q, p)) continue;              // бачить сам — звук нічого не додає
+      if (!q.memNoise) q.memNoise = { x: 0, y: 0, at: 0 };
+      q.memNoise.x = p.x; q.memNoise.y = p.y; q.memNoise.at = now;
+    }
+  }
   const t = p.target;
   const d = t ? hyp(t.x - p.x, t.y - p.y) : 300;
   /* упередження за швидкістю цілі — краще у влучніших персонажів */
@@ -936,24 +1203,45 @@ function fire(p) {
     vx: Math.cos(ang) * GUN.speed, vy: Math.sin(ang) * GUN.speed,
     owner: p, traveled: 0, dead: false,
   });
-  if (p.ammo <= 0) startReload(p);
+  if (p.ammo <= 0) requestReload(p);
 }
 function startReload(p) {
   if (p.reloading) return;
   p.reloading = true; p.reloadT0 = perfNow; p.reloadEnd = perfNow + GUN.reload;
   p.burstLeft = 0;
+  p.wantReload = false;
+}
+/* Перезарядка ЗА укриттям: якщо ворог тримає нас у прицілі — спершу крок за
+   найближче укриття, reload стартує в combat(), коли LOS розірвано (або по
+   таймауту-страховці, щоб не бігати вічно з пустим магазином). */
+function requestReload(p) {
+  if (p.reloading || p.wantReload) return;
+  const t = p.target;
+  if (p.human || !t || !t.alive || !canSee(p, t)) { startReload(p); return; }
+  const o = pickCover(p, t.x, t.y);
+  if (!o) { startReload(p); return; }        // чисте поле — краще перезарядитись одразу
+  p.wantReload = true;
+  p.reloadForceAt = perfNow + 1200;
+  p.state = 'SEEK_COVER';
+  p.coverOb = o;
+  const cp = coverPoint(o, t.x, t.y);
+  setGoal(p, cp.x, cp.y);
+  p.decideAt = perfNow + 600;
 }
 /* бойова частина кадру: доворот прицілу + черги */
 function combat(p, dt) {
   const t = p.target, now = perfNow;
   if (p.reloading && now >= p.reloadEnd) { p.reloading = false; p.ammo = GUN.mag; }
   p.recoil = Math.max(0, p.recoil - dt * 0.09);
+  /* відкладена перезарядка: сховались / ворог зник / вийшов таймаут-страховка */
+  if (p.wantReload && !p.reloading &&
+      (now >= p.reloadForceAt || !t || !t.alive || !canSee(p, t))) startReload(p);
   if (!t || !t.alive || p.healUntil) return;
   const los = canSee(p, t);
   if (los && !p.hadLos) p.firstLosAt = now;   // ціль щойно з'явилась у прицілі
   p.hadLos = los;
   p.losToTarget = los;
-  if (los) { p.lastSeenX = t.x; p.lastSeenY = t.y; p.lastSeenAt = now; p.noLosSince = 0; }
+  if (los) { memRemember(p, t); p.lastSeenX = t.x; p.lastSeenY = t.y; p.lastSeenAt = now; p.noLosSince = 0; }
   const d = hyp(t.x - p.x, t.y - p.y);
   const want = los ? Math.atan2(t.y - p.y, t.x - p.x)
                    : Math.atan2(p.lastSeenY - p.y, p.lastSeenX - p.x);
@@ -962,12 +1250,42 @@ function combat(p, dt) {
   if (!los && !p.reloading && p.ammo < 10) startReload(p);
   if (!los || p.reloading || d > GUN.range) return;
   if (Math.abs(angDiff(p.aim, want)) > 0.14) return;
-  if (p.ammo <= 0) { startReload(p); return; }
+  if (p.ammo <= 0) { requestReload(p); return; }
   if (now < p.burstRestUntil || now < p.nextShotAt) return;
   if (p.burstLeft <= 0) p.burstLeft = 3 + fint(4);      // черга 3–6
   fire(p);
   p.burstLeft--; p.nextShotAt = now + GUN.rof;
   if (p.burstLeft <= 0) p.burstRestUntil = now + 520 + fint(650);
+}
+
+/* ── Керування людиною (глядач із телефону через hostNet) ──
+   Чесність: та сама швидкість, що в бота (без спринт-буста), стрільба через
+   той самий тракт fire/startReload (rof/ammo/reload не обійти), колізії/зона/
+   урон — спільний код у update(). AI для такого бійця повністю вимкнений. */
+function humanControl(p, dt) {
+  const now = perfNow, inp = p.inp;
+  /* канал лікування руками не тримаємо — аптечка лишається на землі */
+  if (p.healUntil) { p.healUntil = 0; p.healKit = null; }
+  /* fire() без цілі стріляє строго по p.aim — інакше цілився б у стару AI-ціль */
+  p.target = null; p.losToTarget = false; p.hadLos = false;
+  const m = hyp(inp.mx, inp.my);
+  const k = 1 - Math.exp(-dt * 6);              // та сама інерція розгону, що в followGoal
+  if (m > 0.05) {
+    p.vx += (inp.mx / m * 115 - p.vx) * k;      // 115 — швидкість бота без спринту
+    p.vy += (inp.my / m * 115 - p.vy) * k;
+  } else { p.vx *= 0.8; p.vy *= 0.8; }
+  p.x += p.vx * dt; p.y += p.vy * dt;
+  p.walk += hyp(p.vx, p.vy) * dt * 0.05;
+  p.aim = inp.aim;
+  if (p.reloading && now >= p.reloadEnd) { p.reloading = false; p.ammo = GUN.mag; }
+  p.recoil = Math.max(0, p.recoil - dt * 0.09);
+  if (inp.fire) {
+    if (p.ammo <= 0) startReload(p);
+    else if (!p.reloading && now >= p.nextShotAt) {
+      fire(p);
+      p.nextShotAt = now + GUN.rof;
+    }
+  }
 }
 
 /* покадрова поведінка гравця */
@@ -978,6 +1296,11 @@ function updatePlayer(p, dt, aliveN) {
   for (let i = 0; i < obstacles.length; i++) {
     const o = obstacles[i];
     if (o.type === 'bush' && o.alive && hyp(o.x - p.x, o.y - p.y) < o.r - 4) { p.bush = o; break; }
+  }
+  if (p.human) {
+    if (p.inp && now - p.inp.at <= 1200) { humanControl(p, dt); return; }
+    /* ввід протух (лаг/пішов) → бот плавно перехоплює з нового рішення */
+    p.human = false; p.decideAt = 0;
   }
   /* канал лікування: стоїмо 2с; збили — аптечка лишається */
   if (p.healUntil) {
@@ -998,15 +1321,40 @@ function updatePlayer(p, dt, aliveN) {
   const t = p.target;
   switch (p.state) {
     case 'ENGAGE': {
-      /* стрейф боком, тримаємо дистанцію */
+      /* стрейф боком, тримаємо СВОЮ дистанцію (архетипи різні) */
       if (now > p.strafeAt) { p.strafeAt = now + 700 + fint(800); p.strafeSide = -p.strafeSide; }
       if (t && t.alive) {
+        const role = p.persona.role;
         const d = hyp(t.x - p.x, t.y - p.y) || 1;
         const px = -(t.y - p.y) / d, py = (t.x - p.x) / d;
-        let gx = p.x + px * p.strafeSide * 70, gy = p.y + py * p.strafeSide * 70;
-        if (d > 450) { gx += (t.x - p.x) / d * 120; gy += (t.y - p.y) / d * 120; }
-        else if (d < 210) { gx -= (t.x - p.x) / d * 90; gy -= (t.y - p.y) / d * 90; } // відступ: не зближуємось даром
+        const amp = role === 'CAMPER' ? 34 : 70;      // кемпер майже не міняє позицію
+        let gx = p.x + px * p.strafeSide * amp, gy = p.y + py * p.strafeSide * amp;
+        const far = role === 'SNIPER' ? 520 : 450;
+        const near = role === 'RUSHER' ? 150 : (role === 'SNIPER' ? 300 : 210);
+        if (d > far) { gx += (t.x - p.x) / d * 120; gy += (t.y - p.y) / d * 120; }
+        else if (d < near) {                          // відступ: не зближуємось даром
+          const back = role === 'SNIPER' ? 130 : 90;
+          gx -= (t.x - p.x) / d * back; gy -= (t.y - p.y) / d * back;
+        }
         setGoal(p, gx, gy);
+      }
+      break;
+    }
+    case 'SEARCH':
+      /* полювання за зниклою ціллю / перевірка звуку */
+      sprint = true;
+      /* без живої цілі losToTarget може лишитись протухлим true — не фліпаємо */
+      if (p.losToTarget && t && t.alive) { p.state = 'ENGAGE'; p.decideAt = 0; }
+      else if (now > p.searchUntil) { p.target = null; p.state = 'ROAM'; p.decideAt = 0; }
+      else if (hyp(p.goalX - p.x, p.goalY - p.y) < 18) p.decideAt = 0;  // кут зачищено — далі
+      break;
+    case 'CAMP':
+    case 'EDGE': {
+      /* сидимо на позиції; без цілі — фронт до загрози (звук) або всередину зони */
+      if (hyp(p.goalX - p.x, p.goalY - p.y) < 14 && (!t || !t.alive)) {
+        const nz = p.memNoise && now - p.memNoise.at < 6000;
+        const fx = nz ? p.memNoise.x : zone.cx, fy = nz ? p.memNoise.y : zone.cy;
+        p.aim = lerpAng(p.aim, Math.atan2(fy - p.y, fx - p.x), Math.min(1, dt * 4));
       }
       break;
     }
@@ -1107,6 +1455,9 @@ function updateBullets(dt) {
         const k = clamp(1 - (dist - 180) / 700, 0.5, 1);
         const head = frnd() < 0.08;
         let dmg = (6 + frnd() * 3) * k * (head ? 2 : 1);
+        /* CQB-бонус рашера: впритул його черга боляча — роль виграє клінч,
+           який сама ж і створює (інакше вінрейт рашера просідає до ~10%) */
+        if (b.owner && b.owner.persona.role === 'RUSHER' && dist < 220) dmg *= 1.25;
         for (let q = 0; q < 5; q++)
           addPart(2, hx, hy, (frnd() * 2 - 1) * 150, (frnd() * 2 - 1) * 150, 0.4, 2, '#b01515');
         if (frnd() < 0.3) decalBlood(hx, hy, 0.6);
@@ -1618,6 +1969,32 @@ function drawPlayer(p) {
 }
 
 /* нік + смужки HP/броні — в ЕКРАННИХ координатах, щоб читались на будь-якому зумі */
+/* Колір циферки урону: дрібний — білий, відчутний — жовтий, жирний — червоний */
+function popColor(d) { return d >= 35 ? '#ff6b57' : (d >= 20 ? '#ffd93d' : '#ffffff'); }
+const POP_MS = 850;   // життя циферки: злет + розчинення
+function drawPops2D() {
+  if (!dmgPops.length) return;
+  const z = cam.z;
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  for (let i = 0; i < dmgPops.length; i++) {
+    const pp = dmgPops[i], age = (perfNow - pp.t0) / POP_MS;
+    if (age >= 1) continue;
+    const sx = (pp.p.x - cam.x) * z + vw / 2;
+    const sy = (pp.p.y - cam.y) * z + vh / 2 - (PR + 26) * z - age * 34;
+    if (sx < -40 || sx > vw + 40 || sy < -40 || sy > vh + 40) continue;
+    ctx.globalAlpha = age < 0.6 ? 1 : 1 - (age - 0.6) / 0.4;
+    const fs2 = Math.round((pp.dmg >= 35 ? 21 : 17) * Math.min(1.4, Math.max(0.8, z)));
+    ctx.font = '800 ' + fs2 + 'px "Roboto Mono", monospace';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.strokeText('-' + pp.dmg, sx, sy);
+    ctx.fillStyle = popColor(pp.dmg);
+    ctx.fillText('-' + pp.dmg, sx, sy);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
 function drawLabels() {
   const z = cam.z;
   ctx.save();
@@ -1734,6 +2111,7 @@ function render() {
   drawZone(vL, vR, vT, vB);
   ctx.restore();
   drawLabels();
+  drawPops2D();
   /* віньєтка — кінематографічність */
   const vg = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.45, vw / 2, vh / 2, Math.max(vw, vh) * 0.75);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
@@ -1954,6 +2332,12 @@ function showFlyHint() {
   if (flyHintTimer) clearTimeout(flyHintTimer);
   flyHintTimer = setTimeout(function () { el.classList.remove('show'); flyHintTimer = 0; }, 4000);
 }
+/* глядач почав керувати польотом — підказка своє відпрацювала, ховаємо одразу */
+function hideFlyHint() {
+  if (flyHintTimer) { clearTimeout(flyHintTimer); flyHintTimer = 0; }
+  const el = document.getElementById('so-flyhint');
+  if (el) el.classList.remove('show');
+}
 function flyRequestLock() {
   /* pointer lock може впасти (прихована вкладка, політика браузера) —
      тоді працює drag-look фолбек, режим від цього не залежить */
@@ -1988,21 +2372,25 @@ function flyStop(toAuto) {
   updFlyBtn(); updOverviewBtn();
 }
 function flyLook(mx, my) {
+  hideFlyHint();
   fly.yaw += mx * 0.0022;
   fly.pitch = clamp(fly.pitch - my * 0.0022, -FLY_PITCH_MAX, FLY_PITCH_MAX);
 }
 /* true → клавіша належить польоту (хоткеї камер ◀▶/V не зачіпаємо) */
 function flyKey(code, down) {
+  let took = true;
   switch (code) {
-    case 'KeyW': fly.kW = down; return true;
-    case 'KeyA': fly.kA = down; return true;
-    case 'KeyS': fly.kS = down; return true;
-    case 'KeyD': fly.kD = down; return true;
-    case 'Space': fly.kUp = down; return true;
-    case 'KeyC': case 'ControlLeft': case 'ControlRight': fly.kDn = down; return true;
-    case 'ShiftLeft': case 'ShiftRight': fly.kBoost = down; return true;
+    case 'KeyW': fly.kW = down; break;
+    case 'KeyA': fly.kA = down; break;
+    case 'KeyS': fly.kS = down; break;
+    case 'KeyD': fly.kD = down; break;
+    case 'Space': fly.kUp = down; break;
+    case 'KeyC': case 'ControlLeft': case 'ControlRight': fly.kDn = down; break;
+    case 'ShiftLeft': case 'ShiftRight': fly.kBoost = down; break;
+    default: took = false;
   }
-  return false;
+  if (took && down) hideFlyHint();
+  return took;
 }
 function flyUpdate(dt) {
   const spd = 260 * fly.speedMul * (fly.kBoost ? 2.6 : 1);
@@ -2046,15 +2434,117 @@ let groundDirty3D = true;
 const W2 = W / 2, H2 = H / 2;
 const TR3N = 40, SM3N = 36, EX3N = 6, GR3N = 6;   // розміри пулів (жодних алокацій у кадрі)
 const FI3N = 3, SK3N = 3;   // одночасні калюжі вогню / димові завіси у 3D
-const FTON = 8, SPUF = 9;   // язиків полум'я на калюжу / спрайтів на хмару диму
+const FTON = 8, SPUF = 21;  // язиків полум'я на калюжу / сфер-клубків на хмару диму
 
-/* ── Палітра сухого степу (лоуполі-земля): бруд / суха трава / пісок.
-   Тони близькі й теплі — плями читаються, але не рябить під фасетками. */
-/* тони приглушені й зведені близько: насичена оливка з overview рябіла
-   «камуфляжем» — тепер глибокі спокійні хакі, бруд і трава майже тон-у-тон,
-   пісок лише трохи світліший (м'які проплішини, не плями) */
-const TERRA_DIRT = '#6e6247', TERRA_GRASS = '#68704a', TERRA_SAND = '#94875f';
-const TERRA_FAR = '#786f4e';   // базовий тон дальньої землі — між травою і піском
+/* ══ БІОМИ ══ Мапа лобі вибирає біом фіналу (royale.js передає opts.biome:
+   map1 → forest, map2 → desert, map3 → winter). Прямий RSO.start без
+   опції — ліс. Все біомне зібрано тут: палітра землі (три тони + стежка),
+   туман/небо/дальня земля, набір моделей на логічні слоти і периметр.
+   Моделі вантажаться ЛІНИВО лише для активного біому (loadModels3D). */
+/* Пропси Toon Shooter Game Kit — «база» промо-рендера: контейнери, споруди,
+   водонапірка, ліхтарі, коробки, розбита машина, паркани. ОДНАКОВІ в усіх
+   біомах (стиль кіта самодостатній), домішуються в models кожного біому. */
+const TOON_PROPS = {
+  cont1: 'toon/container.glb', cont2: 'toon/containerlong.glb',
+  struct1: 'toon/struct1.glb', struct2: 'toon/struct2.glb',
+  struct3: 'toon/struct3.glb', struct4: 'toon/struct4.glb',
+  wtank: 'toon/watertank.glb', slight: 'toon/light.glb',
+  cone: 'toon/cone.glb', pallet: 'toon/pallet.glb',
+  boxes1: 'toon/boxes1.glb', boxes2: 'toon/boxes2.glb',
+  boxes3: 'toon/boxes3.glb', boxes4: 'toon/boxes4.glb',
+  car: 'toon/car.glb', tires: 'toon/tires.glb',
+  planks: 'toon/planks.glb', tank: 'toon/tank.glb',
+  keydec: 'toon/key.glb', fencem: 'toon/metalfence.glb',
+};
+function withToon(models) { for (const k in TOON_PROPS) models[k] = TOON_PROPS[k]; return models; }
+const BIOMES = {
+  /* ліс — база: соковите зелене поле під ясним теплим небом (промо-настрій);
+     дерева арени — тунові Tree_1-4 кіта, підлісок — Stylized Nature MegaKit */
+  forest: {
+    key: 'forest',
+    dirt: '#8a7050', grass: '#5fa53e', sand: '#8fa74b', far: '#569b3c',
+    path: '#a8895b', pathHalf: 30, pathRocks: 18,
+    fog: '#dbe8d0', fogGame: 0.00030, fogOver: 0.00008,
+    sky: ['#6fb2e4', '#a9d3ec', '#e2efdd'],
+    hemi: ['#d8e9f8', '#5d7c46'],
+    sun: '#fff3d6',
+    treeKeys: ['tree', 'tree2', 'tree3', 'tree4'],
+    models: withToon({
+      tree: 'toon/tree1.glb', tree2: 'toon/tree2.glb', tree3: 'toon/tree3.glb', tree4: 'toon/tree4.glb',
+      /* укриття-«кущ» — стос шин кіта: волохатий nature-кущ вибивався зі стилю */
+      bush: 'toon/tires.glb',
+      rock1: 'nature/rock1.glb', rock2: 'nature/rock2.glb',
+      grass1: 'nature/grass1.glb', grass2: 'nature/grass2.glb',
+      fern: 'nature/fern.glb', clover: 'nature/clover.glb',
+      flower1: 'nature/flower1.glb', flower2: 'nature/flower2.glb',
+      mushroom: 'nature/mushroom.glb',
+      pebble1: 'nature/pebble1.glb', pebble2: 'nature/pebble2.glb',
+      path1: 'nature/path1.glb', path2: 'nature/path2.glb',
+      log1: 'nature/dead2.glb', log2: 'nature/dead4.glb',
+      tree1far: 'nature/tree1far.glb', tree2far: 'nature/tree2far.glb', tree3far: 'nature/tree3far.glb',
+    }),
+  },
+  /* пустеля: та сама тун-база, але суха жовто-пісочна земля, мертві дерева */
+  desert: {
+    key: 'desert',
+    dirt: '#b9945a', grass: '#cfab63', sand: '#e2c684',
+    far: '#c9a55f',
+    path: '#97907f', pathHalf: 26, pathRocks: 34,   // сіра камʼяниста стежка, бруківка щільніша
+    noiseSX: 0.0016, noiseSZ: 0.0052,   // витягнутий шум — смуги читаються як хвилі дюн
+    fog: '#e2d4b2', fogGame: 0.00036, fogOver: 0.00010,
+    sky: ['#8fb0d4', '#d9c491', '#ecdcae'],
+    hemi: ['#eee0c4', '#8a7a52'],
+    sun: '#ffedc4',
+    treeKeys: ['tree', 'tree2', 'tree3', 'tree4', 'tree5'],
+    models: withToon({
+      tree: 'nature/dead1.glb', tree2: 'nature/twist2.glb', tree3: 'nature/dead3.glb',
+      tree4: 'nature/dead5.glb', tree5: 'nature/twist4.glb',
+      bush: 'toon/tires.glb',
+      rock1: 'nature/rockdes1.glb', rock2: 'nature/rockdes2.glb',
+      grass1: 'nature/grassdry1.glb', grass2: 'nature/grassdry2.glb',
+      plant7: 'nature/plant7.glb',
+      pebble1: 'nature/pebble1.glb', pebble2: 'nature/pebble2.glb',
+      path1: 'nature/path1.glb', path2: 'nature/path2.glb',
+      deadfar: 'nature/deadfar.glb',
+    }),
+    decorSrc: { mesa: 'rock1' },   // мезаси — ті самі пустельні скелі, збільшені
+  },
+  /* зима: та сама тун-база на снігу, сосни з підмороженими кронами */
+  winter: {
+    key: 'winter',
+    dirt: '#b8c0c8', grass: '#dde4ea', sand: '#eef2f6',
+    far: '#dbe2e8',
+    path: '#7b7268', pathHalf: 24, pathRocks: 8,
+    fog: '#e4eaf0', fogGame: 0.00050, fogOver: 0.00012,
+    sky: ['#93a9c2', '#ccd7e2', '#e2e8ee'],
+    hemi: ['#dfe8f2', '#9aa6b2'],
+    sun: '#fff6e8',
+    treeKeys: ['tree', 'tree2', 'tree3', 'tree4'],
+    models: withToon({
+      tree: 'nature/pinew2.glb', tree2: 'nature/pinew4.glb', tree3: 'nature/pinew5.glb',
+      tree4: 'nature/dead3.glb',
+      bush: 'toon/tires.glb',
+      rock1: 'nature/rock1.glb', rock2: 'nature/rock2.glb',
+      grass1: 'nature/grass1.glb',
+      pebble1: 'nature/pebble1.glb', pebble2: 'nature/pebble2.glb',
+      path1: 'nature/path1.glb', path2: 'nature/path2.glb',
+      pinefar: 'nature/pinefar.glb',
+    }),
+    decorSrc: { lean1: 'tree', lean2: 'tree2' },
+  },
+};
+let BIO = BIOMES.forest;   // активний біом бою; ставиться в apiStart ДО setup3D
+
+/* ── Ґрунтова стежка: звивиста синусоїдна крива від краю до краю через
+   центр арени. Детермінована від сіда рельєфу (_terr) — той самий бій,
+   та сама стежка. Малюється вершинними кольорами землі (paintGround3D),
+   декор її оминає (decorFree), бруківка сіється вздовж (planDecor3D). */
+function pathZAt(x) {
+  const ph = (_terr % 4096) / 4096 * TAU;
+  return H / 2 + Math.sin(x * 0.0036 + ph) * (H * 0.185)
+               + Math.sin(x * 0.0013 + ph * 1.7) * (H * 0.115);
+}
+function pathDistAt(x, y) { return Math.abs(y - pathZAt(x)); }
 
 function webglAvailable() {
   try {
@@ -2118,6 +2608,15 @@ function makeRadialTex3(inner, outer) {
   return new THREE.CanvasTexture(c);
 }
 
+/* небо активного біому: 3 стопи градієнта (зеніт/середина/горизонт) */
+function paintSky3D() {
+  if (!T3A || !T3A.skyCanvas) return;
+  const sg = T3A.skyCanvas.getContext('2d');
+  const lin = sg.createLinearGradient(0, 0, 0, 256);
+  lin.addColorStop(0, BIO.sky[0]); lin.addColorStop(0.62, BIO.sky[1]); lin.addColorStop(1, BIO.sky[2]);
+  sg.fillStyle = lin; sg.fillRect(0, 0, 2, 256);
+  T3A.skyTex.needsUpdate = true;
+}
 /* Спільні ресурси: створюються один раз на життя сторінки, не диспозяться —
    бої повторюються, а текстури перевикористовуються. */
 function ensureAssets3D() {
@@ -2146,8 +2645,8 @@ function ensureAssets3D() {
      arena.png мила пагорби; фасетки різкі на будь-якому зумі). Нормалі «на
      трикутник» дає non-indexed геометрія у build3D, кольори — paintGround3D */
   M.ground = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  /* дальня земля: базовий тон тієї ж палітри, тане в серпанку FogExp2 */
-  M.farGround = new THREE.MeshLambertMaterial({ color: TERRA_FAR });
+  /* дальня земля: базовий тон палітри біому (перефарбовується у build3D) */
+  M.farGround = new THREE.MeshLambertMaterial({ color: BIO.far });
   M.farGround.color.convertSRGBToLinear();   // та сама причина, що й у paintGround3D
   const crS = t3Mat('/assets/pubg3d/crate-side.png', '#8a6a3f');
   const crT = t3Mat('/assets/pubg/crate.png', '#9a7748');
@@ -2159,8 +2658,10 @@ function ensureAssets3D() {
   M.sandbag = t3Mat('/assets/pubg3d/sandbag-side.png', '#7a6f4e');
   M.barrier = t3Mat('/assets/pubg3d/barrier-side.png', '#84878e');
   M.trunk = new THREE.MeshLambertMaterial({ color: '#4a3520' });
-  M.tree = t3Mat('/assets/pubg3d/tree-side.png', '#2e4722', { alphaTest: 0.35, side: THREE.DoubleSide });
-  M.bush = t3Mat('/assets/pubg3d/bush-side.png', '#37502a', { alphaTest: 0.35, side: THREE.DoubleSide });
+  /* фолбеки до приходу GLB: прості зелені квади (спрайти tree-side/bush-side
+     видалені разом зі старими моделями) */
+  M.tree = new THREE.MeshLambertMaterial({ color: '#3d6b2f', side: THREE.DoubleSide });
+  M.bush = new THREE.MeshLambertMaterial({ color: '#33363a', side: THREE.DoubleSide });   // «кущ» тепер стос шин — фолбек темна гума
   M.white = new THREE.MeshLambertMaterial({ color: '#e8e6e0' });
   const mkT = t3Mat('/assets/pubg/medkit.png', '#d8d6d0');
   M.medkit = [M.white, M.white, mkT, M.white, M.white, M.white];
@@ -2182,13 +2683,82 @@ function ensureAssets3D() {
   T3A.flashTex = makeRadialTex3('rgba(255,240,180,1)', 'rgba(255,150,40,0)');
   T3A.smokeTex = makeRadialTex3('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)');
   M.flash = new THREE.SpriteMaterial({ map: T3A.flashTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
-  /* небо: вертикальний градієнт (велика сфера BackSide) — фон + серпанок FogExp2 в тон */
-  const sc = document.createElement('canvas'); sc.width = 2; sc.height = 256;
-  const sg = sc.getContext('2d');
-  const lin = sg.createLinearGradient(0, 0, 0, 256);
-  lin.addColorStop(0, '#7e96b6'); lin.addColorStop(0.62, '#b9b8a6'); lin.addColorStop(1, '#cfc7ae');
-  sg.fillStyle = lin; sg.fillRect(0, 0, 2, 256);
-  T3A.skyTex = new THREE.CanvasTexture(sc);
+  /* випалене коло під калюжею молотова: майже чорне «плато» до ~60% радіуса,
+     далі м'який прозорий край (двостопний градієнт давав бліду пляму) */
+  {
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64;
+    const sg = sc.getContext('2d');
+    const sgr = sg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    sgr.addColorStop(0, 'rgba(22,15,11,0.92)');
+    sgr.addColorStop(0.6, 'rgba(22,15,11,0.85)');
+    sgr.addColorStop(1, 'rgba(22,15,11,0)');
+    sg.fillStyle = sgr; sg.fillRect(0, 0, 64, 64);
+    T3A.scorchTex = new THREE.CanvasTexture(sc);
+  }
+  /* ── Лоуполі-язики полум'я: 3 варіанти «крапель»-конусів із джитером бічних
+     вершин і вертикальним градієнтом вершинних кольорів (жовте ядро →
+     помаранч → червоно-оранжевий край). MeshBasicMaterial vertexColors —
+     вогонь світиться сам, без освітлення; без прозорості (гасне масштабом),
+     тож ОДИН спільний матеріал на всі язики. Джитер — власний детермінований
+     хеш: terrHash тут не можна (залежить від сіда бою, а ассети — сторінкові) */
+  const fRnd = function (i, k) { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
+  const fCols = [new THREE.Color('#ffe38a'), new THREE.Color('#ff9a2e'), new THREE.Color('#ff4a1c')];
+  for (let i = 0; i < 3; i++) fCols[i].convertSRGBToLinear();   // та сама причина, що й у paintGround3D
+  const fTmp = new THREE.Color();
+  G.flames = [];
+  for (let v = 0; v < 3; v++) {
+    const fg = new THREE.ConeGeometry(0.45, 1, 6 + v, 1).toNonIndexed();
+    const fp = fg.attributes.position;
+    const fc = new Float32Array(fp.count * 3);
+    for (let i = 0; i < fp.count; i++) {
+      const t = fp.getY(i) + 0.5;   // 0 основа → 1 вістря
+      if (t < 0.99 && t > 0.01) {   // бічні вершини «пливуть» — крапля, не циркуль
+        fp.setX(i, fp.getX(i) * (0.8 + fRnd(i * 7 + v * 131, 1) * 0.55));
+        fp.setZ(i, fp.getZ(i) * (0.8 + fRnd(i * 13 + v * 57, 2) * 0.55));
+      }
+      fTmp.copy(fCols[0]).lerp(fCols[1], clamp(t / 0.55, 0, 1));
+      if (t > 0.55) fTmp.lerp(fCols[2], (t - 0.55) / 0.45);
+      const o = i * 3; fc[o] = fTmp.r; fc[o + 1] = fTmp.g; fc[o + 2] = fTmp.b;
+    }
+    fg.setAttribute('color', new THREE.BufferAttribute(fc, 3));
+    fg.translate(0, 0.5, 0);   // півот у основі — язик росте з землі
+    G.flames.push(fg);
+  }
+  M.flame = new THREE.MeshBasicMaterial({ vertexColors: true });
+  /* ── Пухка тун-хмара диму «цвітною капустою»: гладкі сфери-клубки у 3-х
+     розмірних класах + сплюснутий варіант. Тун-затінення запечене у вершинні
+     кольори по висоті (світла маківка → сірий низ, 3 тони з різкуватими
+     межами) на MeshBasic БЕЗ освітлення: вигляд стабільний у будь-якому
+     біомі й найдешевший. Непрозорість 0.94 — щільна хмара (вона й чесна:
+     LOS крізь дим блокується у smokeBlocks) */
+  G.puffs = [];
+  (function () {
+    const segs = [[12, 9, 1], [10, 8, 1], [10, 8, 0.78], [8, 6, 1]];   // великий/середній/сплюснутий/дрібний
+    /* convertSRGBToLinear: рендерер видає sRGB — інакше тони посвітліють */
+    const top = new THREE.Color('#f5f7f9').convertSRGBToLinear();
+    const mid = new THREE.Color('#ccd1d9').convertSRGBToLinear();
+    const low = new THREE.Color('#a2a8b3').convertSRGBToLinear();
+    for (let v = 0; v < segs.length; v++) {
+      const pg = new THREE.SphereGeometry(1, segs[v][0], segs[v][1]);
+      if (segs[v][2] !== 1) pg.scale(1.15, segs[v][2], 1.15);
+      const pp = pg.attributes.position, pc = new Float32Array(pp.count * 3);
+      for (let k = 0; k < pp.count; k++) {
+        const t = (pp.getY(k) / segs[v][2] + 1) / 2;   // 0 = низ … 1 = маківка
+        /* межі високо, мід-смуга вузька: світла лише маківка, нижня половина
+           клубка чесно сіра — двотоновий «намальований» перехід видно збоку */
+        const c = t > 0.64 ? top : (t > 0.52 ? mid : low);
+        pc[k * 3] = c.r; pc[k * 3 + 1] = c.g; pc[k * 3 + 2] = c.b;
+      }
+      pg.setAttribute('color', new THREE.BufferAttribute(pc, 3));
+      G.puffs.push(pg);
+    }
+  })();
+  M.puff = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.94 });
+  /* небо: вертикальний градієнт (велика сфера BackSide) — фон + серпанок FogExp2 в тон.
+     Канвас живе в T3A: paintSky3D перемальовує його під палітру біому щобою */
+  T3A.skyCanvas = document.createElement('canvas'); T3A.skyCanvas.width = 2; T3A.skyCanvas.height = 256;
+  T3A.skyTex = new THREE.CanvasTexture(T3A.skyCanvas);
+  paintSky3D();
   M.sky = new THREE.MeshBasicMaterial({ map: T3A.skyTex, side: THREE.BackSide, fog: false, depthWrite: false });
   /* камуфляж гравців: одна текстура, але персональні клони матеріалу
      (щоб фарбувати смерть/спалах урону не зачіпаючи інших) */
@@ -2214,7 +2784,7 @@ function newCamoMat(playerColor) {
    Поки модель не готова (чи впала мережа/парсер) — працює старий
    примітив-фолбек, НІЧОГО не ламається; після onLoad живі інстанси
    поточного бою підмінюються на льоту через swapIn3D(). */
-const GLB = { loader: null, ready: {}, started: false };
+const GLB = { loader: null, ready: {}, files: {}, started: false, bioKey: '' };
 function loadModel(path) {
   return new Promise(function (resolve, reject) {
     if (typeof THREE === 'undefined' || !THREE.GLTFLoader) { reject(new Error('GLTFLoader відсутній')); return; }
@@ -2229,38 +2799,59 @@ function glbPrep(g) {
   const center = new THREE.Vector3(); box.getCenter(center);
   return { scene: g.scene, clips: g.animations || [], size: size, min: box.min.clone(), center: center };
 }
+/* один логічний слот: кеш по ФАЙЛУ вічний (GLB.files), слот (GLB.ready) —
+   пер-біомний. Гард на resolve: поки модель їхала мережею, біом міг
+   змінитись — чужий файл у слот не кладемо. */
+function loadSlot3D(name, path, biome) {
+  if (GLB.files[path]) {
+    GLB.ready[name] = GLB.files[path];
+    if (T3) swapIn3D(name);
+    return;
+  }
+  loadModel(path).then(function (g) {
+    const prep = glbPrep(g);
+    GLB.files[path] = prep;
+    if (biome && ('/assets/models/' + BIO.models[name] !== path)) return;   // біом уже інший
+    GLB.ready[name] = prep;
+    if (T3) swapIn3D(name);   // бій уже йде — підмінюємо живі інстанси
+  }).catch(function (e) {
+    try { console.warn('[RSO] Модель ' + path + ' не завантажилась, лишаємо примітив:', e); } catch (_) {}
+  });
+}
 function loadModels3D() {
-  if (GLB.started) return;
-  GLB.started = true;
-  const defs = [
-    /* adventurer — Quaternius Adventurer (той самий риг UAL): готові кліпи
-       Idle_Gun / Idle_Gun_Shoot / Run / Run_Shoot / Death (вибір власника) */
-    ['soldier',  '/assets/models/adventurer.glb'],
-    ['revolver', '/assets/models/revolver.glb'],
-    ['tree',     '/assets/models/tree.glb'],
-    ['tree2',    '/assets/models/tree2.glb'],    // сосна — різноманіття лісу
-    ['bush',     '/assets/models/bush.glb'],
-    ['medkit',   '/assets/models/medkit.glb'],
-    ['barrel',   '/assets/models/barrel.glb'],
-    ['barrier',  '/assets/models/barrier.glb'],
-    ['sandbags', '/assets/models/sandbags.glb'],
-    ['crate',    '/assets/models/crate.glb'],    // Quaternius, poly.pizza/m/3OEFd1AWfa (CC0)
-    /* декор арени (без колізій): камінці та кущики сухої трави */
-    ['rock1',    '/assets/models/rock1.glb'],
-    ['rock2',    '/assets/models/rock2.glb'],
-    ['grass1',   '/assets/models/grass1.glb'],
-  ];
-  for (let i = 0; i < defs.length; i++) {
-    (function (name, path) {
-      loadModel(path).then(function (g) {
-        GLB.ready[name] = glbPrep(g);
-        if (T3) swapIn3D(name);   // бій уже йде — підмінюємо живі інстанси
-      }).catch(function (e) {
-        try { console.warn('[RSO] Модель ' + path + ' не завантажилась, лишаємо примітив:', e); } catch (_) {}
-      });
-    })(defs[i][0], defs[i][1]);
+  /* ядро (зброя/укриття/аптечка/бійці) — раз на життя сторінки */
+  if (!GLB.started) {
+    GLB.started = true;
+    /* усе ядро — Toon Shooter Game Kit: боєць (револьвер уже в кисті),
+       аптечка Health, вибухова бочка, укриття */
+    const defs = [
+      ['soldier',   '/assets/models/toon/soldier.glb'],
+      ['medkit',    '/assets/models/toon/health.glb'],
+      ['barrel',    '/assets/models/toon/barrel.glb'],
+      ['barrier',   '/assets/models/toon/barrier.glb'],
+      ['sandbags',  '/assets/models/toon/sack.glb'],
+      ['crate',     '/assets/models/toon/crate.glb'],
+      ['container', '/assets/models/toon/containerlong.glb'],   // 2D 'wall' → ряд контейнерів
+      ['nadefrag',  '/assets/models/toon/nadefrag.glb'],   // осколкова (і база під смок)
+      ['nadefire',  '/assets/models/toon/nadefire.glb'],   // молотов у польоті
+    ];
+    for (let i = 0; i < defs.length; i++) loadSlot3D(defs[i][0], defs[i][1], false);
+  }
+  /* природа — ЛІНИВО лише для активного біому: пустелю в лісі не вантажимо */
+  if (GLB.bioKey !== BIO.key) {
+    GLB.bioKey = BIO.key;
+    for (const k in GLB.ready)
+      if (!CORE_KEYS[k] && !BIO.models[k]) delete GLB.ready[k];
+    for (const k in BIO.models) {
+      const full = '/assets/models/' + BIO.models[k];
+      /* слот міг лишитись від минулого біому (той самий ключ — інший файл):
+         чистимо, інакше build3D поставить у зимовий кущ пустельний агав */
+      if (GLB.ready[k] && GLB.ready[k] !== GLB.files[full]) delete GLB.ready[k];
+      loadSlot3D(k, full, true);
+    }
   }
 }
+const CORE_KEYS = { soldier: 1, medkit: 1, barrel: 1, barrier: 1, sandbags: 1, crate: 1, container: 1, nadefrag: 1, nadefire: 1 };
 /* статичний клон: геометрії/матеріали СПІЛЬНІ між клонами (дешево).
    shadows=false для дрібноти (бочки/кущі/аптечки/мішки/барʼєри) — кожен
    castShadow-меш дорогий у shadow-pass, а тінь від дрібноти не читається */
@@ -2278,9 +2869,12 @@ function onceUpdateMatrix(obj) {
    НА землі навіть із півотом не в основі) та -center.x/z (центр по колізії).
    Обертання ставиться на holder ззовні — інакше зсув центрування
    «поїхав» би при повороті inst навколо власного origin. */
-/* ~половина дерев — сосна tree2: за парністю id перешкоди (стабільно між
-   кадрами і не зсуває ігровий RNG) */
-function treeKeyOf(o) { return (o.id % 2) ? 'tree2' : 'tree'; }
+/* дерева арени — слоти активного біому (ліс: 2 листяні + сосна; пустеля: 5
+   мертвих/покручених; зима: сосни + сухостій): вибір за id перешкоди (стабільно між
+   кадрами і не зсуває ігровий RNG). Дальнє декоративне кільце дерев іде НЕ
+   сюди, а в запечений декор (tree*far у planDecor3D) — інакше кожне дерево
+   коштує 4 draw call-и (2 матеріали x 2 проходи з тінню) */
+function treeKeyOf(o) { return BIO.treeKeys[o.id % BIO.treeKeys.length]; }
 function makeTree3D(o) {
   const rec = GLB.ready[treeKeyOf(o)];
   const inst = glbStatic(rec, true);
@@ -2291,7 +2885,7 @@ function makeTree3D(o) {
   return inst;
 }
 function makeBush3D(o) {
-  const rec = GLB.ready.bush;
+  const rec = GLB.ready.bush;   // слот bush в усіх біомах — тунові шини (Debris_Tires)
   const inst = glbStatic(rec, false);
   const s = (o.r * 2.2) / Math.max(rec.size.x, rec.size.z, 0.001);
   inst.scale.setScalar(s);
@@ -2376,19 +2970,32 @@ function paintGround3D(geo) {
   const col = new Float32Array(pos.count * 3);
   /* convertSRGBToLinear: рендерер на виході кодує в sRGB, тож «сирі» hex
      без конверсії виходили б вицвіло-білястими */
-  const dirt = new THREE.Color(TERRA_DIRT).convertSRGBToLinear(),
-        grass = new THREE.Color(TERRA_GRASS).convertSRGBToLinear(),
-        sand = new THREE.Color(TERRA_SAND).convertSRGBToLinear();
+  const dirt = new THREE.Color(BIO.dirt).convertSRGBToLinear(),
+        grass = new THREE.Color(BIO.grass).convertSRGBToLinear(),
+        sand = new THREE.Color(BIO.sand).convertSRGBToLinear(),
+        pathC = new THREE.Color(BIO.path).convertSRGBToLinear();
+  /* пустеля розтягує головний шум у смуги — читається як хвилі дюн */
+  const nsx = BIO.noiseSX || 0.0035, nsz = BIO.noiseSZ || 0.0035;
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i += 3) {
     const x = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3 + W2;
     const z = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3 + H2;
     /* КРУПНІ плями бруд↔трава (низька частота — поле читається великими
        м'якими зонами, не рябить) + рідші піщані «проплішини» дрібнішим шумом */
-    const n = vnoise(x * 0.0035 + 7.7, z * 0.0035 + 3.1);
+    const n = vnoise(x * nsx + 7.7, z * nsz + 3.1);
     const m = vnoise(x * 0.014 + 41.2, z * 0.014 + 17.9);
-    c.copy(dirt).lerp(grass, clamp((n - 0.28) / 0.44, 0, 1));
-    if (m > 0.64) c.lerp(sand, clamp((m - 0.64) / 0.3, 0, 1) * 0.6);
+    /* зміщений поріг: більша частка поля — соковита трава, бруд лише плямами */
+    c.copy(dirt).lerp(grass, clamp((n - 0.16) / 0.38, 0, 1));
+    if (m > 0.68) c.lerp(sand, clamp((m - 0.68) / 0.3, 0, 1) * 0.4);
+    /* витоптані ПЛЯМИ землі (промо-лук): 2 октави шуму з порогом дають
+       органічні «язики» голої землі серед трави, а не смуги; краї м'які */
+    const wb = vnoise(x * 0.0052 + 211.4, z * 0.0052 + 87.2) * 0.62
+             + vnoise(x * 0.011 + 55.5, z * 0.011 + 31.1) * 0.38;
+    if (wb > 0.62) c.lerp(pathC, clamp((wb - 0.62) / 0.06, 0, 1) * 0.85);
+    /* стежка: м'який край гуляє шумом, щоб не було «лінійки» по фасетках */
+    const pd = pathDistAt(x, z);
+    const pw = BIO.pathHalf + (vnoise(x * 0.02 + 3.3, z * 0.02 + 9.1) - 0.5) * 16;
+    if (pd < pw + 10) c.lerp(pathC, clamp((pw - pd) / 9, 0, 1) * 0.9);
     /* джитер на фасетку: детермінований від індексу трикутника; м'який —
        фасетки лише вгадуються, без «шахівниці» */
     const j = 1 + (terrHash(i, 977) - 0.5) * 0.09;
@@ -2403,10 +3010,9 @@ function paintGround3D(geo) {
    довантаження GLB нічого не зсуває. Це суто ВІЗУАЛЬНИЙ шар — у 2D-логіці
    колізій/LOS цих обʼєктів НЕМАЄ. */
 function decorRnd(i, k) { return terrHash(i * 131 + k * 7, 9173 - i); }
-function decorFree(x, y, m) {
-  /* декор розсівається і ЗА межами арени (домальований світ до TERRA_EXT) */
-  if (x < -TERRA_EXT + 60 || x > W + TERRA_EXT - 60 || y < -TERRA_EXT + 60 || y > H + TERRA_EXT - 60) return false;
-  if (hyp(x - W / 2, y - H / 2) < 150) return false;   // центр — точка інтересу
+/* тільки ігрові обʼєкти (укриття/спавни/аптечки) — спільна частина для
+   звичайного розсіву і для бруківки, яка ЛЯГАЄ на стежку */
+function decorObFree(x, y, m) {
   for (let i = 0; i < obstacles.length; i++) {
     const o = obstacles[i];
     const r = o.shape === 'circle' ? Math.max(o.r, o.crown || 0) : Math.max(o.hw, o.hh);
@@ -2418,8 +3024,37 @@ function decorFree(x, y, m) {
     if (hyp(x - medkits[i].x, y - medkits[i].y) < 55) return false;
   return true;
 }
+function decorFree(x, y, m) {
+  /* декор розсівається і ЗА межами арени (домальований світ до TERRA_EXT) */
+  if (x < -TERRA_EXT + 60 || x > W + TERRA_EXT - 60 || y < -TERRA_EXT + 60 || y > H + TERRA_EXT - 60) return false;
+  if (hyp(x - W / 2, y - H / 2) < 150) return false;   // центр — точка інтересу
+  /* стежка лишається чистою — трава/кущики її не заростають */
+  if (pathDistAt(x, y) < BIO.pathHalf + 8 + m * 0.4) return false;
+  return decorObFree(x, y, m);
+}
+/* усі види запеченого декору (суперсет по всіх біомах) — список спільний
+   для planDecor3D / bakeDecor3D / swapIn3D; невикористані в біомі плани
+   просто порожні. lean* — нахилені дерева стіни, log* — повалені колоди,
+   path* — бруківка стежки, mesa — пустельні скелі-мезаси. */
+const DECOR_NAMES = ['rock1', 'rock2', 'grass1', 'grass2', 'fern', 'clover',
+                     'flower1', 'flower2', 'mushroom', 'pebble1', 'pebble2',
+                     'plant7', 'path1', 'path2', 'log1', 'log2', 'lean1', 'lean2',
+                     'mesa', 'tree1far', 'tree2far', 'tree3far',
+                     'deadfar', 'pinefar',
+                     /* тун-«база»: великі споруди периметра + дрібний реквізит арени */
+                     'cont1', 'cont2', 'struct1', 'struct2', 'struct3', 'struct4',
+                     'wtank', 'slight', 'cone', 'pallet', 'boxes1', 'boxes2',
+                     'boxes3', 'boxes4', 'car', 'tires', 'planks', 'tank',
+                     'keydec', 'fencem', 'barreldec', 'cratedec'];
+/* декор-ім'я → логічний слот моделі активного біому; barreldec/cratedec —
+   візуальні клони CORE-моделей (бочки/ящики без колізій біля споруд) */
+const DECOR_SRC_COMMON = { barreldec: 'barrel', cratedec: 'crate' };
+function decorSrcOf(name) {
+  return (BIO.decorSrc && BIO.decorSrc[name]) || DECOR_SRC_COMMON[name] || name;
+}
 function planDecor3D() {
-  const plan = { rock1: [], rock2: [], grass1: [], baked: {} };
+  const plan = { baked: {} };
+  for (let i = 0; i < DECOR_NAMES.length; i++) plan[DECOR_NAMES[i]] = [];
   let idx = 0;
   const put = function (list, szMin, szSpan, margin, tries) {
     for (let t = 0; t < tries; t++) {
@@ -2431,11 +3066,230 @@ function planDecor3D() {
       return;
     }
   };
-  /* площа з домальованим світом ~5x арени — кількість підтягнута під неї */
-  for (let i = 0; i < 64; i++)
-    put(decorRnd(i + 1, 9) < 0.5 ? plan.rock1 : plan.rock2, 6, 8, 26, 14);   // камені, 6-14 юнітів
-  for (let i = 0; i < 170; i++)
-    put(plan.grass1, 8, 4, 18, 10);                                          // кущики трави, 8-12 юнітів
+  /* додатковий засів УСЕРЕДИНІ арени: камера більшість часу тут, трава
+     має читатися під ногами, а не лише в домальованому світі */
+  const putIn = function (list, szMin, szSpan, margin, tries) {
+    for (let t = 0; t < tries; t++) {
+      idx++;
+      const x = 50 + decorRnd(idx, 5) * (W - 100);
+      const y = 45 + decorRnd(idx, 6) * (H - 90);
+      if (!decorFree(x, y, margin)) continue;
+      list.push({ x: x, y: y, rot: decorRnd(idx, 3) * TAU, size: szMin + decorRnd(idx, 4) * szSpan });
+      return;
+    }
+  };
+  const K = BIO.key;
+  /* площа з домальованим світом ~5x арени — кількості підтягнуті під неї
+     І під бюджет трикутників сцени (≤ ~300к) */
+  if (K === 'desert') {
+    /* пустеля: рідкий сухий підлісок — золота трава, руді кущики, пісочні камені */
+    for (let i = 0; i < 40; i++) put(decorRnd(i + 1, 9) < 0.5 ? plan.rock1 : plan.rock2, 7, 9, 26, 14);
+    /* 34/10 (було 64/18): зовнішній сухостій проріджено під бюджет землі 230x170 */
+    for (let i = 0; i < 34; i++) put(plan.grass1, 9, 5, 14, 10);
+    for (let i = 0; i < 10; i++) put(plan.grass2, 10, 5, 16, 8);
+    for (let i = 0; i < 16; i++) put(plan.plant7, 8, 5, 16, 8);
+    for (let i = 0; i < 26; i++) put(plan.pebble1, 2.5, 2.5, 8, 6);
+    for (let i = 0; i < 26; i++) put(plan.pebble2, 2.5, 2.5, 8, 6);
+    for (let i = 0; i < 46; i++) putIn(plan.grass1, 8, 4, 12, 8);
+    for (let i = 0; i < 12; i++) putIn(plan.plant7, 7, 4, 14, 8);
+    for (let i = 0; i < 12; i++) putIn(plan.pebble1, 2.5, 2, 8, 6);
+  } else if (K === 'winter') {
+    /* зима: сніг ховає підлісок — лише рідкі кущики трави і сірі камені */
+    for (let i = 0; i < 30; i++) put(decorRnd(i + 1, 9) < 0.5 ? plan.rock1 : plan.rock2, 6, 8, 26, 14);
+    for (let i = 0; i < 14; i++) put(plan.grass1, 8, 4, 14, 10);
+    for (let i = 0; i < 18; i++) put(plan.pebble1, 2.5, 2.5, 8, 6);
+    for (let i = 0; i < 18; i++) put(plan.pebble2, 2.5, 2.5, 8, 6);
+    for (let i = 0; i < 10; i++) putIn(plan.grass1, 7, 3, 12, 8);
+    for (let i = 0; i < 8; i++)  putIn(plan.pebble1, 2.5, 2, 8, 6);
+  } else {
+    /* ліс: густий підлісок (зовнішню зону ледь проріджено — її ховає стіна лісу) */
+    for (let i = 0; i < 38; i++)
+      put(decorRnd(i + 1, 9) < 0.5 ? plan.rock1 : plan.rock2, 6, 8, 26, 14);   // камені, 6-14 юнітів
+    for (let i = 0; i < 72; i++)
+      put(plan.grass1, 9, 5, 14, 10);        // головна маса: соковиті кущики трави
+    for (let i = 0; i < 14; i++)
+      put(plan.grass2, 10, 5, 16, 8);        // високі «віхті» — акценти
+    for (let i = 0; i < 10; i++)
+      put(plan.fern, 9, 4, 16, 8);
+    for (let i = 0; i < 8; i++)
+      put(plan.clover, 6, 3, 14, 8);
+    for (let i = 0; i < 6; i++)
+      put(plan.flower1, 8, 3, 16, 8);        // квіти — кольорові плями галявини
+    for (let i = 0; i < 4; i++)
+      put(plan.flower2, 9, 3, 16, 8);
+    for (let i = 0; i < 20; i++)
+      put(plan.pebble1, 2.5, 2.5, 8, 6);     // галька — дрібна, можна ближче до укриттів
+    for (let i = 0; i < 20; i++)
+      put(plan.pebble2, 2.5, 2.5, 8, 6);
+    for (let i = 0; i < 104; i++) putIn(plan.grass1, 8, 4, 12, 8);
+    for (let i = 0; i < 10; i++)  putIn(plan.clover, 6, 3, 12, 8);
+    for (let i = 0; i < 5; i++)  putIn(plan.flower1, 7, 3, 14, 8);
+    for (let i = 0; i < 10; i++) putIn(plan.pebble1, 2.5, 2, 8, 6);
+  }
+  /* бруківка стежки: RockPath-камені лягають НА стежку «місцями» (кластери
+     від детермінованого гейту) + жменя гальки — читається як стара мостова */
+  for (let i = 0; i < BIO.pathRocks; i++) {
+    const px = 30 + ((i + 0.5) / BIO.pathRocks) * (W - 60);
+    if (decorRnd(3100 + i, 1) < 0.5) continue;
+    const pz = pathZAt(px) + (decorRnd(3100 + i, 2) - 0.5) * BIO.pathHalf * 1.4;
+    if (!decorObFree(px, pz, 12)) continue;
+    const key = decorRnd(3100 + i, 3) < 0.3 ? 'path1' : 'path2';
+    plan[key].push({ x: px, y: pz, rot: decorRnd(3100 + i, 4) * TAU, size: 7 + decorRnd(3100 + i, 5) * 7, sink: 2 });
+    if (decorRnd(3100 + i, 6) < 0.5)
+      plan.pebble1.push({ x: px + (decorRnd(3100 + i, 7) - 0.5) * 34, y: pz + (decorRnd(3100 + i, 8) - 0.5) * 24,
+                          rot: decorRnd(3100 + i, 9) * TAU, size: 2.5 + decorRnd(3100 + i, 10) * 2 });
+  }
+  /* повалені колоди (тільки ліс): мертві стовбури ГОРИЗОНТАЛЬНО — нахил ~90°
+     навколо випадкової горизонтальної осі + втоплення, щоб лягли в рельєф.
+     Декор без колізій; не в центрі, не на стежці (decorFree відсіює) */
+  if (K === 'forest') {
+    let logsPlaced = 0;
+    for (let t = 0; t < 60 && logsPlaced < 4; t++) {
+      const lx = 100 + decorRnd(4200 + t, 1) * (W - 200);
+      const lz = 90 + decorRnd(4200 + t, 2) * (H - 180);
+      if (!decorFree(lx, lz, 40)) continue;
+      const dir = decorRnd(4200 + t, 3) * TAU;
+      plan[logsPlaced % 2 ? 'log2' : 'log1'].push({
+        x: lx, y: lz, rot: decorRnd(4200 + t, 4) * TAU,
+        size: 58 + decorRnd(4200 + t, 5) * 26, byH: true,
+        tax: Math.cos(dir), taz: Math.sin(dir), tilt: Math.PI / 2 * 0.95, sink: 2.6,
+      });
+      logsPlaced++;
+    }
+  }
+  /* ── Периметр біому (за межами арени, чистий декор) ── */
+  const per = 2 * (W + H);
+  const perimPt = function (t, dist) {   // точка на межі арени + зсув назовні
+    let d = ((t % 1) + 1) % 1 * per;
+    let x, z, nx, nz;
+    if (d < W) { x = d; z = 0; nx = 0; nz = -1; }
+    else if ((d -= W) < H) { x = W; z = d; nx = 1; nz = 0; }
+    else if ((d -= H) < W) { x = W - d; z = H; nx = 0; nz = 1; }
+    else { d -= W; x = 0; z = H - d; nx = -1; nz = 0; }
+    return { x: x + nx * dist, y: z + nz * dist };
+  };
+  /* ── Тун-«база» (усі біоми, стиль промо): великі контейнери і споруди
+     кільцем ЗА межами арени замість лісової стіни впритул; водонапірка,
+     танк у кутку, сітчасті паркани, ліхтарі вздовж стежки; дрібний
+     реквізит (коробки/палети/конуси/шини) — розсипом у арені; великий
+     безколізійний декор (машина, танк, водонапірка) — ТІЛЬКИ за межами ── */
+  const BIG_RING = ['struct1', 'cont2', 'struct2', 'cont1', 'struct3', 'cont2',
+                    'struct4', 'cont2', 'struct1', 'cont1', 'struct2', 'cont2'];
+  /* «природний» габарит пропса: метри кіта × (зріст бійця 44 / 2.2 м) */
+  const BIG_SIZE = { cont1: 44, cont2: 88, struct1: 160, struct2: 212, struct3: 158, struct4: 208 };
+  for (let i = 0; i < BIG_RING.length; i++) {
+    const key = BIG_RING[i];
+    const p = perimPt((i + 0.15 + terrHash(8101 + i, 3) * 0.7) / BIG_RING.length,
+                      95 + terrHash(8105 + i, 5) * 110);
+    if (pathDistAt(p.x, p.y) < BIO.pathHalf + 50) continue;   // «ворота» стежки відкриті
+    plan[key].push({ x: p.x, y: p.y, rot: terrHash(8109 + i, 7) * TAU,
+                     size: BIG_SIZE[key] * (0.9 + terrHash(8113 + i, 9) * 0.3), sink: 2 });
+  }
+  /* водонапірка — домінанта силуету бази, по різні боки арени */
+  for (let i = 0; i < 2; i++) {
+    const p = perimPt(0.18 + i * 0.52 + terrHash(8201 + i, 3) * 0.08, 70 + terrHash(8205 + i, 5) * 60);
+    plan.wtank.push({ x: p.x, y: p.y, rot: terrHash(8209 + i, 7) * TAU, size: 74 });
+  }
+  { /* танк — один, «у кутку» бази */
+    const p = perimPt(0.62 + terrHash(8301, 3) * 0.05, 90);
+    plan.tank.push({ x: p.x, y: p.y, rot: terrHash(8305, 5) * TAU, size: 56, sink: 1.5 });
+  }
+  /* сітчасті паркани короткими ланками вздовж межі арени */
+  for (let i = 0; i < 8; i++) {
+    const t = (i + 0.5 + terrHash(8401 + i, 3) * 0.5) / 8;
+    const p = perimPt(t, 48 + terrHash(8405 + i, 5) * 22);
+    if (pathDistAt(p.x, p.y) < BIO.pathHalf + 40) continue;
+    const d = ((t % 1) + 1) % 1 * per;
+    const yaw = (d < W || (d >= W + H && d < W * 2 + H)) ? 0 : Math.PI / 2;   // ланка паралельна своїй стороні
+    plan.fencem.push({ x: p.x, y: p.y, rot: yaw, size: 70, sink: 1 });
+  }
+  /* ліхтарі вздовж стежки — «жила» бази; плафон нависає НАД стежкою */
+  for (let i = 0; i < 5; i++) {
+    const lx = 140 + (i / 4) * (W - 280);
+    const side = i % 2 ? 1 : -1;
+    const lz = pathZAt(lx) + side * (BIO.pathHalf + 26);
+    if (!decorObFree(lx, lz, 10)) continue;
+    plan.slight.push({ x: lx, y: lz, rot: side > 0 ? Math.PI : 0, size: 44 });
+  }
+  /* дрібний реквізит УСЕРЕДИНІ арени — лише ОЧЕВИДНО прохідна дрібнота
+     (конуси, плоскі палети/дошки, ключі): крізь неї пробігти не соромно.
+     Об'ємне (шини/бочки/ящики/стоси коробок) всередину НЕ сіємо — гравець
+     читає його як тверде укриття, а колізії нема */
+  for (let i = 0; i < 6; i++) putIn(plan.cone, 12, 4, 8, 8);
+  for (let i = 0; i < 4; i++) putIn(plan.pallet, 30, 6, 10, 8);
+  for (let i = 0; i < 3; i++) putIn(plan.planks, 30, 6, 10, 8);
+  for (let i = 0; i < 2; i++) putIn(plan.keydec, 9, 3, 8, 8);
+  /* об'ємний реквізит — на периметр бази (за полем гри, серед споруд):
+     там «тверде без колізій» чесне, бо туди не добігти */
+  const putPer = function (list, seed, szMin, szSpan) {
+    const p = perimPt(terrHash(seed, 3), 55 + terrHash(seed, 5) * 130);
+    if (pathDistAt(p.x, p.y) < BIO.pathHalf + 30) return;   // «ворота» стежки відкриті
+    list.push({ x: p.x, y: p.y, rot: terrHash(seed, 7) * TAU,
+                size: szMin + terrHash(seed, 9) * szSpan, sink: 1 });
+  };
+  for (let i = 0; i < 3; i++) putPer(plan.boxes1, 8601 + i, 20, 6);
+  for (let i = 0; i < 3; i++) putPer(plan.boxes2, 8611 + i, 20, 6);
+  for (let i = 0; i < 2; i++) putPer(plan.boxes3, 8621 + i, 26, 6);
+  for (let i = 0; i < 2; i++) putPer(plan.boxes4, 8631 + i, 26, 6);
+  for (let i = 0; i < 3; i++) putPer(plan.tires, 8641 + i, 32, 8);
+  for (let i = 0; i < 4; i++) putPer(plan.barreldec, 8651 + i, 16, 3);
+  for (let i = 0; i < 3; i++) putPer(plan.cratedec, 8661 + i, 18, 4);
+  { /* розбита машина — на периметрі бази: всередині арени крізь неї
+       пробігали б (колізії нема), а гравець читає її як тверде укриття */
+    const p = perimPt(0.34 + terrHash(8501, 3) * 0.08, 75 + terrHash(8503, 5) * 50);
+    if (pathDistAt(p.x, p.y) >= BIO.pathHalf + 30)
+      plan.car.push({ x: p.x, y: p.y, rot: terrHash(8505, 7) * TAU,
+                      size: 105 + terrHash(8507, 9) * 15, sink: 1.5 });
+  }
+  if (K === 'desert') {
+    /* пустеля: рідші мертві дерева ЗА кільцем бази + скелі-мезаси вдалині.
+       10 (було 26) і 7 мез (було 9): компенсація детальнішої землі 230x170 —
+       overview пустелі має лишатись ≤ ~340к трикутників */
+    for (let di = 0; di < 10; di++) {
+      const p = perimPt(terrHash(9101 + di, 17), 230 + terrHash(9202 + di, 29) * 420);
+      if (pathDistAt(p.x, p.y) < BIO.pathHalf + 30) continue;
+      plan.deadfar.push({ x: p.x, y: p.y, rot: terrHash(9303 + di, 7) * TAU,
+                          size: (30 + terrHash(9404 + di, 3) * 26) * 1.9 });
+    }
+    for (let di = 0; di < 7; di++) {
+      const p = perimPt(terrHash(9501 + di, 11), 240 + terrHash(9602 + di, 13) * 400);
+      plan.mesa.push({ x: p.x, y: p.y, rot: terrHash(9703 + di, 5) * TAU,
+                       size: 110 + terrHash(9804 + di, 3) * 90, sink: 5 });
+    }
+  } else {
+    /* ліс/зима: кільце дерев ГЛИБШЕ за базу (споруди стоять на чистому полі,
+       як у промо), далі рідкі far-LOD до горизонту */
+    const dense = K === 'winter';
+    const putRing = function (p, di) {
+      if (p.x < -TERRA_EXT + 60 || p.x > W + TERRA_EXT - 60 || p.y < -TERRA_EXT + 60 || p.y > H + TERRA_EXT - 60) return;
+      if (pathDistAt(p.x, p.y) < BIO.pathHalf + 26) return;
+      /* волохаті nature-кущі (bushfar) прибрано: стіна лише з дерев */
+      const key = dense ? 'pinefar' : ['tree1far', 'tree2far', 'tree3far'][di % 3];
+      plan[key].push({ x: p.x, y: p.y, rot: ((9000 + di) % 7) * 0.9,
+                       size: (40 + terrHash(9404 + di, 3) * 26) * 1.9 });
+    };
+    /* власне кільце: СТРАТИФІКОВАНО по периметру (без дір), джитер уздовж і вглиб */
+    const nWall = dense ? 90 : 36;
+    for (let di = 0; di < nWall; di++)
+      putRing(perimPt((di + terrHash(9202 + di, 29) * 0.9) / nWall,
+                      240 + terrHash(9101 + di, 17) * 200), di);
+    /* глибина до горизонту — рідші, випадкові: силуети в серпанку */
+    const nDeep = dense ? 30 : 10;
+    for (let di = 0; di < nDeep; di++)
+      putRing(perimPt(terrHash(9602 + di, 23), 470 + terrHash(9101 + di, 19) * 330), 200 + di);
+  }
+  /* гриби — ПІД деревами (у тіні крони), а не де попало: читається як ліс */
+  if (K !== 'forest') return plan;
+  for (let i = 0; i < obstacles.length; i++) {
+    const o = obstacles[i];
+    if (o.type !== 'tree') continue;
+    if (decorRnd(700 + i, 11) < 0.45) continue;   // не під кожним деревом
+    const a = decorRnd(700 + i, 12) * TAU;
+    const d = o.r + 8 + decorRnd(700 + i, 13) * 14;
+    const x = o.x + Math.cos(a) * d, y = o.y + Math.sin(a) * d;
+    if (x < -TERRA_EXT + 60 || x > W + TERRA_EXT - 60 || y < -TERRA_EXT + 60 || y > H + TERRA_EXT - 60) continue;
+    plan.mushroom.push({ x: x, y: y, rot: decorRnd(700 + i, 14) * TAU, size: 3.5 + decorRnd(700 + i, 15) * 2.5 });
+  }
   return plan;
 }
 /* Запікання декору: ОДИН merged-меш на матеріал замість 60 окремих нод
@@ -2443,47 +3297,32 @@ function planDecor3D() {
    Декор статичний, тож трансформи вершин рахуємо раз на CPU. */
 function bakeDecor3D(name) {
   if (!T3 || !T3.decor || T3.decor.baked[name]) return;
-  const rec = GLB.ready[name], places = T3.decor[name];
+  const rec = GLB.ready[decorSrcOf(name)], places = T3.decor[name];
   if (!rec || !places || !places.length) return;
   T3.decor.baked[name] = true;
   rec.scene.updateMatrixWorld(true);
   const meshes = [];
   rec.scene.traverse(function (m) { if (m.isMesh) meshes.push(m); });
-  /* grass1 — це ЦІЛА ГАЛЯВИНА з ~30 окремих кущиків, розкиданих по 176
-     юнітах: вписувати її всю у 8-12 юнітів — отримати невидиму крапку.
-     Тому для трави беремо ПО ОДНОМУ кущику (підмешу) на точку розсіву,
-     кожен зі своїм власним bbox для центрування/посадки. */
-  const single = name === 'grass1';
-  const boxes = [];
-  if (single) {
-    for (let mi = 0; mi < meshes.length; mi++) {
-      const b = new THREE.Box3().setFromObject(meshes[mi]);
-      const sz = new THREE.Vector3(); b.getSize(sz);
-      const c = new THREE.Vector3(); b.getCenter(c);
-      boxes.push({ min: b.min, size: sz, center: c });
-    }
-  }
   const buckets = [];   // {mat, pos, norm, uv}
   const M4 = new THREE.Matrix4(), R4 = new THREE.Matrix4(), S4 = new THREE.Matrix4(),
-        C4 = new THREE.Matrix4(), MM = new THREE.Matrix4(), N3 = new THREE.Matrix3();
-  const v = new THREE.Vector3(), nv = new THREE.Vector3();
+        C4 = new THREE.Matrix4(), A4 = new THREE.Matrix4(), MM = new THREE.Matrix4(),
+        N3 = new THREE.Matrix3();
+  const v = new THREE.Vector3(), nv = new THREE.Vector3(), ax = new THREE.Vector3();
   const span = Math.max(rec.size.x, rec.size.z, 0.001);
   for (let pi = 0; pi < places.length; pi++) {
     const pl = places[pi];
-    let use = meshes, s, cx, cz, my;
-    if (single) {
-      const mi = (terrHash(pi * 17 + 3, 4211) * meshes.length) | 0;
-      use = [meshes[Math.min(mi, meshes.length - 1)]];
-      const bx = boxes[Math.min(mi, meshes.length - 1)];
-      s = pl.size / Math.max(bx.size.x, bx.size.y, bx.size.z, 0.001);
-      cx = bx.center.x; cz = bx.center.z; my = bx.min.y;
-    } else {
-      s = pl.size / span;
-      cx = rec.center.x; cz = rec.center.z; my = rec.min.y;
-    }
+    /* моделі кіта — цілісні кущики/камінці: масштаб від горизонтального
+       габариту всієї моделі (byH — від висоти: колоди мірою є довжина
+       стовбура), посадка низом bbox на рельєф */
+    const use = meshes,
+          s = pl.byH ? pl.size / Math.max(rec.size.y, 0.001) : pl.size / span,
+          cx = rec.center.x, cz = rec.center.z, my = rec.min.y;
     /* легке втоплення: фасетки рельєфу трохи відхиляються від heightAt між
        вершинами сітки — основа декору не повинна «висіти» над схилом */
-    M4.makeTranslation(pl.x - W2, heightAt(pl.x, pl.y) - 1.4, pl.y - H2);
+    M4.makeTranslation(pl.x - W2, heightAt(pl.x, pl.y) - (pl.sink != null ? pl.sink : 1.4), pl.y - H2);
+    /* нахил навколо СВІТОВОЇ горизонтальної осі, півот — основа моделі:
+       дерева стіни хиляться до центру, колоди валяться в горизонталь */
+    if (pl.tilt) { A4.makeRotationAxis(ax.set(pl.tax, 0, pl.taz).normalize(), pl.tilt); M4.multiply(A4); }
     R4.makeRotationY(pl.rot); S4.makeScale(s, s, s);
     C4.makeTranslation(-cx, -my, -cz);
     M4.multiply(R4).multiply(S4).multiply(C4);
@@ -2493,8 +3332,12 @@ function bakeDecor3D(name) {
       N3.getNormalMatrix(MM);
       let bk = null;
       for (let b = 0; b < buckets.length; b++) if (buckets[b].mat === mesh.material) { bk = buckets[b]; break; }
-      if (!bk) { bk = { mat: mesh.material, pos: [], norm: [], uv: [] }; buckets.push(bk); }
-      const g = mesh.geometry, p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv;
+      if (!bk) { bk = { mat: mesh.material, pos: [], norm: [], uv: [], col: [] }; buckets.push(bk); }
+      const g = mesh.geometry, p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv,
+            vc = g.attributes.color;   // COLOR_0 кіта: без нього vertexColors-шейдер малює ЧОРНЕ
+      /* COLOR_0 у glTF — normalized ubyte/ushort, а getX() в r128 повертає СИРІ
+         значення (0..255) — без масштабу кольори «вигорають» у білий */
+      const vcs = vc ? (vc.normalized ? (vc.array.BYTES_PER_ELEMENT === 1 ? 1 / 255 : 1 / 65535) : 1) : 1;
       const ix = g.index, cnt = ix ? ix.count : p.count;
       for (let k = 0; k < cnt; k++) {
         const vi = ix ? ix.getX(k) : k;
@@ -2502,6 +3345,7 @@ function bakeDecor3D(name) {
         bk.pos.push(v.x, v.y, v.z);
         if (n) { nv.fromBufferAttribute(n, vi).applyMatrix3(N3).normalize(); bk.norm.push(nv.x, nv.y, nv.z); }
         if (u) bk.uv.push(u.getX(vi), u.getY(vi));
+        if (vc) bk.col.push(vc.getX(vi) * vcs, vc.getY(vi) * vcs, vc.getZ(vi) * vcs);
       }
     }
   }
@@ -2511,30 +3355,32 @@ function bakeDecor3D(name) {
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bk.pos), 3));
     if (bk.norm.length === bk.pos.length) g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(bk.norm), 3));
     if (bk.uv.length * 3 === bk.pos.length * 2) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(bk.uv), 2));
+    if (bk.col.length === bk.pos.length) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(bk.col), 3));
     const mesh = new THREE.Mesh(g, bk.mat);
-    mesh.castShadow = name !== 'grass1';   // тіні лише каменям: трава в shadow-pass дорога й не читається
+    /* тіні — лише помітному декору АРЕНИ: каміння, колоди, мезаси, машина,
+       водонапірка, танк; споруди периметра далеко (їх тіні не читаються),
+       а кожен castShadow-бакет — зайвий draw call у shadow-pass */
+    mesh.castShadow = name === 'rock1' || name === 'rock2' || name === 'lean1' ||
+                      name === 'lean2' || name === 'log1' || name === 'log2' || name === 'mesa' ||
+                      name === 'wtank' || name === 'tank' || name === 'car';
     mesh.matrixAutoUpdate = false;
     T3.scene.add(mesh);
   }
 }
-/* ── Боєць: Quaternius Adventurer (риг UAL) — готові кліпи Idle_Gun /
-   Idle_Gun_Shoot / Run / Run_Shoot / Death; револьвер у правій кисті ── */
+/* ── Боєць: Toon Shooter Game Kit, Character_Soldier (риг CharacterArmature) —
+   кліпи Idle / Idle_Shoot / Run_Gun / Run_Shoot / Death / HitReact / Wave.
+   АК УЖЕ вбудований у праву кисть моделі (нода 'AK' на кістці
+   пальця; зайві стволи вирізані при конвертації) — хват авторський,
+   пер-кліпова калібровка не потрібна. ── */
 const SOLDIER_H = 44;              // зріст у світових юнітах (гравець-коло r=16)
-const SOLDIER_ROT = Math.PI / 2;   // Quaternius дивиться у +Z → «перед» рига +X
+const SOLDIER_ROT = Math.PI / 2;   // кіт дивиться у +Z → «перед» рига +X
 const CLIP_PREFIX = 'CharacterArmature|';
-/* Хват револьвера: однорука зброя живе в кістці правої кисті ('Wrist.R';
-   GLTFLoader санітизує крапки в іменах нод → перевіряємо і 'WristR') —
-   у Gun-кліпах UAL права рука витягнута з пістолетом, тож кисть сама несе
-   зброю через усі стани (Idle_Gun / Run_Shoot / Death) без пер-кліпових
-   пресетів. Значення відкалібровано ВІЗУАЛЬНО (скріншоти айдлу/бігу/стрільби):
-   вісь кістки кисті ≈ +Y уздовж передпліччя, тому ствол (+X групи зброї)
-   довернутий до +Y, а руків'я лягає в долоню невеликим офсетом. */
-const GUN_HAND_POS = [0, 2.2, 0.6];      // світові юніти в осях кістки Wrist.R
-const GUN_HAND_EULER = [0, 0, 88];       // градуси, порядок XYZ; ствол = +X групи зброї
-const REVOLVER_LEN = 14;                 // нормалізація: ~14 юнітів по довшій осі
+/* дуло: офсет спалаху в ЛОКАЛЬНИХ осях ноди AK — ствол уздовж +X
+   (bbox X −0.94…2.46, лінія ствола ~Y+0.6); з конвертера ak-swap.mjs */
+const GUN_MUZZLE_POS = [2.4, 0.6, 0];
 function soldierClip(rec, name) {
-  return THREE.AnimationClip.findByName(rec.clips, CLIP_PREFIX + name) ||
-         THREE.AnimationClip.findByName(rec.clips, name);
+  return THREE.AnimationClip.findByName(rec.clips, name) ||
+         THREE.AnimationClip.findByName(rec.clips, CLIP_PREFIX + name);
 }
 function makeSoldier3D(p) {
   const rec = GLB.ready.soldier;
@@ -2546,83 +3392,46 @@ function makeSoldier3D(p) {
   const wrap = new THREE.Group();
   wrap.add(inst);
   const mats = [];
-  let handBone = null, fallbackBone = null;
+  let gunNode = null;
   inst.traverse(function (m) {
     if (m.isMesh) {
       m.castShadow = true;
       m.frustumCulled = false;   // скелетні меші «зникають» край кадру без цього
       m.material = reg3(m.material.clone());   // персональний матеріал під тонування
-      /* Fortnite-скін: тіло/ноги/черевики/рюкзак у колір гравця, а голову
-         (обличчя+волосся) НЕ фарбуємо — лице лишається читабельним; кольору
-         на корпусі досить, щоб розрізняти гравців на будь-якому плані */
-      if (m.name.indexOf('Head') === -1) m.material.color.set(p.color);
-      mats.push(m.material);   // голова теж у tintMats: сіріє в трупа, блимає від урону
-    } else if (m.isBone) {
-      /* права кисть: у Gun-кліпах UAL вона витягнута з пістолетом */
-      if (m.name === 'Wrist.R' || m.name === 'WristR') handBone = m;
-      else if (m.name === 'Chest') fallbackBone = m;
+      /* ідентифікація гравця КОЛЬОРОМ КОСТЮМА: зелена частина уніформи —
+         матеріал 'Character_Main' — фарбується в p.color; Skin/Pants/чорне
+         лишаються авторськими */
+      if (m.material.name === 'Character_Main')
+        m.material.color.set(p.color).convertSRGBToLinear();
+      mats.push(m.material);   // усі меші в tintMats: сіріють у трупа, блимають від урону
     }
+    if (m.name === 'AK') gunNode = m;   // вбудована зброя (група мешів)
   });
-  /* ── Револьвер (revolver.glb) у правій кисті. Кістка живе у масштабі
-     рига, тому світові юніти перераховуємо через її world-scale. */
-  let muzzle = null, gunGrp = null;
-  if (!handBone) {
-    // страховка: кисть не знайшли (інша версія рига) — зброя чіпляється до
-    // грудей/кореня моделі, щоб боєць НІКОЛИ не був голоруч
-    try { console.warn('[RSO] кістка кисті не знайдена — револьвер на тулубі'); } catch (_) {}
-    handBone = fallbackBone;
-    if (!handBone) {
-      handBone = new THREE.Group();
-      handBone.position.set(6 / Math.max(inst.scale.x, 1e-6), 28 / Math.max(inst.scale.x, 1e-6), 0);
-      inst.add(handBone);
-    }
-  }
-  {
+  /* спалах пострілу — спрайт на дулі вбудованого револьвера; локальний
+     простір ноди = метри кіта, тож масштаб спрайта нормалізуємо через
+     world-scale (кістки пальця масштабів не додають, але страхуємось) */
+  let muzzle = null;
+  if (gunNode) {
+    /* зброя тіні не кидає: 4 меші × 4 гравці у shadow-pass не читаються,
+       а draw call-и коштують */
+    gunNode.traverse(function (m) { if (m.isMesh) m.castShadow = false; });
     inst.updateMatrixWorld(true);
     const ws = new THREE.Vector3();
-    handBone.getWorldScale(ws);
-    const u = 1 / Math.max(ws.x, 1e-6);        // світові юніти → локальні юніти кістки
-    const gun = new THREE.Group();
-    const rvRec = GLB.ready.revolver;
-    if (rvRec) {
-      const rv = rvRec.scene.clone(true);
-      /* нормалізуємо револьвер до ~REVOLVER_LEN світових юнітів по найдовшій
-         осі; центр моделі — в (0,0,0) групи, руків'я підганяє GUN_HAND_POS */
-      const L = Math.max(rvRec.size.x, rvRec.size.y, rvRec.size.z, 0.001);
-      const k = REVOLVER_LEN / L;
-      rv.scale.setScalar(k);
-      const c = new THREE.Vector3();
-      c.set((rvRec.min.x + rvRec.size.x / 2) * k, (rvRec.min.y + rvRec.size.y / 2) * k, (rvRec.min.z + rvRec.size.z / 2) * k);
-      rv.position.sub(c);                       // центр моделі в (0,0,0) групи
-      /* модель лежить стволом уздовж +X — це і є вісь стволу групи зброї */
-      gun.add(rv);
-    } else {
-      /* фолбек: пістолет із боксів (стволом у +X), поки revolver.glb не доїхав */
-      const barrel = new THREE.Mesh(T3A.geo.box, T3A.mat.gun);
-      barrel.scale.set(9, 2.2, 1.8); barrel.position.set(3.5, 1, 0);
-      const grip = new THREE.Mesh(T3A.geo.box, T3A.mat.gun);
-      grip.scale.set(2.6, 5, 2); grip.position.set(-1.5, -2, 0);
-      gun.add(barrel); gun.add(grip);
-    }
-    /* спалах пострілу — спрайт на кінці ствола (керується із syncPlayers3D) */
+    gunNode.getWorldScale(ws);
+    const u = 1 / Math.max(ws.x, 1e-6);   // світові юніти → локальні ноди зброї
     muzzle = new THREE.Sprite(T3A.mat.flash);
-    muzzle.scale.set(12, 12, 1); muzzle.position.set(REVOLVER_LEN / 2 + 1.5, 1.2, 0); muzzle.visible = false;
-    gun.add(muzzle);
-    /* нормалізація масштабу кістки + фіксований офсет/кут відносно кисті:
-       ствол уздовж напрямку, куди показує рука, руків'я в долоні */
-    gun.scale.setScalar(u);
-    const dg = Math.PI / 180;
-    gun.quaternion.setFromEuler(new THREE.Euler(
-      GUN_HAND_EULER[0] * dg, GUN_HAND_EULER[1] * dg, GUN_HAND_EULER[2] * dg, 'XYZ'));
-    gun.position.set(GUN_HAND_POS[0] * u, GUN_HAND_POS[1] * u, GUN_HAND_POS[2] * u);
-    gun.userData.u = u;   // для живого калібрування хвата
-    handBone.add(gun);
-    gunGrp = gun;
+    muzzle.scale.set(12 * u, 12 * u, 1);
+    muzzle.position.set(GUN_MUZZLE_POS[0], GUN_MUZZLE_POS[1], GUN_MUZZLE_POS[2]);
+    muzzle.visible = false;
+    gunNode.add(muzzle);
+  } else {
+    try { console.warn('[RSO] нода AK не знайдена — спалах лишиться на ризі'); } catch (_) {}
   }
   const mixer = new THREE.AnimationMixer(inst);
   const acts = {};
-  /* wave — окремий victory-стан (переможець махає глядачам за вінер-скріном) */
-  const CLIPS = { idle: 'Idle_Gun', idleShoot: 'Idle_Gun_Shoot', run: 'Run', runShoot: 'Run_Shoot', death: 'Death', wave: 'Wave' };
+  /* мапінг станів бою → кліпи кіта; біг — Run_Gun (зі зброєю в руці),
+     wave — victory-стан (переможець махає глядачам за вінер-скріном) */
+  const CLIPS = { idle: 'Idle', idleShoot: 'Idle_Shoot', run: 'Run_Gun', runShoot: 'Run_Shoot', death: 'Death', hit2: 'HitReact', wave: 'Wave' };
   for (const k in CLIPS) {
     const c = soldierClip(rec, CLIPS[k]);
     if (c) acts[k] = mixer.clipAction(c);
@@ -2631,12 +3440,16 @@ function makeSoldier3D(p) {
     acts.death.setLoop(THREE.LoopOnce, 1);
     acts.death.clampWhenFinished = true;       // завмирає в фінальній позі — труп
   }
+  if (acts.hit2) {
+    acts.hit2.setLoop(THREE.LoopOnce, 1);
+    acts.hit2.clampWhenFinished = true;        // міст до Death у ланцюжковій смерті
+  }
   if (acts.idle) {
     acts.idle.play();
     acts.idle.time = (p.idx * 0.37) % (acts.idle.getClip().duration || 1);   // десинхрон айдлів
   }
   return { obj: wrap, mixer: mixer, idle: acts.idle || null, run: acts.run || null,
-           acts: acts, mats: mats, muzzle: muzzle, gun: gunGrp, spine: null };
+           acts: acts, mats: mats, muzzle: muzzle, gun: gunNode, spine: null };
 }
 /* повісити GLB-солдата на риг (виклик і при build, і при hot-swap) */
 function attachSoldier3D(r) {
@@ -2645,7 +3458,7 @@ function attachSoldier3D(r) {
   r.legL = r.legR = null;
   r.inner.add(sd.obj);
   r.model = sd.obj; r.mixer = sd.mixer; r.idleA = sd.idle; r.runA = sd.run;
-  r.acts = sd.acts; r.animKey = 'idle'; r.deathPlayed = false;
+  r.acts = sd.acts; r.animKey = 'idle'; r.deathPlayed = false; r.deathChainAt = 0;
   r.tintMats = sd.mats; r.running3 = false;
   r.gunFlash = sd.muzzle; r.gun = sd.gun; r.spine = sd.spine; r.aimW = 0;
 }
@@ -2661,7 +3474,16 @@ function swapIn3D(name) {
       }
       return;
     }
-    if (name === 'rock1' || name === 'rock2' || name === 'grass1') { bakeDecor3D(name); return; }
+    if (name === 'nadefrag' || name === 'nadefire') {
+      /* шкурки снарядів у пулі: перебудова дає GLB замість фолбек-примітивів */
+      for (let i = 0; i < T3.nades.length; i++) attachNadeSkins3D(T3.nades[i]);
+      return;
+    }
+    if (DECOR_NAMES.indexOf(name) >= 0) { bakeDecor3D(name); return; }
+    /* деякі моделі арени живлять і запечений декор (стіна лісу — повні
+       дерева, кущ дальнього кільця тощо): довантаження запікає і його */
+    for (let dn = 0; dn < DECOR_NAMES.length; dn++)
+      if (decorSrcOf(DECOR_NAMES[dn]) === name) bakeDecor3D(DECOR_NAMES[dn]);
     const list = T3.pending[name];
     if (!list) return;
     for (let i = 0; i < list.length; i++) {
@@ -2669,11 +3491,11 @@ function swapIn3D(name) {
       /* вибухла бочка лишається примітивним «згарищем» — не підміняємо */
       if (name === 'barrel' && it.rec && it.rec.wrecked) continue;
       while (it.holder.children.length) it.holder.remove(it.holder.children[0]);
-      if (name === 'tree' || name === 'tree2') { it.holder.add(makeTree3D(it.o)); it.holder.rotation.y = (it.o.id % 7) * 0.9; }
+      if (name.indexOf('tree') === 0) { it.holder.add(makeTree3D(it.o)); it.holder.rotation.y = (it.o.id % 7) * 0.9; }
       else if (name === 'bush') { it.holder.add(makeBush3D(it.o)); it.holder.rotation.y = (it.o.id % 5) * 1.3; }
       else if (name === 'medkit') it.holder.add(makeMedkit3D());
       else if (name === 'barrel') { it.holder.add(makeBarrel3D(it.o)); it.rec.isGlb = true; it.rec.mesh = null; }
-      else if (name === 'barrier') it.holder.add(makeRow3D(GLB.ready[name], it.o));
+      else if (name === 'barrier' || name === 'container') it.holder.add(makeRow3D(GLB.ready[name], it.o));
       else if (name === 'sandbags') it.holder.add(makeRow3D(GLB.ready[name], it.o, 35));
       else if (name === 'crate') it.holder.add(makeCrate3D(it.o));   // yaw уже стоїть на холдері
       /* аптечки рухаються щокадру — їм матриці не заморожуємо */
@@ -2692,7 +3514,7 @@ function setup3D() {
       t3Renderer.shadowMap.enabled = true;
       t3Renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       t3Renderer.outputEncoding = THREE.sRGBEncoding;
-      t3Renderer.setClearColor('#cfc7ae', 1);
+      t3Renderer.setClearColor('#c4c9a8', 1);   // у тон низу неба
     }
     ensureAssets3D();
     return true;
@@ -2715,8 +3537,13 @@ function build3D() {
     camera: new THREE.PerspectiveCamera(50, Math.max(0.5, vw / Math.max(1, vh)), 2, 7000),
     rigs: [], dynObs: [], kits: [], tracers: [], smoke: [], expl: [], nades: [], nadeMarks: [],
     fires3: [], smokes3: [],   // пули зон молотова/смока
-    /* холдери, що чекають на свій GLB (фолбек-примітив усередині) */
-    pending: { tree: [], tree2: [], bush: [], medkit: [], barrel: [], barrier: [], sandbags: [], crate: [] },
+    /* холдери, що чекають на свій GLB (фолбек-примітив усередині);
+       слоти дерев — за списком активного біому (у пустелі їх 5) */
+    pending: (function () {
+      const p = { bush: [], medkit: [], barrel: [], barrier: [], sandbags: [], crate: [], container: [] };
+      for (let i = 0; i < BIO.treeKeys.length; i++) p[BIO.treeKeys[i]] = [];
+      return p;
+    })(),
     decor: null,   // детермінований розсів каменів/трави (bakeDecor3D)
     cpos: new THREE.Vector3(0, 900, 700), clook: new THREE.Vector3(0, 0, 0),
     dpos: new THREE.Vector3(), dlook: new THREE.Vector3(), tmpV: new THREE.Vector3(),
@@ -2724,14 +3551,20 @@ function build3D() {
     orbA: 0, decalTex: null,
   };
   const S = T3.scene;
-  /* серпанок: горизонт тане в колір неба (низ градієнта). Колір під теплу
-     палітру нової землі; густина трохи менша за стару — фасетки лоуполі
-     на загальному плані не «миляться» серпанком */
-  S.fog = new THREE.FogExp2('#c0baa5', 0.00045);   // серпанок у тон приглушеної землі
+  /* біомна атмосфера: моделі природи (ліниво), небо-градієнт, серпанок,
+     дальня земля і фон рендерера — все з палітри активного біому */
+  loadModels3D();
+  paintSky3D();
+  M.farGround.color.set(BIO.far).convertSRGBToLinear();
+  if (t3Renderer) t3Renderer.setClearColor(BIO.sky[2], 1);
+  /* серпанок: горизонт тане в колір неба (низ градієнта); густина помірна —
+     фасетки лоуполі на загальному плані не «миляться» серпанком */
+  S.fog = new THREE.FogExp2(BIO.fog, BIO.fogGame);
   S.add(new THREE.Mesh(G.sky, M.sky));
-  /* світло: сонце з м'якими тінями — головний «продавець» 3D — плюс заповнення */
-  S.add(new THREE.HemisphereLight('#bdd0e6', '#6b6250', 0.6));
-  const sun = new THREE.DirectionalLight('#fff1da', 1.0);
+  /* світло: сонце з м'якими тінями — головний «продавець» 3D — плюс заповнення
+     (відбите світло неба/землі — у тон біому) */
+  S.add(new THREE.HemisphereLight(BIO.hemi[0], BIO.hemi[1], 0.6));
+  const sun = new THREE.DirectionalLight(BIO.sun, 1.0);
   sun.position.set(-430, 760, -280);
   sun.castShadow = true;
   /* 1024 замість 2048: чверть пікселів shadow-pass, різниця в картинці
@@ -2751,7 +3584,9 @@ function build3D() {
      computeVertexNormals дає нормаль НА ТРИКУТНИК — справжній flat-look
      (сам прапорець flatShading у r128-Lambert фасеток не дав би: освітлення
      там рахується у vertex-шейдері) */
-  const groundGeo = reg3(new THREE.PlaneGeometry(W + TERRA_EXT * 2, H + TERRA_EXT * 2, 176, 132).toNonIndexed());
+  /* 230x170: дрібніші фасетки — плями витоптаної землі і стежка плавніші
+     (запит власника); бюджет сцени тримаємо ≤ ~340к трикутників */
+  const groundGeo = reg3(new THREE.PlaneGeometry(W + TERRA_EXT * 2, H + TERRA_EXT * 2, 230, 170).toNonIndexed());
   groundGeo.rotateX(-Math.PI / 2);
   const gpos = groundGeo.attributes.position;
   for (let i = 0; i < gpos.count; i++)
@@ -2766,40 +3601,31 @@ function build3D() {
   const far = new THREE.Mesh(G.farGround, M.farGround);
   far.position.y = -1.6;
   S.add(far); onceUpdateMatrix(far);
-  /* «домальований» світ: зовнішнє кільце (за ареною, до TERRA_EXT) засаджуємо
-     деревами й кущами — суто декор, у 2D-логіці колізій/LOS їх нема */
-  for (let di = 0; di < 34; di++) {
-    const rx = -TERRA_EXT + 90 + terrHash(9101 + di, 17) * (W + TERRA_EXT * 2 - 180);
-    const rz = -TERRA_EXT + 90 + terrHash(9202 + di, 29) * (H + TERRA_EXT * 2 - 180);
-    if (rx > -60 && rx < W + 60 && rz > -50 && rz < H + 50) continue;   // тільки ЗОВНІ арени
-    const dh = new THREE.Group();
-    dh.position.set(rx - W2, heightAt(rx, rz), rz - H2);
-    if (terrHash(9303 + di, 7) < 0.62) {
-      const o = { id: 9000 + di, crown: 30 + terrHash(9404 + di, 3) * 26 };
-      if (GLB.ready[treeKeyOf(o)]) { dh.add(makeTree3D(o)); dh.rotation.y = (o.id % 7) * 0.9; }
-      else T3.pending[treeKeyOf(o)].push({ holder: dh, o: o });
-    } else {
-      const o = { id: 9000 + di, r: 15 + terrHash(9505 + di, 5) * 13 };
-      if (GLB.ready.bush) { dh.add(makeBush3D(o)); dh.rotation.y = (o.id % 5) * 1.3; }
-      else T3.pending.bush.push({ holder: dh, o: o });
-    }
-    S.add(dh); onceUpdateMatrix(dh);
-  }
+  /* «домальований» світ: периметр біому (стіна лісу / мезаси) живе у
+     запеченому декорі — див. блок периметра в planDecor3D */
   /* шар декалей: той самий offscreen-канвас `ground`, куди 2D-код малює
      кров/кіптяву — та сама РЕЛЬЄФНА геометрія, піднята на 0.4 (без z-fight):
      декалі «стеляться» по пагорбах, а не тонуть у них */
   if (ground) {
     T3.decalTex = reg3(new THREE.CanvasTexture(ground));
     const dm = reg3(new THREE.MeshBasicMaterial({ map: T3.decalTex, transparent: true, depthWrite: false }));
-    const dp = new THREE.Mesh(groundGeo, dm);
-    dp.position.y = 0.4;
+    /* декалі — на ЧВЕРТЬ-сітці рельєфу (індексованій): шар без освітлення
+       фасеток не потребує, а повна non-indexed копія коштувала 46к трикутників
+       щокадру; підйом 1.0 ховає розбіжність грубішої сітки зі схилами */
+    const decalGeo = reg3(new THREE.PlaneGeometry(W + TERRA_EXT * 2, H + TERRA_EXT * 2, 56, 42));
+    decalGeo.rotateX(-Math.PI / 2);
+    const dgp = decalGeo.attributes.position;
+    for (let i = 0; i < dgp.count; i++)
+      dgp.setY(i, heightAt(dgp.getX(i) + W2, dgp.getZ(i) + H2));
+    const dp = new THREE.Mesh(decalGeo, dm);
+    dp.position.y = 1.0;
     dp.renderOrder = 1;
     S.add(dp); onceUpdateMatrix(dp);
     groundDirty3D = true;
   }
   /* декор (камені/трава): план — одразу, запікання — коли GLB готовий */
   T3.decor = planDecor3D();
-  bakeDecor3D('rock1'); bakeDecor3D('rock2'); bakeDecor3D('grass1');
+  for (let dn = 0; dn < DECOR_NAMES.length; dn++) bakeDecor3D(DECOR_NAMES[dn]);
   buildObstacles3D();
   buildPickups3D();
   buildRigs3D();
@@ -2854,8 +3680,9 @@ function buildObstacles3D() {
       r.glow = glow;
       T3.dynObs.push(r);
     } else if (o.type === 'sandbag' || o.type === 'wall' || o.type === 'barrier') {
-      /* мішки → sandbags.glb; барʼєр і стіна → barrier.glb; фолбек — бокс */
-      const key = o.type === 'sandbag' ? 'sandbags' : 'barrier';
+      /* мішки → траншея з мішків; барʼєр → барикада зі сміття; стіна →
+         ряд вантажних контейнерів («острови» бази на прямокутних колізіях) */
+      const key = o.type === 'sandbag' ? 'sandbags' : (o.type === 'wall' ? 'container' : 'barrier');
       const holder = new THREE.Group();
       holder.position.set(gx, gy, gz);
       if (GLB.ready[key]) {
@@ -2993,7 +3820,7 @@ function buildRigs3D() {
       flash: flash, ring: ring, label: label, lcv: lcv, lctx: lcv.getContext('2d'),
       ltex: ltex, labelKey: '', deadTint: false,
     };
-    if (GLB.ready.soldier) {
+    if (GLB.ready[charKeyOf(p)]) {
       try { attachSoldier3D(rec); } catch (e) { attachPrimRig3D(rec); }
     } else {
       attachPrimRig3D(rec);
@@ -3002,6 +3829,68 @@ function buildRigs3D() {
   }
 }
 
+/* шкурка снаряда з GLB: клон, нормалізований під габарит старого примітива
+   і відцентрований — снаряд крутиться в польоті навколо власного центру.
+   recolor: смок — це nadefrag із Green/DarkGreen, перефарбованими в біло-сіре */
+function makeNadeSkin3D(rec, target, recolor) {
+  const inst = glbStatic(rec, false);
+  const s = target / Math.max(rec.size.x, rec.size.y, rec.size.z, 0.001);
+  inst.scale.set(s, s, s);
+  inst.position.set(-rec.center.x * s, -rec.center.y * s, -rec.center.z * s);
+  if (recolor) inst.traverse(function (m) {
+    if (!m.isMesh || !m.material || !m.material.name) return;
+    if (m.material.name === 'Green') { m.material = reg3(m.material.clone()); m.material.color.set('#d9dbdd'); }
+    else if (m.material.name === 'DarkGreen') { m.material = reg3(m.material.clone()); m.material.color.set('#8f959b'); }
+  });
+  const holder = new THREE.Group();
+  holder.add(inst);
+  return holder;
+}
+/* три «шкурки» снаряда на групі з пулу T3.nades; викликається і з buildPools3D
+   (фолбек-примітиви, якщо GLB ще їде), і зі swapIn3D після довантаження */
+function attachNadeSkins3D(g) {
+  const G = T3A.geo, M = T3A.mat;
+  while (g.children.length) g.remove(g.children[0]);
+  let frag, molo, smk;
+  if (GLB.ready.nadefrag) frag = makeNadeSkin3D(GLB.ready.nadefrag, 6, false);
+  else {
+    /* фолбек: сфера з важелем і чекою (габарит — вибір власника, ~2.25/2.6) */
+    frag = new THREE.Group();
+    const body = new THREE.Mesh(G.sphere, M.grenade);
+    body.scale.set(2.25, 2.6, 2.25);
+    const lever = new THREE.Mesh(G.box, M.gun);
+    lever.scale.set(0.8, 2.1, 0.6); lever.position.set(0.8, 2.5, 0); lever.rotation.z = -0.35;
+    const pin = new THREE.Mesh(G.box, reg3(new THREE.MeshBasicMaterial({ color: '#d8d8d8' })));
+    pin.scale.set(1.3, 0.45, 0.45); pin.position.set(-1.2, 2.3, 0);
+    frag.add(body); frag.add(lever); frag.add(pin);
+  }
+  if (GLB.ready.nadefire) molo = makeNadeSkin3D(GLB.ready.nadefire, 9, false);
+  else {
+    /* фолбек-молотов: пляшка (циліндр + шийка) з палаючою ганчіркою-спрайтом */
+    molo = new THREE.Group();
+    const glassM = reg3(new THREE.MeshLambertMaterial({ color: '#3f6a2f' }));
+    const btl = new THREE.Mesh(G.cyl, glassM);
+    btl.scale.set(2.1, 6.5, 2.1);
+    const neck = new THREE.Mesh(G.cyl, glassM);
+    neck.scale.set(0.95, 3.2, 0.95); neck.position.y = 4.4;
+    const rag = new THREE.Sprite(M.flash);
+    rag.scale.set(7, 7, 1); rag.position.y = 6.6;
+    molo.add(btl); molo.add(neck); molo.add(rag);
+  }
+  if (GLB.ready.nadefrag) smk = makeNadeSkin3D(GLB.ready.nadefrag, 6.5, true);
+  else {
+    /* фолбек-смок: сіра шашка-циліндр зі світлою кришкою */
+    smk = new THREE.Group();
+    const can = new THREE.Mesh(G.cyl, reg3(new THREE.MeshLambertMaterial({ color: '#7d838c' })));
+    can.scale.set(2.3, 6, 2.3);
+    const cap = new THREE.Mesh(G.cyl, reg3(new THREE.MeshLambertMaterial({ color: '#d8d8d8' })));
+    cap.scale.set(1.4, 1.2, 1.4); cap.position.y = 3.4;
+    smk.add(can); smk.add(cap);
+  }
+  molo.visible = false; smk.visible = false;
+  g.add(frag); g.add(molo); g.add(smk);
+  g.userData.frag = frag; g.userData.molo = molo; g.userData.smk = smk;
+}
 function buildPools3D() {
   const G = T3A.geo, M = T3A.mat, S = T3.scene;
   for (let i = 0; i < TR3N; i++) {
@@ -3012,39 +3901,9 @@ function buildPools3D() {
   for (let i = 0; i < GR3N; i++) {
     /* снаряд у польоті: три «шкурки» під тип кидка (frag/molotov/smoke),
        перемикаються visible-ом у syncGrenades3D; поруч — мітка приземлення.
-       Граната вдвічі менша за стару (4.5/5.2 → 2.25/2.6) — вибір власника. */
+       Шкурки — GLB (nadefrag/nadefire) з примітивним фолбеком до довантаження */
     const g = new THREE.Group();
-    const frag = new THREE.Group();
-    const body = new THREE.Mesh(G.sphere, M.grenade);
-    body.scale.set(2.25, 2.6, 2.25);
-    const lever = new THREE.Mesh(G.box, T3A.mat.gun);
-    lever.scale.set(0.8, 2.1, 0.6); lever.position.set(0.8, 2.5, 0); lever.rotation.z = -0.35;
-    const pinM = reg3(new THREE.MeshBasicMaterial({ color: '#d8d8d8' }));
-    const pin = new THREE.Mesh(G.box, pinM);
-    pin.scale.set(1.3, 0.45, 0.45); pin.position.set(-1.2, 2.3, 0);
-    frag.add(body); frag.add(lever); frag.add(pin);
-    /* молотов: пляшка (циліндр + шийка) з палаючою ганчіркою-спрайтом */
-    const molo = new THREE.Group();
-    const glassM = reg3(new THREE.MeshLambertMaterial({ color: '#3f6a2f' }));
-    const btl = new THREE.Mesh(G.cyl, glassM);
-    btl.scale.set(2.1, 6.5, 2.1);
-    const neck = new THREE.Mesh(G.cyl, glassM);
-    neck.scale.set(0.95, 3.2, 0.95); neck.position.y = 4.4;
-    const rag = new THREE.Sprite(M.flash);
-    rag.scale.set(7, 7, 1); rag.position.y = 6.6;
-    molo.add(btl); molo.add(neck); molo.add(rag);
-    /* смок: сіра шашка-циліндр зі світлою кришкою */
-    const smk = new THREE.Group();
-    const canM = reg3(new THREE.MeshLambertMaterial({ color: '#7d838c' }));
-    const can = new THREE.Mesh(G.cyl, canM);
-    can.scale.set(2.3, 6, 2.3);
-    const capM = reg3(new THREE.MeshLambertMaterial({ color: '#d8d8d8' }));
-    const cap = new THREE.Mesh(G.cyl, capM);
-    cap.scale.set(1.4, 1.2, 1.4); cap.position.y = 3.4;
-    smk.add(can); smk.add(cap);
-    molo.visible = false; smk.visible = false;
-    g.add(frag); g.add(molo); g.add(smk);
-    g.userData.frag = frag; g.userData.molo = molo; g.userData.smk = smk;
+    attachNadeSkins3D(g);
     g.visible = false;
     S.add(g); T3.nades.push(g);
     /* мітка приземлення: пульсуюче кільце в точці, куди летить граната —
@@ -3067,35 +3926,71 @@ function buildPools3D() {
     sp.visible = false;
     S.add(sp); T3.smoke.push(sp);
   }
-  /* ── Молотов-вогонь: FI3N калюж × FTON язиків-спрайтів + пульсуюче світло.
-     Кожен язик має власний матеріал — мерехтять незалежно (усе через reg3 → dispose) */
+  /* ── Молотов-вогонь: FI3N калюж × FTON лоуполі-«крапель» полум'я (спільні
+     геометрії G.flames + один M.flame: без прозорості, тож фейд — масштабом);
+     під ними випалене коло, зверху — пульсуюче точкове світло ── */
   for (let i = 0; i < FI3N; i++) {
     const grp = new THREE.Group();
+    /* темна пляма з м'яким прозорим краєм: свій матеріал, бо опасіті пер-калюжна */
+    const scM = reg3(new THREE.MeshBasicMaterial({ map: T3A.scorchTex, transparent: true, depthWrite: false, opacity: 0 }));
+    const scorch = new THREE.Mesh(G.plane, scM);
+    scorch.rotation.x = -Math.PI / 2; scorch.position.y = 1.1; scorch.renderOrder = 2;
+    grp.add(scorch);
     const tongues = [];
     for (let q = 0; q < FTON; q++) {
-      const fm = reg3(new THREE.SpriteMaterial({ map: T3A.flashTex, color: '#ffb35a', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
-      const sp = new THREE.Sprite(fm);
-      const a = (q / FTON) * TAU, rr = q === 0 ? 0 : 0.35 + (q % 3) * 0.2;   // частка радіуса калюжі
-      sp.userData.ox = Math.cos(a) * rr; sp.userData.oz = Math.sin(a) * rr;
-      sp.userData.ph = q * 1.7;
-      grp.add(sp); tongues.push(sp);
+      const m = new THREE.Mesh(G.flames[q % G.flames.length], M.flame);
+      const a = (q / FTON) * TAU + q * 0.9;
+      const rr = q === 0 ? 0 : 0.3 + ((q * 37) % 45) / 100;   // частка радіуса калюжі
+      m.userData.ox = Math.cos(a) * rr; m.userData.oz = Math.sin(a) * rr;
+      m.userData.ph = q * 1.7;
+      m.userData.base = q === 0 ? 1 : 0.62 + ((q * 53) % 30) / 100;   // центральний — найвищий
+      grp.add(m); tongues.push(m);
     }
     const li = new THREE.PointLight('#ff7a2a', 0, 260, 2);   // помаранчеве точкове з пульсом
     li.position.y = 26;
     grp.add(li);
     grp.visible = false;
     S.add(grp);
-    T3.fires3.push({ grp: grp, tongues: tongues, light: li });
+    T3.fires3.push({ grp: grp, tongues: tongues, light: li, scorch: scorch });
   }
-  /* ── Димова завіса: SK3N хмар × SPUF великих м'яких спрайтів, що клубочаться ── */
+  /* ── Димова завіса: SK3N хмар × SPUF клубків «цвітною капустою»: великі
+     сфери в серці й на маківці, середні кільцем по «плечах», дрібні каскадом
+     по низу та краях — горбкуватий, майже непрозорий силует ── */
   for (let i = 0; i < SK3N; i++) {
     const grp = new THREE.Group();
     const puffs = [];
     for (let q = 0; q < SPUF; q++) {
-      const sm = reg3(new THREE.SpriteMaterial({ map: T3A.smokeTex, color: '#c9cbc9', transparent: true, depthWrite: false, opacity: 0 }));
-      const sp = new THREE.Sprite(sm);
-      sp.userData.ph = q * 0.9;
-      sp.userData.rr = 0.2 + (q % 4) * 0.17;   // частка радіуса завіси
+      /* детермінований джитер від індексів: хмари різні, але відтворювані */
+      const j1 = ((i * 97 + q * 57) % 100) / 100;
+      const j2 = ((i * 53 + q * 83) % 100) / 100;
+      let geoIdx, rad, oy, br, a;
+      if (q < 4) {              // великі: серце клубка і маківка
+        geoIdx = 0;
+        a = q * (TAU / 4) + i * 0.8 + j1 * 0.9;
+        rad = q === 0 ? 0 : 0.12 + j1 * 0.1;
+        oy = q === 0 ? 0.72 : 0.5 + j2 * 0.18;
+        br = 0.46 + j1 * 0.12;
+      } else if (q < 12) {      // середні: кільце по «плечах»
+        geoIdx = 1 + (q % 2);   // чергуємо круглий/сплюснутий — живіший силует
+        a = ((q - 4) / 8) * TAU + i * 0.7 + j2 * 0.5;
+        rad = 0.38 + j1 * 0.14;
+        oy = 0.3 + j2 * 0.16;
+        br = 0.3 + j1 * 0.1;
+      } else {                  // дрібні: каскад по низу і краях
+        geoIdx = 3;
+        a = ((q - 12) / 9) * TAU + i * 1.3 + j1 * 0.6;
+        /* каскад тягнеться до краю ігрового радіуса завіси (r=80) —
+           гравець усередині кола схований і візуально, не лише в LOS */
+        rad = 0.56 + j2 * 0.2;
+        oy = 0.08 + j1 * 0.14;
+        br = 0.2 + j2 * 0.12;
+      }
+      const sp = new THREE.Mesh(G.puffs[geoIdx], M.puff);
+      sp.userData.ox = Math.cos(a) * rad;
+      sp.userData.oz = Math.sin(a) * rad;
+      sp.userData.oy = oy;
+      sp.userData.br = br;
+      sp.userData.ph = q * 0.9 + i * 2.1;
       puffs.push(sp); grp.add(sp);
     }
     grp.visible = false;
@@ -3164,12 +4059,68 @@ function drawLabel3D(rec) {
   const bw = 150, bh = 11, x = 128 - bw / 2, y = 36;
   c.fillStyle = 'rgba(0,0,0,0.65)'; c.fillRect(x - 2, y - 2, bw + 4, bh + 4);
   c.fillStyle = p.color; c.fillRect(x, y, bw * clamp(p.hp / p.maxHP, 0, 1), bh);
+  /* число HP прямо в смужці — прохання власника */
+  c.font = '700 12px " + String.fromCharCode(82,111,98,111,116,111) + " Mono, monospace';
+  c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.85)';
+  const hpTxt = String(Math.max(0, Math.round(p.hp)));
+  c.strokeText(hpTxt, 128, y + bh - 1);
+  c.fillStyle = '#fff'; c.fillText(hpTxt, 128, y + bh - 1);
   if (p.armor > 0) { c.fillStyle = '#c9d4e4'; c.fillRect(x, y - 6, bw * clamp(p.armor / 50, 0, 1), 3); }
   let prog = -1, pc = '#ffd93d';
   if (p.reloading) prog = (perfNow - p.reloadT0) / GUN.reload;
   else if (p.healUntil) { prog = 1 - (p.healUntil - perfNow) / 2000; pc = '#a0ff4a'; }
   if (prog >= 0) { c.fillStyle = pc; c.fillRect(x, y + bh + 3, bw * clamp(prog, 0, 1), 3); }
   rec.ltex.needsUpdate = true;
+}
+/* ── Циферки урону в 3D: лінивий пул спрайтів із канвас-текстурами.
+   Кожен запис dmgPops орендує спрайт: злітає над головою жертви і тане.
+   redraw ставить hurt() при злитті тиків — текстура переливається раз. ── */
+function popSlot3D(i) {
+  if (!T3.pops) T3.pops = [];
+  if (!T3.pops[i]) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64;
+    const tex = reg3(new THREE.CanvasTexture(cv));
+    const mat = reg3(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    const spr = new THREE.Sprite(mat);
+    spr.visible = false; spr.renderOrder = 9;
+    T3.scene.add(spr);
+    T3.pops[i] = { spr: spr, cv: cv, ctx: cv.getContext('2d'), tex: tex, key: '' };
+  }
+  return T3.pops[i];
+}
+function syncPops3D() {
+  const camera = T3.camera, tv = T3.tmpV;
+  const tanV = Math.tan(camera.fov * Math.PI / 360);
+  let used = 0;
+  for (let i = 0; i < dmgPops.length; i++) {
+    const pp = dmgPops[i], age = (perfNow - pp.t0) / POP_MS;
+    if (age >= 1) continue;
+    const slot = popSlot3D(used++);
+    const key = pp.dmg;
+    if (slot.key !== key || pp.redraw) {
+      slot.key = key; pp.redraw = false;
+      const c = slot.ctx;
+      c.clearRect(0, 0, 128, 64);
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '800 ' + (pp.dmg >= 35 ? 40 : 32) + 'px "Roboto Mono", monospace';
+      c.lineWidth = 7; c.strokeStyle = 'rgba(0,0,0,0.85)';
+      c.strokeText('-' + pp.dmg, 64, 32);
+      c.fillStyle = popColor(pp.dmg);
+      c.fillText('-' + pp.dmg, 64, 32);
+      slot.tex.needsUpdate = true;
+    }
+    const gx = pp.p.x - W2, gz = pp.p.y - H2;
+    const gy = heightAt(pp.p.x, pp.p.y) + 62 + age * 26;   // злітає над плашкою
+    slot.spr.position.set(gx, gy, gz);
+    /* екранний розмір ≈ сталий, як у лейблів */
+    tv.set(gx, gy, gz);
+    const d = camera.position.distanceTo(tv);
+    const wh = Math.min(30, 2 * d * tanV * ((pp.dmg >= 35 ? 26 : 21) / Math.max(240, vh)));
+    slot.spr.scale.set(wh * 2, wh, 1);
+    slot.spr.material.opacity = age < 0.6 ? 1 : 1 - (age - 0.6) / 0.4;
+    slot.spr.visible = true;
+  }
+  if (T3.pops) for (let i = used; i < T3.pops.length; i++) T3.pops[i].spr.visible = false;
 }
 function syncPlayers3D(dt) {
   const camera = T3.camera, tv = T3.tmpV;
@@ -3244,10 +4195,25 @@ function syncPlayers3D(dt) {
       if (r.acts && r.acts.death) {
         if (!r.deathPlayed) {
           r.deathPlayed = true;
-          for (const k in r.acts) if (k !== 'death') r.acts[k].fadeOut(0.1);
-          r.acts.death.reset().play();
+          /* 50/50: чистий Death або «підкинуло — впав» (HitRecieve_2 -> Death) */
+          const chain = r.acts.hit2 && frnd() < 0.5;
+          for (const k in r.acts) if (k !== 'death' && k !== 'hit2') r.acts[k].fadeOut(0.1);
+          if (chain) {
+            /* трошки раніше кінця HitRecieve_2 — кросфейд без «завмерлої» паузи */
+            r.deathChainAt = perfNow + (r.acts.hit2.getClip().duration || 0.6) * 1000 - 120;
+            r.acts.hit2.reset().play();
+          } else {
+            r.deathChainAt = 0;
+            r.acts.death.reset().play();
+          }
         }
-        if (perfNow - p.deadAt < 2600) r.mixer.update(dt);   // дограти кліп і завмерти
+        if (r.deathChainAt && perfNow >= r.deathChainAt) {
+          r.deathChainAt = 0;
+          r.acts.death.reset();
+          r.acts.death.play();
+          r.acts.hit2.crossFadeTo(r.acts.death, 0.12, false);
+        }
+        if (perfNow - p.deadAt < 3600) r.mixer.update(dt);   // дограти ланцюжок і завмерти
         r.inner.rotation.z = 0;
         r.inner.position.y = 0;
       } else {
@@ -3364,7 +4330,7 @@ function syncGrenades3D() {
   }
   for (let i = n; i < GR3N; i++) { T3.nades[i].visible = false; if (T3.nadeMarks[i]) T3.nadeMarks[i].visible = false; }
 }
-/* зони молотова/смока: язики полум'я мерехтять, дим повільно клубочиться */
+/* зони молотова/смока: лоуполі-язики танцюють масштабом, тун-хмара клубочиться */
 function syncAreas3D() {
   for (let i = 0; i < FI3N; i++) {
     const F = T3.fires3[i];
@@ -3372,16 +4338,29 @@ function syncAreas3D() {
       const f = fires[i];
       F.grp.visible = true;
       F.grp.position.set(f.x - W2, heightAt(f.x, f.y), f.y - H2);   // калюжа на рельєфі
-      /* швидкий розгін (0.25с) і догорання (останні 0.6с) */
-      const ease = Math.min(1, (perfNow - f.born) / 250) * clamp((f.until - perfNow) / 600, 0, 1);
+      /* виростання з нуля (~200мс) і згасання в останню секунду життя */
+      const ease = Math.min(1, (perfNow - f.born) / 200) * clamp((f.until - perfNow) / 1000, 0, 1);
       for (let q = 0; q < F.tongues.length; q++) {
-        const sp = F.tongues[q], ud = sp.userData;
-        const flick = 0.72 + 0.28 * Math.sin(perfNow * 0.021 + ud.ph * 3.1);   // мерехтіння
-        const h = f.r * (0.26 + 0.15 * flick) * (q === 0 ? 1.5 : 1);           // центральний язик вищий
-        sp.position.set(ud.ox * f.r, h * 0.55, ud.oz * f.r);
-        sp.scale.set(h * 0.9, h * 1.6, 1);   // витягнуті вгору «низькі язики»
-        sp.material.opacity = 0.85 * ease * flick;
+        const m = F.tongues[q], ud = m.userData;
+        /* пульс у власній фазі: повільна хвиля + швидше тремтіння */
+        const flick = 0.72 + 0.19 * Math.sin(perfNow * 0.006 + ud.ph)
+                           + 0.09 * Math.sin(perfNow * 0.023 + ud.ph * 2.1);
+        const h = f.r * 0.5 * ud.base * flick * ease;
+        m.visible = h > 0.5;   // нульовий масштаб дає вироджену матрицю
+        m.position.set(ud.ox * f.r * 0.68, 0.6, ud.oz * f.r * 0.68);
+        m.scale.set(h * 0.8, h, h * 0.8);
+        /* ледь похитується — «живий» язик, не металевий конус */
+        m.rotation.x = Math.sin(perfNow * 0.004 + ud.ph) * 0.1;
+        m.rotation.z = Math.cos(perfNow * 0.0035 + ud.ph * 1.3) * 0.1;
       }
+      /* випалене коло проявляється й лишається до кінця (далі — decalScorch);
+         нахил за схилом рельєфу — інакше плоске коло тоне в пагорбі */
+      const sx = (heightAt(f.x + 16, f.y) - heightAt(f.x - 16, f.y)) / 32;
+      const sz = (heightAt(f.x, f.y + 16) - heightAt(f.x, f.y - 16)) / 32;
+      F.scorch.rotation.set(-Math.PI / 2 + Math.atan(sz), 0, -Math.atan(sx));
+      F.scorch.position.y = 2.2;
+      F.scorch.scale.set(f.r * 1.9, f.r * 1.9, 1);
+      F.scorch.material.opacity = 0.8 * Math.min(1, (perfNow - f.born) / 450);
       F.light.intensity = (2.2 + Math.sin(perfNow * 0.017 + i * 2.4) * 0.8) * ease;   // пульс
       F.light.distance = f.r * 3.2;
     } else { F.grp.visible = false; F.light.intensity = 0; }
@@ -3390,20 +4369,21 @@ function syncAreas3D() {
     const K = T3.smokes3[i];
     if (i < smokes.length) {
       const s = smokes[i];
-      K.grp.visible = true;
       K.grp.position.set(s.x - W2, heightAt(s.x, s.y), s.y - H2);   // завіса на рельєфі
-      /* плавний вхід (0.9с) і вихід (1.4с) */
-      const ease = clamp(Math.min((perfNow - s.born) / 900, (s.until - perfNow) / 1400), 0, 1);
+      /* надувається за ~350мс, здувається за останні ~600мс */
+      const ease = clamp(Math.min((perfNow - s.born) / 350, (s.until - perfNow) / 600), 0, 1);
+      K.grp.visible = ease > 0.01;
+      K.grp.rotation.y = perfNow * 0.00015;   // повільне обертання клубка (0.15 рад/с)
+      const breathe = 1 + 0.04 * Math.sin(perfNow * 0.0016);   // «дихання» всієї хмари
       for (let q = 0; q < K.puffs.length; q++) {
         const sp = K.puffs[q], ud = sp.userData;
-        const a = ud.ph + perfNow * 0.00022 * (q % 2 ? 1 : -1);   // повільне клубочіння
-        const rr = s.r * ud.rr;
-        sp.position.set(Math.cos(a) * rr,
-          18 + (q % 3) * 14 + Math.sin(perfNow * 0.0011 + ud.ph) * 4,
-          Math.sin(a) * rr);
-        const sc = s.r * (1.05 + (q % 3) * 0.22);
-        sp.scale.set(sc, sc * 0.82, 1);
-        sp.material.opacity = (0.55 + (q % 2) * 0.3) * ease;   // ~0.85 у піку
+        const bob = Math.sin(perfNow * 0.0021 + ud.ph) * s.r * 0.03;   // бобання своєї фази
+        /* зсуви теж їдуть від ease — хмара саме НАДУВАЄТЬСЯ, а не проявляється */
+        const sw = 0.4 + 0.6 * ease;
+        sp.position.set(ud.ox * s.r * sw, ud.oy * s.r * sw + bob, ud.oz * s.r * sw);
+        const rr = s.r * ud.br * breathe * ease;
+        sp.visible = rr > 0.5;
+        sp.scale.set(rr, rr * 0.88, rr);
       }
     } else K.grp.visible = false;
   }
@@ -3587,7 +4567,7 @@ function updateCam3D(dt) {
   /* серпанок глушить фарби на дальньому overview — там туман майже вимикаємо,
      на ігрових камерах повертаємо повну щільність (плавно, без стрибка кольору) */
   if (T3.scene.fog) {
-    const fd = camMode === 'overview' ? 0.00010 : 0.00045;
+    const fd = camMode === 'overview' ? BIO.fogOver : BIO.fogGame;
     T3.scene.fog.density += (fd - T3.scene.fog.density) * Math.min(1, dt * 3);
   }
   /* плавність: без ривків, різні швидкості для позиції та погляду.
@@ -3624,6 +4604,7 @@ function render3D(dt) {
   syncAreas3D();
   syncParts3D();
   syncZone3D(dt || 0.016);
+  syncPops3D();
   if (groundDirty3D && T3.decalTex) { T3.decalTex.needsUpdate = true; groundDirty3D = false; }
   updateCam3D(dt || 0.016);
   t3Renderer.render(T3.scene, T3.camera);
@@ -3675,6 +4656,7 @@ function updateVictory(dt, now) {
 }
 function finishFight() {
   winnerShown = true;
+  hostNet.fightEnd();   // гравцям: roster {fighting:false}, state більше не летить
   /* бій скінчився — віддаємо мишу назад: у польоті вона захоплена (курсора
      не видно) і глядач не міг би клікнути «Закрыть» на вінер-скріні */
   flyStop(false);
@@ -3778,6 +4760,9 @@ function apiStart(finalists, opts) {
   root = document.getElementById('royale-shootout');
   cv = document.getElementById('so-canvas');
   if (!root || !cv) return;
+  /* біом арени — ДО setup3D: ensureAssets3D/loadModels3D читають BIO.
+     Лобі передає за слотом мапи (map1/2/3); без опції — ліс */
+  BIO = BIOMES[opts.biome] || BIOMES.forest;
   /* Вибір шару малювання: 3D (Three.js) якщо THREE підключений і WebGL живий,
      інакше — старий 2D-canvas. Логіка бою в обох випадках одна. */
   USE_3D = (typeof THREE !== 'undefined') && webglAvailable() && setup3D();
@@ -3789,7 +4774,7 @@ function apiStart(finalists, opts) {
   seedRng();
   perfNow = performance.now();
   /* повний скид стану */
-  bullets.length = 0; grenades.length = 0; explosions.length = 0; killfeed.length = 0;
+  bullets.length = 0; grenades.length = 0; explosions.length = 0; killfeed.length = 0; dmgPops.length = 0;
   fires.length = 0; smokes.length = 0;
   for (let i = 0; i < PMAX; i++) parts[i].on = false;
   for (let i = 0; i < FMAX; i++) floats[i].on = false;
@@ -3817,10 +4802,15 @@ function apiStart(finalists, opts) {
   /* дебаг-контракт (постійний, ним користуються інструменти розробки):
      заморозка бою + доступ до сцени/heightAt із консолі */
   window.__RSO_FREEZE = function (ms) { goAt = performance.now() + (ms == null ? 1e9 : ms); };
-  window.__RSO_GET = function () { return { T3: T3, players: players, heightAt: heightAt }; };
+  /* дебаг: покласти дим-завісу в точку — дивитись ефект без RNG бою */
+  window.__RSO_SMOKE = function (x, y) { smokes.push({ x: x || W / 2, y: y || H / 2, r: 80, born: perfNow, until: perfNow + 7000 }); };
+  window.__RSO_GET = function () { return { T3: T3, players: players, heightAt: heightAt, renderer: t3Renderer, biome: BIO.key,
+    obstacles: obstacles, zone: zone,
+    roles: players.map(function (q) { return q.nick + ':' + q.persona.role; }) }; };
   goAt = perfNow + 3400;                              // 3-2-1-БОЙ
   initZone(goAt);
   lastShotHeard = goAt; lastShotSfx = 0;
+  hostNet.fightStart();   // гравцям: roster {fighting:true} + map, далі state ~13/с
   root.classList.add('visible');
   const wEl = document.getElementById('so-winner');
   if (wEl) wEl.classList.remove('show');
@@ -3853,6 +4843,7 @@ function stopLoop() {
 }
 function apiStop() {
   stopLoop();
+  hostNet.fightEnd();   // «Закрыть» без фіналу — гравцям теж {fighting:false}
   flyStop(false);   // знімаємо pointer lock і підсвітку кнопки
   dispose3D();   // геометрії/матеріали/текстури бою; renderer і спільні ресурси лишаються
   if (!root) root = document.getElementById('royale-shootout');
@@ -3886,6 +4877,139 @@ function apiToggleFly() {
   if (fly.on) flyStop(true);   // вихід кнопкою → назад в авто-режисуру
   else flyStart();
 }
+
+/* ── hostNet: міст панелі-хоста до сервер-реле /ws/play ─────────
+   Симуляція бою ЛИШАЄТЬСЯ в цьому браузері (чесна 2D-логіка вище) —
+   сервер лише ретранслює: звідси гравцям летить map/roster/state,
+   назад приходить input привʼязаних глядачів. Працює і в превʼю
+   (мок приймає хоста без куки), і в проді (кука сесії йде з upgrade). */
+/* МУЛЬТИПЛЕЄР ЗАКОНСЕРВОВАНО (прохання власника: «керування поки не
+   потрібне, заховай — доробимо в майбутньому»). Уся інфраструктура
+   робоча: сервер-реле ws-play.js, сторінка /play, цей міст і human-інпут
+   у симуляції. Щоб оживити — постав true (і MP=1 на сервері bot.js). */
+const MP_ENABLED = false;
+const hostNet = (function () {
+  let ws = null, retry = 0, reTimer = 0, stateTimer = 0;
+  let fighting = false, finalNicks = [];
+
+  function wsUrl() {
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/play';
+  }
+  function sendObj(o) {
+    if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(o)); } catch (e) { /* сокет обірвався */ } }
+  }
+  function open() {
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+    try { ws = new WebSocket(wsUrl()); } catch (e) { ws = null; schedule(); return; }
+    ws.onopen = function () {
+      retry = 0;
+      sendObj({ t: 'hello', role: 'host' });
+      /* реконект посеред бою: сервер утратив кеш → гравцям знову статика */
+      if (fighting) { sendObj(rosterMsg()); sendObj(mapMsg()); }
+    };
+    ws.onmessage = function (ev) {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (!m) return;
+      if (m.t === 'input') applyInput(m);
+      else if (m.t === 'left') dropHuman(m.nick);
+      /* 'joined' — нічого: мапу/ростер новачку шле сервер зі свого кешу */
+    };
+    ws.onclose = function () { ws = null; schedule(); };
+    ws.onerror = function () { try { if (ws) ws.close(); } catch (e) { /* ок */ } };
+  }
+  function schedule() {
+    if (reTimer) return;
+    /* бекоф 0.5с → 15с: не довбемо сервер, але після рестарту чіпляємось швидко */
+    const wait = Math.min(15000, 500 * Math.pow(2, retry++));
+    reTimer = setTimeout(function () { reTimer = 0; open(); }, wait);
+  }
+
+  function findByNick(nick) {
+    const k = String(nick || '').toLowerCase();
+    for (let i = 0; i < players.length; i++)
+      if (players[i].nick.toLowerCase() === k) return players[i];
+    return null;
+  }
+  function applyInput(m) {
+    if (!running || winnerShown) return;
+    const p = findByNick(m.nick);
+    if (!p || !p.alive) return;
+    const num = function (v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+    /* привʼязаний зайшов і після старту бою: human — з першого input */
+    p.human = true;
+    p.inp = {
+      mx: clamp(num(m.mx), -1, 1), my: clamp(num(m.my), -1, 1),
+      aim: num(m.aim), fire: !!m.fire, at: performance.now(),
+    };
+  }
+  function dropHuman(nick) {
+    const p = findByNick(nick);
+    if (p && p.human) { p.human = false; p.decideAt = 0; }   // AI перехоплює одразу
+  }
+
+  const r1 = function (v) { return Math.round(v * 10) / 10; };
+  const r2 = function (v) { return Math.round(v * 100) / 100; };
+  function mapMsg() {
+    const obs = [];
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
+      /* геометрія: circle → [type,x,y,r] (4 ел.), rect → [type,x,y,hw,hh] (5 ел.) */
+      if (o.shape === 'circle') obs.push([o.type, Math.round(o.x), Math.round(o.y), Math.round(o.r)]);
+      else obs.push([o.type, Math.round(o.x), Math.round(o.y), o.hw, o.hh]);
+    }
+    return { t: 'map', w: W, h: H, obs: obs };
+  }
+  function rosterMsg() { return { t: 'roster', fighting: fighting, finalists: finalNicks }; }
+  function stateMsg() {
+    const ps = [];
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      ps.push([p.idx, r1(p.x), r1(p.y), r2(p.aim), p.hp > 0 ? Math.round(p.hp) : 0,
+               p.alive ? 1 : 0, p.human ? 1 : 0]);
+    }
+    const bs = [];
+    for (let i = 0; i < bullets.length; i++) {
+      const b = bullets[i];
+      bs.push([Math.round(b.x), Math.round(b.y), r2(Math.atan2(b.vy, b.vx))]);
+    }
+    const ks = [];
+    for (let i = 0; i < medkits.length; i++)
+      if (!medkits[i].taken) ks.push([Math.round(medkits[i].x), Math.round(medkits[i].y)]);
+    const fs = [];
+    for (let i = 0; i < fires.length; i++)
+      fs.push([Math.round(fires[i].x), Math.round(fires[i].y), Math.round(fires[i].r)]);
+    const ss = [];
+    for (let i = 0; i < smokes.length; i++)
+      ss.push([Math.round(smokes[i].x), Math.round(smokes[i].y), Math.round(smokes[i].r)]);
+    return {
+      t: 'state',
+      z: zone ? { x: Math.round(zone.cx), y: Math.round(zone.cy), r: Math.round(zone.r) } : null,
+      p: ps, b: bs, k: ks, f: fs, s: ss,
+    };
+  }
+
+  function fightStart() {
+    finalNicks = players.map(function (p) { return p.nick; });
+    fighting = true;
+    sendObj(rosterMsg());
+    sendObj(mapMsg());
+    if (stateTimer) clearInterval(stateTimer);
+    /* 75мс ≈ 13 пакетів/с — у вилці 12–15 з протоколу */
+    stateTimer = setInterval(function () {
+      if (running && !winnerShown) sendObj(stateMsg());
+    }, 75);
+  }
+  function fightEnd() {
+    if (!fighting && !stateTimer) return;
+    fighting = false;
+    if (stateTimer) { clearInterval(stateTimer); stateTimer = 0; }
+    sendObj(rosterMsg());
+    for (let i = 0; i < players.length; i++) players[i].human = false;
+  }
+
+  if (MP_ENABLED) open();   // законсервовано: без прапорця міст сплячий
+  return { fightStart: fightStart, fightEnd: fightEnd };
+})();
 
 window.RSO = {
   start: apiStart,

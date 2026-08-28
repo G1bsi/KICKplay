@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<!-- user-scalable=no: подвійний тап на мобілці не має зумити ігровий канвас -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>KICKPLAY — гра</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ffd93d'/%3E%3Cpath d='M36 8 16 38h12l-4 18 24-32H34l6-16z' fill='%230a0a0c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/assets/tokens.css">
+<link rel="stylesheet" href="/assets/play.css">
+</head>
+<body>
+
+<!-- ── Шапка: бренд + бейдж реконекту ───────────────────────── -->
+<header class="p-top">
+  <div class="p-brand">
+    <span class="p-brand-badge">⚡</span>
+    <span class="p-brand-name">KICK<em>PLAY</em></span>
+  </div>
+  <div id="p-reconnect" class="p-reconnect hidden">
+    <span class="p-spin"></span> зʼєднання…
+  </div>
+</header>
+
+<!-- ── Екран КОД: чекаємо повідомлення в чаті ───────────────── -->
+<main id="scr-code" class="p-screen">
+  <div class="p-card">
+    <div class="p-label">Напиши в чат Kick цей код</div>
+    <div id="p-code" class="p-code">····</div>
+    <div class="p-hint">
+      Повідомлення з кодом зі <b>свого</b> акаунта — і ти в грі.
+      Код живе 10 хвилин.
+    </div>
+    <div class="p-wait"><span class="p-spin"></span> чекаємо на твоє повідомлення…</div>
+  </div>
+</main>
+
+<!-- ── Екран ПРИВʼЯЗАНО: чекаємо на фінал ───────────────────── -->
+<main id="scr-lobby" class="p-screen hidden">
+  <div class="p-card">
+    <div class="p-label">Ти в грі як</div>
+    <div id="p-nick" class="p-nick">—</div>
+    <div id="p-lobby-status" class="p-wait"><span class="p-spin"></span> чекаємо на фінал…</div>
+    <button id="p-rejoin" class="p-btn hidden">Грати тут</button>
+  </div>
+</main>
+
+<!-- ── Екран БІЙ: канвас + HUD ──────────────────────────────── -->
+<div id="scr-game" class="p-game hidden">
+  <canvas id="p-cv"></canvas>
+
+  <!-- тач-шар: ліва половина — джойстик, права — приціл+вогонь -->
+  <div id="p-touch" class="p-touch">
+    <div id="p-stick" class="p-stick hidden"><div id="p-knob" class="p-knob"></div></div>
+  </div>
+
+  <!-- своє HP — велике внизу -->
+  <div id="p-hud" class="p-hud hidden">
+    <div class="p-hpbar"><div id="p-hpfill" class="p-hpfill"></div></div>
+    <div id="p-hptext" class="p-hptext">100</div>
+  </div>
+
+  <!-- режим спостерігача -->
+  <div id="p-spec" class="p-spec hidden">👀 дивись стрім</div>
+</div>
+
+<script src="/assets/play.js"></script>
+</body>
+</html>

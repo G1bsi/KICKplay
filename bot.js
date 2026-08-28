@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import http from 'http';
 import crypto from 'crypto';
 import zlib from 'zlib';
+import { createPlayRelay } from './ws-play.js';
+const MP_ENABLED = process.env.MP === '1';   // мультиплеєр законсервовано до кращих часів
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -224,6 +226,13 @@ const server = http.createServer((req, res) => {
     sendAsset(req, res, name, /(^|&)v=/.test(query || '')
       ? 'public, max-age=31536000, immutable'
       : 'no-cache');
+    return;
+  }
+
+  // Сторінка гравця — публічна, БЕЗ сесійного гейта: глядачі заходять
+  // з телефонів без пароля; привʼязка до ніка йде через код у чаті
+  if (MP_ENABLED && (req.url === '/play' || req.url === '/play/')) {
+    sendAsset(req, res, 'play.html', 'no-cache');
     return;
   }
 
@@ -607,6 +616,16 @@ const server = http.createServer((req, res) => {
   sendAsset(req, res, 'index.html', 'no-cache');
 });
 
+/* ── Мультиплеєр перестрілки: реле /ws/play на ТОМУ Ж http-сервері ──
+   Хост (панель) підтверджується сесійною кукою; гравці — публічні,
+   привʼязка ніка — кодом у чаті Kick (див. обробник ChatMessageEvent). */
+/* реле створюється лише з MP=1; заглушка-обʼєкт тримає ті самі методи,
+   щоб виклики з обробника чату не падали */
+const playRelay = MP_ENABLED ? createPlayRelay({
+  server,
+  isHostReq: (req) => isValidSession(getCookie(req, 'session')),
+}) : { chatCode: () => false };
+
 // ── Справжня випадковість: random.org (з фолбеком на crypto) ──
 // Чому: розіграш має бути перевірюваним для глядачів — random.org видає
 // атмосферний шум, а не псевдовипадкові числа. Мережа може лежати або
@@ -861,6 +880,10 @@ function connect() {
       // Відправляємо повідомлення у кастомний чат на фронтенді
       const chatMsg = JSON.stringify({ username, content, color, badges });
       chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
+
+      // Привʼязка гравця перестрілки: у повідомленні є 4-значний код зі
+      // сторінки гравця → реле привʼязує його сокет до цього ніка
+      try { playRelay.chatCode(username, content); } catch (e) { /* реле не валить чат */ }
 
       const lower = content.toLowerCase();
 

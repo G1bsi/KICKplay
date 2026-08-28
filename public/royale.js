@@ -52,6 +52,12 @@ function rlPickMap() {
   rlMapQi = 0;
   rlMapSrc = rlMapQueue[0];
 }
+/* Біом фінальної перестрілки жорстко привʼязаний до СЛОТА мапи цієї гри:
+   map1 → ліс, map2 → пустеля, map3 → зима. Невпізнаний шлях — ліс. */
+function rlBiomeOf(src) {
+  const m = typeof src === 'string' ? src.match(/\/(map[123])\.[a-z0-9]+$/i) : null;
+  return m ? { map1: 'forest', map2: 'desert', map3: 'winter' }[m[1].toLowerCase()] : 'forest';
+}
 function rlNextMapCandidate() {
   if (rlMapQi + 1 >= rlMapQueue.length) return false;
   rlMapSrc = rlMapQueue[++rlMapQi];
@@ -816,7 +822,7 @@ function royLaunchFight() {
   roySaveState(true); // після F5 під час бою — фінал можна запустити знову
   rlStatus('⚔️ ФИНАЛ: ' + finalists.length + ' бойцов');
   try {
-    window.RSO.start(finalists, { onWinner: (f) => royDeclareWinner(f) });
+    window.RSO.start(finalists, { biome: rlBiomeOf(rlMapSrc), onWinner: (f) => royDeclareWinner(f) });
   } catch (e) {
     rlPhase = 'playing'; rlSyncControls();
     rlStatus('⚠️ Ошибка запуска перестрелки: ' + (e && e.message ? e.message : e));
