@@ -2469,10 +2469,11 @@ const BIOMES = {
     hemi: ['#d8e9f8', '#5d7c46'],
     sun: '#fff3d6',
     treeKeys: ['tree', 'tree2', 'tree3', 'tree4'],
+    /* кущ-укриття — процедурні бліби (makeBush3D): два тони зелені крон кіта
+       (шини з ролі куща прибрано — стос гуми читався як тверде укриття) */
+    bushCols: ['#778d2b', '#657822'],
     models: withToon({
       tree: 'toon/tree1.glb', tree2: 'toon/tree2.glb', tree3: 'toon/tree3.glb', tree4: 'toon/tree4.glb',
-      /* укриття-«кущ» — стос шин кіта: волохатий nature-кущ вибивався зі стилю */
-      bush: 'toon/tires.glb',
       rock1: 'nature/rock1.glb', rock2: 'nature/rock2.glb',
       grass1: 'nature/grass1.glb', grass2: 'nature/grass2.glb',
       fern: 'nature/fern.glb', clover: 'nature/clover.glb',
@@ -2496,10 +2497,10 @@ const BIOMES = {
     hemi: ['#eee0c4', '#8a7a52'],
     sun: '#ffedc4',
     treeKeys: ['tree', 'tree2', 'tree3', 'tree4', 'tree5'],
+    bushCols: ['#9a8f52', '#857b43'],   // сухо-оливковий чагарник пустелі
     models: withToon({
       tree: 'nature/dead1.glb', tree2: 'nature/twist2.glb', tree3: 'nature/dead3.glb',
       tree4: 'nature/dead5.glb', tree5: 'nature/twist4.glb',
-      bush: 'toon/tires.glb',
       rock1: 'nature/rockdes1.glb', rock2: 'nature/rockdes2.glb',
       grass1: 'nature/grassdry1.glb', grass2: 'nature/grassdry2.glb',
       plant7: 'nature/plant7.glb',
@@ -2520,10 +2521,11 @@ const BIOMES = {
     hemi: ['#dfe8f2', '#9aa6b2'],
     sun: '#fff6e8',
     treeKeys: ['tree', 'tree2', 'tree3', 'tree4'],
+    bushCols: ['#3f5a3c', '#344f34'],   // темна хвойна зелень
+    bushSnow: '#e6ecf2',                // присніжені шапки поверх блібів
     models: withToon({
       tree: 'nature/pinew2.glb', tree2: 'nature/pinew4.glb', tree3: 'nature/pinew5.glb',
       tree4: 'nature/dead3.glb',
-      bush: 'toon/tires.glb',
       rock1: 'nature/rock1.glb', rock2: 'nature/rock2.glb',
       grass1: 'nature/grass1.glb',
       pebble1: 'nature/pebble1.glb', pebble2: 'nature/pebble2.glb',
@@ -2628,6 +2630,11 @@ function ensureAssets3D() {
   G.boxTop = new THREE.BoxGeometry(1, 1, 1); G.boxTop.translate(0, -0.5, 0);   // півот угорі — для ніг
   G.cyl = new THREE.CylinderGeometry(1, 1, 1, 12);
   G.sphere = new THREE.SphereGeometry(1, 12, 10);
+  /* бліб куща: ікосаедр detail=1; штатні нормалі сферично-гладкі, а
+     computeVertexNormals по non-indexed геометрії дає нормалі НА ФАСЕТКУ —
+     бліб читається як тун-крона кіта без окремої GLB */
+  G.ico = new THREE.IcosahedronGeometry(1, 1);
+  G.ico.computeVertexNormals();
   G.helmet = new THREE.SphereGeometry(1, 12, 8, 0, TAU, 0, Math.PI / 2);
   G.ring = new THREE.RingGeometry(0.82, 1, 32); G.ring.rotateX(-Math.PI / 2);
   G.plane = new THREE.PlaneGeometry(1, 1);
@@ -2644,7 +2651,9 @@ function ensureAssets3D() {
   /* земля: лоуполі-фасетки з vertex-кольорами (жодних картинок — розмита
      arena.png мила пагорби; фасетки різкі на будь-якому зумі). Нормалі «на
      трикутник» дає non-indexed геометрія у build3D, кольори — paintGround3D */
-  M.ground = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  /* без flatShading: Lambert у r128 його не має (warn у консолі), фасетки
+     й так дає non-indexed геометрія з пофасетковими нормалями */
+  M.ground = new THREE.MeshLambertMaterial({ vertexColors: true });
   /* дальня земля: базовий тон палітри біому (перефарбовується у build3D) */
   M.farGround = new THREE.MeshLambertMaterial({ color: BIO.far });
   M.farGround.color.convertSRGBToLinear();   // та сама причина, що й у paintGround3D
@@ -2661,7 +2670,6 @@ function ensureAssets3D() {
   /* фолбеки до приходу GLB: прості зелені квади (спрайти tree-side/bush-side
      видалені разом зі старими моделями) */
   M.tree = new THREE.MeshLambertMaterial({ color: '#3d6b2f', side: THREE.DoubleSide });
-  M.bush = new THREE.MeshLambertMaterial({ color: '#33363a', side: THREE.DoubleSide });   // «кущ» тепер стос шин — фолбек темна гума
   M.white = new THREE.MeshLambertMaterial({ color: '#e8e6e0' });
   const mkT = t3Mat('/assets/pubg/medkit.png', '#d8d6d0');
   M.medkit = [M.white, M.white, mkT, M.white, M.white, M.white];
@@ -2875,22 +2883,82 @@ function onceUpdateMatrix(obj) {
    сюди, а в запечений декор (tree*far у planDecor3D) — інакше кожне дерево
    коштує 4 draw call-и (2 матеріали x 2 проходи з тінню) */
 function treeKeyOf(o) { return BIO.treeKeys[o.id % BIO.treeKeys.length]; }
+/* радіус стовбура моделі (вершини нижніх 20% висоти) — рахується раз на GLB.
+   Потрібен, щоб дерева з ГОЛИМ стовбуром не наїжджали стовбуром на колізію
+   o.r (гравець «входив у картинку»); у сосен/сухостою при землі гілля, а не
+   стовбур — їм ця метрика безглузда, тому кап на них не застосовується */
+function treeTrunkR(rec) {
+  if (rec.trunkR !== undefined) return rec.trunkR;
+  let tr = 0;
+  const yCut = rec.min.y + rec.size.y * 0.2;
+  const v = new THREE.Vector3();
+  rec.scene.updateMatrixWorld(true);
+  rec.scene.traverse(function (m) {
+    if (!m.isMesh || !m.geometry.attributes.position) return;
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      if (v.y < yCut) tr = Math.max(tr, Math.hypot(v.x - rec.center.x, v.z - rec.center.z));
+    }
+  });
+  rec.trunkR = tr;
+  return tr;
+}
 function makeTree3D(o) {
   const rec = GLB.ready[treeKeyOf(o)];
   const inst = glbStatic(rec, true);
   /* масштаб від крони: стовбур-колізія (o.r) вузький, крона ширша — як у 2D */
-  const s = (o.crown * 1.9) / Math.max(rec.size.x, rec.size.z, 0.001);
+  let s = (o.crown * 1.9) / Math.max(rec.size.x, rec.size.z, 0.001);
+  /* кап великих екземплярів: голий стовбур (<35% півширини моделі — інакше
+     це гілля при землі) не ширший за колізію+15%, крона жертвує до ~18% */
+  const tr = treeTrunkR(rec);
+  if (tr > 0.001 && tr < Math.max(rec.size.x, rec.size.z) * 0.175 && tr * s > o.r * 1.15)
+    s = (o.r * 1.15) / tr;
   inst.scale.setScalar(s);
   inst.position.set(-rec.center.x * s, -rec.min.y * s, -rec.center.z * s);
   return inst;
 }
+/* кущ-укриття: процедурні фасеткові бліби (ікосаедри) у тонах крон кіта —
+   стос шин із ролі куща прибрано, бо гума читалась як ТВЕРДЕ укриття, а кущ
+   навмисно прохідний (маскування). XZ-габарит ≈ колізія (діаметр ~2.1r,
+   не ширше +10%), верхівка ~36-38 юнітів — боєць (44) пірнає в крону по
+   плечі. Рандом — терен-хеш від id: стабільний між кадрами, RNG не зсуває. */
+let bushMatCache = { key: '', mats: [], snow: null };
+function bushMats3D() {
+  if (bushMatCache.key === BIO.key) return bushMatCache;
+  bushMatCache = { key: BIO.key, mats: [], snow: null };
+  const cols = BIO.bushCols || ['#778d2b', '#657822'];
+  for (let i = 0; i < cols.length; i++)
+    bushMatCache.mats.push(new THREE.MeshLambertMaterial({ color: new THREE.Color(cols[i]).convertSRGBToLinear() }));
+  if (BIO.bushSnow)
+    bushMatCache.snow = new THREE.MeshLambertMaterial({ color: new THREE.Color(BIO.bushSnow).convertSRGBToLinear() });
+  return bushMatCache;
+}
 function makeBush3D(o) {
-  const rec = GLB.ready.bush;   // слот bush в усіх біомах — тунові шини (Debris_Tires)
-  const inst = glbStatic(rec, false);
-  const s = (o.r * 2.2) / Math.max(rec.size.x, rec.size.z, 0.001);
-  inst.scale.setScalar(s);
-  inst.position.set(-rec.center.x * s, -rec.min.y * s, -rec.center.z * s);
-  return inst;
+  const G = T3A.geo, mc = bushMats3D(), grp = new THREE.Group();
+  const k = o.r / 30;   // розкладка тюнена під штатний r=30
+  const jr = function (i) { return terrHash(o.id * 13 + i, 4271) - 0.5; };
+  /* [r, x, y, z, сплюснутість]; сума зсув+радіус+джитер ≤ ~31.5 → діаметр ≤ 63 */
+  const B = [[24, 0, 15, 0, 0.8], [17, 12, 10, -6, 0.85], [15, -11, 9, 7, 0.85], [12, 2, 28, 2, 0.8]];
+  for (let i = 0; i < B.length; i++) {
+    const b = B[i];
+    const m = new THREE.Mesh(G.ico, mc.mats[i % mc.mats.length]);
+    const r = (b[0] + jr(i) * 2) * k;
+    m.scale.set(r, r * b[4], r);
+    m.position.set((b[1] + jr(i + 4) * 3) * k, b[2] * k, (b[3] + jr(i + 8) * 3) * k);
+    m.receiveShadow = true;
+    grp.add(m);
+  }
+  if (mc.snow) {   // зимові снігові шапки — трохи ВИЩЕ верхівок блібів, інакше тонуть у зелені
+    const SC = [[10, 2, 37, 2], [7, 12, 24, -6]];
+    for (let i = 0; i < SC.length; i++) {
+      const sb = SC[i], m = new THREE.Mesh(G.ico, mc.snow);
+      m.scale.set(sb[0] * k, sb[0] * 0.45 * k, sb[0] * k);
+      m.position.set(sb[1] * k, sb[2] * k, sb[3] * k);
+      grp.add(m);
+    }
+  }
+  return grp;
 }
 /* бочка GLB: діаметр = колізія (2r), посадка на землю; тіней нема (дрібнота).
    Модель із poly.pizza — дерев'яна діжка, а бочка в нас ВИБУХОВА, тому
@@ -2910,25 +2978,33 @@ function makeBarrel3D(o) {
 function makeRow3D(rec, o, stackTo) {
   const oL = Math.max(o.hw, o.hh) * 2, oS = Math.min(o.hw, o.hh) * 2;
   const mL = Math.max(rec.size.x, rec.size.z), mS = Math.min(rec.size.x, rec.size.z);
-  let s = oS / Math.max(mS, 0.001);
-  /* тонкі високі моделі (цегляна стіна) інакше виростають хмарочосами:
-     висота секції не може перевищувати ~42 юніти (зріст бійця 44) */
-  if (rec.size.y * s > 42) s = 42 / Math.max(rec.size.y, 0.001);
-  const n = clamp(Math.round(oL / Math.max(mL * s, 1)), 1, 6);
+  /* XZ-масштаб — рівно від короткої сторони КОЛІЗІЇ; висота капиться ОКРЕМО
+     вертикальним масштабом (~42, зріст бійця 44): старий спільний кап тягнув
+     униз і XZ — барʼєр виходив на третину менший за колізію (невидима стіна) */
+  const s = oS / Math.max(mS, 0.001);
+  const sy = Math.min(s, 42 / Math.max(rec.size.y, 0.001));
+  const secL = Math.max(mL * s, 1);
+  const n = clamp(Math.round(oL / secL), 1, 6);
   const grp = new THREE.Group();
   const step = oL / n;
+  /* kL тягне/тисне секцію вздовж ряду: n секцій закривають oL БЕЗ щілин і
+     звисань за колізію на торцях (Container_Long раніше стирчав/розривався) */
+  const kL = step / secL;
   /* stackTo: цільова ВИСОТА стіни у світових юнітах — секції складаються
      поверхами (мішки по коліна не читались як укриття, хоч і блокували кулі) */
-  const rowH = Math.max(rec.size.y * s, 1);
+  const rowH = Math.max(rec.size.y * sy, 1);
   const floors = stackTo ? clamp(Math.round(stackTo / rowH), 1, 4) : 1;
   for (let i = 0; i < n; i++) {
     for (let f = 0; f < floors; f++) {
-      const sec = new THREE.Group();
+      const rot = new THREE.Group();   // поворот усередині, розтяг kL ззовні — інакше kL тиснув би поперек
       const inst = glbStatic(rec, false);
-      inst.scale.setScalar(s);
-      inst.position.set(-rec.center.x * s, -rec.min.y * s, -rec.center.z * s);
-      sec.add(inst);
-      if (rec.size.z > rec.size.x) sec.rotation.y = Math.PI / 2;  // довга вісь моделі → локальний X
+      inst.scale.set(s, sy, s);
+      inst.position.set(-rec.center.x * s, -rec.min.y * sy, -rec.center.z * s);
+      rot.add(inst);
+      if (rec.size.z > rec.size.x) rot.rotation.y = Math.PI / 2;  // довга вісь моделі → локальний X
+      const sec = new THREE.Group();
+      sec.add(rot);
+      sec.scale.x = kL;
       sec.position.x = (i - (n - 1) / 2) * step + (f % 2 ? 2 : -2) * (floors > 1 ? 1 : 0);
       sec.position.y = f * rowH * 0.92;               // легкий нахлест рядів
       grp.add(sec);
@@ -2943,11 +3019,13 @@ function makeRow3D(rec, o, stackTo) {
 function makeCrate3D(o) {
   const rec = GLB.ready.crate;
   const inst = glbStatic(rec, true);   // ящик великий — тінь від нього читається
-  const s = Math.min((o.hw * 2) / Math.max(rec.size.x, 0.001),
-                     (o.hh * 2) / Math.max(rec.size.z, 0.001),
-                     42 / Math.max(rec.size.y, 0.001));
-  inst.scale.setScalar(s);
-  inst.position.set(-rec.center.x * s, -rec.min.y * s, -rec.center.z * s);
+  /* XZ точно по колізії, висота капиться окремим вертикальним масштабом —
+     спільний min-масштаб робив ящик на ~12% вужчим за колізію */
+  const sx = (o.hw * 2) / Math.max(rec.size.x, 0.001);
+  const sz = (o.hh * 2) / Math.max(rec.size.z, 0.001);
+  const sy = Math.min(sx, sz, 42 / Math.max(rec.size.y, 0.001));
+  inst.scale.set(sx, sy, sz);
+  inst.position.set(-rec.center.x * sx, -rec.min.y * sy, -rec.center.z * sz);
   return inst;
 }
 /* «випадковий» yaw 0/90/180/270 від id — стабільний між кадрами і не зсуває RNG */
@@ -3492,7 +3570,6 @@ function swapIn3D(name) {
       if (name === 'barrel' && it.rec && it.rec.wrecked) continue;
       while (it.holder.children.length) it.holder.remove(it.holder.children[0]);
       if (name.indexOf('tree') === 0) { it.holder.add(makeTree3D(it.o)); it.holder.rotation.y = (it.o.id % 7) * 0.9; }
-      else if (name === 'bush') { it.holder.add(makeBush3D(it.o)); it.holder.rotation.y = (it.o.id % 5) * 1.3; }
       else if (name === 'medkit') it.holder.add(makeMedkit3D());
       else if (name === 'barrel') { it.holder.add(makeBarrel3D(it.o)); it.rec.isGlb = true; it.rec.mesh = null; }
       else if (name === 'barrier' || name === 'container') it.holder.add(makeRow3D(GLB.ready[name], it.o));
@@ -3536,11 +3613,12 @@ function build3D() {
     scene: new THREE.Scene(),
     camera: new THREE.PerspectiveCamera(50, Math.max(0.5, vw / Math.max(1, vh)), 2, 7000),
     rigs: [], dynObs: [], kits: [], tracers: [], smoke: [], expl: [], nades: [], nadeMarks: [],
+    obHolders: [],   // {o, holder} усіх укриттів — програмна звірка візуал↔колізія (аудит)
     fires3: [], smokes3: [],   // пули зон молотова/смока
     /* холдери, що чекають на свій GLB (фолбек-примітив усередині);
        слоти дерев — за списком активного біому (у пустелі їх 5) */
     pending: (function () {
-      const p = { bush: [], medkit: [], barrel: [], barrier: [], sandbags: [], crate: [], container: [] };
+      const p = { medkit: [], barrel: [], barrier: [], sandbags: [], crate: [], container: [] };   // кущ процедурний — без pending
       for (let i = 0; i < BIO.treeKeys.length; i++) p[BIO.treeKeys[i]] = [];
       return p;
     })(),
@@ -3656,6 +3734,7 @@ function buildObstacles3D() {
       }
       S.add(holder); onceUpdateMatrix(holder);   // статичний: зникає visible-ом
       T3.dynObs.push({ o: o, holder: holder, kind: 'crate' });
+      T3.obHolders.push({ o: o, holder: holder });
     } else if (o.type === 'barrel') {
       /* бочка: GLB якщо готова, фолбек — старий текстурований циліндр */
       const holder = new THREE.Group();
@@ -3679,6 +3758,7 @@ function buildObstacles3D() {
       S.add(glow);
       r.glow = glow;
       T3.dynObs.push(r);
+      T3.obHolders.push({ o: o, holder: holder });
     } else if (o.type === 'sandbag' || o.type === 'wall' || o.type === 'barrier') {
       /* мішки → траншея з мішків; барʼєр → барикада зі сміття; стіна →
          ряд вантажних контейнерів («острови» бази на прямокутних колізіях) */
@@ -3697,6 +3777,7 @@ function buildObstacles3D() {
         T3.pending[key].push({ holder: holder, o: o });
       }
       S.add(holder); onceUpdateMatrix(holder);
+      T3.obHolders.push({ o: o, holder: holder });
     } else if (o.type === 'tree') {
       const holder = new THREE.Group();
       holder.position.set(gx, gy, gz);
@@ -3721,23 +3802,15 @@ function buildObstacles3D() {
         T3.pending[treeKeyOf(o)].push({ holder: holder, o: o });
       }
       S.add(holder); onceUpdateMatrix(holder);
+      T3.obHolders.push({ o: o, holder: holder });
     } else if (o.type === 'bush') {
+      /* кущ процедурний (без GLB) — будується одразу, pending не потрібен */
       const holder = new THREE.Group();
       holder.position.set(gx, gy, gz);
-      if (GLB.ready.bush) {
-        holder.add(makeBush3D(o));
-        holder.rotation.y = (o.id % 5) * 1.3;
-      } else {
-        for (let q = 0; q < 2; q++) {
-          const pl = new THREE.Mesh(G.plane, M.bush);
-          pl.scale.set(o.r * 2.3, o.r * 1.55, 1);
-          pl.position.y = o.r * 0.75;
-          pl.rotation.y = q * Math.PI / 2 + (o.id % 4) * 0.4;
-          holder.add(pl);
-        }
-        T3.pending.bush.push({ holder: holder, o: o });
-      }
+      holder.add(makeBush3D(o));
+      holder.rotation.y = (o.id % 5) * 1.3;
       S.add(holder); onceUpdateMatrix(holder);
+      T3.obHolders.push({ o: o, holder: holder });
     }
   }
 }
@@ -4047,29 +4120,61 @@ function labelKeyOf(p) {
   const ps = prog < 0 ? -1 : Math.min(11, (clamp(prog, 0, 1) * 12) | 0);
   return ((p.hp + 0.5) | 0) + '|' + ((p.armor + 0.5) | 0) + '|' + ps + '|' + (p.reloading ? 'r' : (p.healUntil ? 'h' : ''));
 }
+/* скруглений прямокутник вручну — ctx.roundRect є не в усіх CEF/OBS */
+function rr2(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+function heart2(c, cx, cy, s) {
+  c.beginPath();
+  c.moveTo(cx, cy + s * 0.92);
+  c.bezierCurveTo(cx - s * 1.42, cy - s * 0.08, cx - s * 0.72, cy - s * 1.08, cx, cy - s * 0.38);
+  c.bezierCurveTo(cx + s * 0.72, cy - s * 1.08, cx + s * 1.42, cy - s * 0.08, cx, cy + s * 0.92);
+  c.closePath();
+}
 function drawLabel3D(rec) {
   const p = rec.p, c = rec.lctx;
   c.clearRect(0, 0, 256, 64);
   c.textAlign = 'center'; c.textBaseline = 'alphabetic';
-  c.font = '700 24px "Roboto Mono", monospace';
+  c.font = '700 22px "Roboto Mono", monospace';
   const wpx = c.measureText(p.nick).width;
-  if (wpx > 236) c.font = '700 ' + Math.max(14, (24 * 236 / wpx) | 0) + 'px "Roboto Mono", monospace';
-  c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,0.8)'; c.strokeText(p.nick, 128, 26);
-  c.fillStyle = '#f2f2f4'; c.fillText(p.nick, 128, 26);
-  const bw = 150, bh = 11, x = 128 - bw / 2, y = 36;
-  c.fillStyle = 'rgba(0,0,0,0.65)'; c.fillRect(x - 2, y - 2, bw + 4, bh + 4);
-  c.fillStyle = p.color; c.fillRect(x, y, bw * clamp(p.hp / p.maxHP, 0, 1), bh);
-  /* число HP прямо в смужці — прохання власника */
-  c.font = '700 12px " + String.fromCharCode(82,111,98,111,116,111) + " Mono, monospace';
-  c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.85)';
-  const hpTxt = String(Math.max(0, Math.round(p.hp)));
-  c.strokeText(hpTxt, 128, y + bh - 1);
-  c.fillStyle = '#fff'; c.fillText(hpTxt, 128, y + bh - 1);
-  if (p.armor > 0) { c.fillStyle = '#c9d4e4'; c.fillRect(x, y - 6, bw * clamp(p.armor / 50, 0, 1), 3); }
+  if (wpx > 236) c.font = '700 ' + Math.max(14, (22 * 236 / wpx) | 0) + 'px "Roboto Mono", monospace';
+  c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,0.8)'; c.strokeText(p.nick, 128, 20);
+  c.fillStyle = '#f2f2f4'; c.fillText(p.nick, 128, 20);
+  /* бар за референсом власника: серце + скруглена смужка з темною обводкою,
+     заливка кольору гравця (ідентифікація), сірий трек порожнього */
+  const bw = 150, bh = 14, x = 64, y = 27, hpF = clamp(p.hp / p.maxHP, 0, 1);
+  rr2(c, x, y, bw, bh, 7);
+  c.fillStyle = '#b9bdc4'; c.fill();                 // трек
+  if (hpF > 0.02) {
+    c.save(); c.clip();                              // заливка не вилазить за скруглення
+    c.fillStyle = p.color; c.fillRect(x, y, bw * hpF, bh);
+    c.restore();
+  }
+  rr2(c, x, y, bw, bh, 7);
+  c.lineWidth = 3; c.strokeStyle = '#14161a'; c.stroke();
+  heart2(c, 46, y + bh / 2 + 1, 12);
+  c.lineWidth = 4; c.strokeStyle = '#14161a'; c.stroke();
+  c.fillStyle = '#e2334a'; c.fill();
+  /* число N/100 — більше й окремо під баром, як у референсі */
+  c.font = '800 17px "Roboto Mono", monospace';
+  c.textAlign = 'right';
+  const hpTxt = Math.max(0, Math.round(p.hp)) + '/' + p.maxHP;
+  c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,0.85)';
+  c.strokeText(hpTxt, x + bw, 60);
+  c.fillStyle = '#fff'; c.fillText(hpTxt, x + bw, 60);
+  c.textAlign = 'center';
+  /* броня і прогрес (перезарядка/хіл) — тонкі смужки під баром зліва */
+  if (p.armor > 0) { c.fillStyle = '#c9d4e4'; c.fillRect(x, y + bh + 3, 96 * clamp(p.armor / 50, 0, 1), 3); }
   let prog = -1, pc = '#ffd93d';
   if (p.reloading) prog = (perfNow - p.reloadT0) / GUN.reload;
   else if (p.healUntil) { prog = 1 - (p.healUntil - perfNow) / 2000; pc = '#a0ff4a'; }
-  if (prog >= 0) { c.fillStyle = pc; c.fillRect(x, y + bh + 3, bw * clamp(prog, 0, 1), 3); }
+  if (prog >= 0) { c.fillStyle = pc; c.fillRect(x, y + bh + 8, 96 * clamp(prog, 0, 1), 3); }
   rec.ltex.needsUpdate = true;
 }
 /* ── Циферки урону в 3D: лінивий пул спрайтів із канвас-текстурами.
