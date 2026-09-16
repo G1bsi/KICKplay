@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/assets/app.css">
 <link rel="stylesheet" href="/assets/royale.css">
 <link rel="stylesheet" href="/assets/shootout.css">
+<link rel="stylesheet" href="/assets/marbles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="/assets/vendor/GLTFLoader.js"></script>
@@ -388,7 +389,7 @@
     <div id="revolver-frame"></div>
     <div id="revolver-cylinder"></div>
     <div id="revolver-barrel-indicator"></div>
-    <img id="revolver-bullet" src="/assets/revolver/bullet.png" alt="" draggable="false">
+    <img id="revolver-bullet" src="/assets/revolver/bullet.webp" alt="" draggable="false">
   </div>
   <!-- Слот фіксованої висоти: кнопки з'являються/зникають, а барабан не стрибає -->
   <div class="rev-controls-slot">
@@ -399,8 +400,52 @@
   </div>
 </div>
 
+<!-- 🔮 Марблс — 3D-гонка кульок (фізика Rapier + рендер Three.js у marbles.js, стилі в marbles.css) -->
+<div id="marbles-overlay">
+  <canvas id="mb-canvas"></canvas>
+  <!-- HUD як у грі: пігулка режим | кульки | таймер, поруч червоний відлік після першого фінішу -->
+  <div id="mb-hud">
+    <div class="mb-pill" id="mb-pill">
+      <span class="mb-pill-name" id="mb-pill-name">🔮 Марблс</span>
+      <span class="mb-pill-item"><span class="mb-ico-ball"></span><span id="mb-alive">0/0</span></span>
+      <span class="mb-pill-item"><span class="mb-ico-clock"></span><span id="mb-timer">00:00.000</span></span>
+    </div>
+    <div class="mb-pill mb-cd" id="mb-cd">00:60</div>
+  </div>
+  <!-- Живий лідерборд топ-10: плашки створює/переставляє marbles.js -->
+  <div id="mb-board"></div>
+  <div id="mb-count"></div>
+  <!-- Подіум топ-3: наповнюється в JS після фінішу трійки -->
+  <div id="mb-podium"></div>
+  <div id="mb-cambar">
+    <button class="mb-cambtn" id="mb-fly-btn" onclick="mbToggleFly()" title="Свободный полёт">🚁 Полёт</button>
+    <button class="mb-cambtn" onclick="mbAutoCam()" title="Камера за лидером">🎥 Авто</button>
+  </div>
+  <div class="mb-flyhint" id="mb-flyhint">WASD — движение · мышь — обзор · Space/C — вверх/вниз · Shift — ускорение · колесо — скорость</div>
+  <div id="mb-controls">
+    <button class="btn-dark" onclick="mbRestartRace()">🔄 Ещё раз</button>
+    <button class="btn-dark" onclick="mbChangeMap()">🗺 Другая карта</button>
+    <button class="btn-primary" onclick="closeMarblesOverlay()">Закрыть</button>
+  </div>
+  <!-- Вибір карти перед стартом: картки будує marbles.js з реєстру MB_MAPS -->
+  <div id="mb-picker">
+    <div class="mb-picker-title">🗺 Выбор карты</div>
+    <div class="mb-picker-sub">⏱ — примерное время до первого финиша</div>
+    <div id="mb-picker-cards"></div>
+    <button class="btn-dark" onclick="closeMarblesOverlay()">Закрыть</button>
+  </div>
+</div>
+
 <script src="/assets/app.js"></script>
 <script src="/assets/royale.js"></script>
 <script src="/assets/shootout.js"></script>
+<!-- Марблс тимчасово вимкнено (режим прихований у GAME_MODES, app.js): ядро й карти
+     не вантажаться зовсім — це ~170КБ JS на кожне відкриття панелі. Щоб повернути,
+     розкоментуй ці рядки і рядок marbles у GAME_MODES
+<script src="/assets/marbles.js"></script>
+<script src="/assets/marbles-maps/endurance.js"></script>
+<script src="/assets/marbles-maps/few.js"></script>
+<script src="/assets/marbles-maps/pixel.js"></script>
+-->
 </body>
 </html>

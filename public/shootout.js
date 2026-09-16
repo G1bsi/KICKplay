@@ -143,7 +143,7 @@ function loadSprites() {
     const rec = { img: new Image(), ok: false };
     rec.img.onload = function () { rec.ok = true; };
     rec.img.onerror = function () { rec.ok = false; }; // деградація без помилок
-    rec.img.src = '/assets/pubg/' + n + '.png';
+    rec.img.src = '/assets/pubg/' + n + '.webp';
     SPR[n] = rec;
   }
 }
@@ -2657,21 +2657,21 @@ function ensureAssets3D() {
   /* дальня земля: базовий тон палітри біому (перефарбовується у build3D) */
   M.farGround = new THREE.MeshLambertMaterial({ color: BIO.far });
   M.farGround.color.convertSRGBToLinear();   // та сама причина, що й у paintGround3D
-  const crS = t3Mat('/assets/pubg3d/crate-side.png', '#8a6a3f');
-  const crT = t3Mat('/assets/pubg/crate.png', '#9a7748');
+  const crS = t3Mat('/assets/pubg3d/crate-side.webp', '#8a6a3f');
+  const crT = t3Mat('/assets/pubg/crate.webp', '#9a7748');
   M.crate = [crS, crS, crT, crS, crS, crS];               // [+x,-x,верх,низ,+z,-z]
-  const brS = t3Mat('/assets/pubg3d/barrel-side.png', '#a32b24');
-  const brT = t3Mat('/assets/pubg/barrel.png', '#7d1f1a');
+  const brS = t3Mat('/assets/pubg3d/barrel-side.webp', '#a32b24');
+  const brT = t3Mat('/assets/pubg/barrel.webp', '#7d1f1a');
   M.barrel = [brS, brT, brS];                             // [бік, кришка, дно]
   M.barrelDead = new THREE.MeshLambertMaterial({ color: '#1b1815' });
-  M.sandbag = t3Mat('/assets/pubg3d/sandbag-side.png', '#7a6f4e');
-  M.barrier = t3Mat('/assets/pubg3d/barrier-side.png', '#84878e');
+  M.sandbag = t3Mat('/assets/pubg3d/sandbag-side.webp', '#7a6f4e');
+  M.barrier = t3Mat('/assets/pubg3d/barrier-side.webp', '#84878e');
   M.trunk = new THREE.MeshLambertMaterial({ color: '#4a3520' });
   /* фолбеки до приходу GLB: прості зелені квади (спрайти tree-side/bush-side
      видалені разом зі старими моделями) */
   M.tree = new THREE.MeshLambertMaterial({ color: '#3d6b2f', side: THREE.DoubleSide });
   M.white = new THREE.MeshLambertMaterial({ color: '#e8e6e0' });
-  const mkT = t3Mat('/assets/pubg/medkit.png', '#d8d6d0');
+  const mkT = t3Mat('/assets/pubg/medkit.webp', '#d8d6d0');
   M.medkit = [M.white, M.white, mkT, M.white, M.white, M.white];
   M.skin = new THREE.MeshLambertMaterial({ color: '#c9a184' });
   M.helmet = new THREE.MeshLambertMaterial({ color: '#2c2f33' });
@@ -2770,7 +2770,7 @@ function ensureAssets3D() {
   M.sky = new THREE.MeshBasicMaterial({ map: T3A.skyTex, side: THREE.BackSide, fog: false, depthWrite: false });
   /* камуфляж гравців: одна текстура, але персональні клони матеріалу
      (щоб фарбувати смерть/спалах урону не зачіпаючи інших) */
-  T3A.loader.load('/assets/pubg3d/camo.png', function (t) {
+  T3A.loader.load('/assets/pubg3d/camo.webp', function (t) {
     t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
     T3A.camoTex = t;
     for (let i = 0; i < T3A.camoClones.length; i++) {
@@ -5116,9 +5116,24 @@ const hostNet = (function () {
   return { fightStart: fightStart, fightEnd: fightEnd };
 })();
 
+/* Перелік файлів бою для тихого прогріву кешу (app.js тягне їх у фон після
+   завантаження панелі). На хостингу кожен GLB — окремий запит, і перший бій
+   «підвантажувався» просто на очах: 80 файлів стартували разом із боєм.
+   Порядок = порядок потрібності: спрайти й текстури, ядро, пропси, природа */
+function apiAssets() {
+  const out = [];
+  for (const n of SPR_NAMES) out.push('/assets/pubg/' + n + '.webp');
+  for (const n of ['crate-side', 'barrel-side', 'sandbag-side', 'barrier-side', 'camo']) out.push('/assets/pubg3d/' + n + '.webp');
+  for (const f of ['soldier', 'health', 'barrel', 'barrier', 'sack', 'crate', 'containerlong', 'nadefrag', 'nadefire']) out.push('/assets/models/toon/' + f + '.glb');
+  for (const k in TOON_PROPS) out.push('/assets/models/' + TOON_PROPS[k]);
+  for (const b in BIOMES) for (const k in BIOMES[b].models) out.push('/assets/models/' + BIOMES[b].models[k]);
+  return out.filter(function (u, i) { return out.indexOf(u) === i; });
+}
+
 window.RSO = {
   start: apiStart,
   stop: apiStop,
+  assets: apiAssets,
   focusNext: apiFocusNext,
   toggleOverview: apiToggleOverview,
   toggleFly: apiToggleFly,

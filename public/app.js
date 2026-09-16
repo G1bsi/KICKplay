@@ -29,7 +29,7 @@ const STICKERS = [
 // ── Cash Hunt: мішені тиру (нарізані зі згенерованого спрайтшита) ──
 // Якщо файла мішені немає, <img onerror> підставляє emoji-фолбек зі STICKERS.
 const TARGETS = Array.from({ length: 16 }, (_, i) =>
-  '/assets/targets/t' + String(i + 1).padStart(2, '0') + '.png');
+  '/assets/targets/t' + String(i + 1).padStart(2, '0') + '.webp');
 
 // ── Звуки Cash Hunt (згенеровано ElevenLabs) ─────────────────────
 const SFX = {};
@@ -420,8 +420,9 @@ const GAME_MODES = [
   { id: 'cashhunt', icon: '🎯', label: 'Cash Hunt' },
   { id: 'royale',   icon: '🪂', label: 'Батл Рояль' },
   { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
-  /* «Гонка» тимчасово прихована з перемикача (код гри лишився цілим —
+  /* «Гонка» і «Марблс» тимчасово приховані з перемикача (код ігор лишився цілим —
      щоб повернути, просто розкоментуй рядок) */
+  // { id: 'marbles',  icon: '🔮', label: 'Марблс' },
   // { id: 'race',     icon: '🏎️', label: 'Гонка' },
 ];
 
@@ -480,6 +481,8 @@ function setGameMode(mode) {
   // Рояль живе в royale.js, який вантажиться ПІСЛЯ app.js — на момент
   // top-level ініціалізації (setGameMode('roulette') внизу файла) функції ще немає
   if (typeof closeRoyaleOverlay === 'function') closeRoyaleOverlay();
+  // Марблс теж живе в окремому файлі (marbles.js) — та сама пересторога
+  if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
   phase = 'idle';
 
   gameMode = mode;
@@ -536,6 +539,7 @@ async function startGame() {
   if (gameMode === 'revolver') return startRevolverGame();
   if (gameMode === 'chatgame') return startChatgame();
   if (gameMode === 'royale') return startRoyale();
+  if (gameMode === 'marbles') return startMarblesGame();
 
   const n = 1;   // Cash Hunt: завжди один переможець
   const res = await fetch('/api/raffle/start', {
@@ -583,6 +587,8 @@ function resetGameUIKeepMode() {
   raceQualifiers = [];
   hideRaceOverlay();
   hideRouletteOverlay();
+  // марблс живе в marbles.js (вантажиться після app.js) — guard як для рояля
+  if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
   /* selecting-mode ховає системний курсор (cursor:none) — знімаємо разом
      з оверлеєм, інакше клас доживає до наступної гри і курсор зникає */
   document.getElementById('cashhunt-overlay').classList.remove('visible', 'selecting-mode');
@@ -2622,6 +2628,38 @@ setGameMode('roulette'); // ховає поле переможців в дефо
 adjustConfirmSeconds(0); // синхронізуємо плитку «час на відповідь» з поточним значенням
 setInterval(() => { if (phase === 'idle') loadState(); }, 2000);
 
+/* ── Тихий прогрів кешу ───────────────────────────────────────────────
+   На хостингу кожна картинка й модель — окремий запит по мережі, і перший
+   старт режиму виглядав як «підвантаження»: табло Cash Hunt, барабан і 3D-бій
+   тягнули мегабайти саме в мить старту. Після завантаження панелі тягнемо їх
+   у фон по одному файлу і з паузою, поки йде гра, — до старту кеш уже теплий.
+   Помилки ігноруємо: прогрів не має ламати панель, якщо файла немає. */
+function warmAssetCache() {
+  const list = [
+    '/assets/board.webp', '/assets/cannon-base.webp', '/assets/cannon-barrel.webp',
+    '/assets/revolver/cylinder.webp', '/assets/revolver/hammer.webp',
+    '/assets/revolver/bullet.webp', '/assets/revolver/live.webp', '/assets/revolver/spent.webp',
+  ];
+  for (let i = 1; i <= 16; i++) list.push('/assets/targets/t' + String(i).padStart(2, '0') + '.webp');
+  list.push('/assets/pubg/map1.webp', '/assets/pubg/map2.webp', '/assets/pubg/map3.webp');
+  if (typeof RSO !== 'undefined' && RSO.assets) list.push.apply(list, RSO.assets());
+  // три потоки: по одному файлу за раз прогрів тягнувся б хвилини, а стрімер
+  // часто тисне «Старт» через пів хвилини після відкриття панелі
+  let i = 0;
+  for (let w = 0; w < 3; w++) {
+    (function next() {
+      if (i >= list.length) return;
+      // під час гри мережу не чіпаємо: кадри дорожчі за прогрів
+      if (phase !== 'idle') return setTimeout(next, 3000);
+      fetch(list[i++], { cache: 'force-cache', priority: 'low' })
+        .catch(() => {})
+        .then(() => setTimeout(next, 40));
+    })();
+  }
+}
+if (typeof requestIdleCallback === 'function') requestIdleCallback(() => setTimeout(warmAssetCache, 1200), { timeout: 5000 });
+else setTimeout(warmAssetCache, 2500);
+
 // Пробіл не повинен "клікати" по фокусованій кнопці (через це після старту
 // гри натискання пробілу повторно запускало startGame() з нуля)
 window.addEventListener('keydown', (e) => {
@@ -2723,7 +2761,7 @@ function initCashhuntBulbs() {
       }, 110);
     } catch (e) { /* вогники — прикраса: збій аналізу не має валити гру */ }
   };
-  img.src = '/assets/board.png';
+  img.src = '/assets/board.webp';
 }
 
 (function() {

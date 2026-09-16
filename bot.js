@@ -136,6 +136,8 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css':  'text/css; charset=utf-8',
   '.js':   'text/javascript; charset=utf-8',
+  '.mjs':  'text/javascript; charset=utf-8',   // ESM (Rapier для марблс) — браузер вимагає JS-MIME для module-скриптів
+  '.wasm': 'application/wasm',
   '.json': 'application/json; charset=utf-8',
   '.svg':  'image/svg+xml',
   '.png':  'image/png',
@@ -149,6 +151,10 @@ const MIME = {
   '.glb':  'model/gltf-binary',   // 3D-моделі перестрілки
 };
 
+// Медіа з довгим кешем (див. маршрут /assets/): міняється рідко, а на хостингу
+// кожна зайва перевірка — окремий round-trip перед стартом режиму
+const MEDIA_RE = /\.(webp|png|jpe?g|gif|svg|ico|glb|mp3|woff2?)$/i;
+
 const assetCache = new Map();
 
 function loadAsset(name) {
@@ -161,7 +167,10 @@ function loadAsset(name) {
   } catch { return null; }
   const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
-  const gz = buf.length > 1024 ? zlib.gzipSync(buf, { level: 8 }) : null;
+  // gzip лишаємо лише коли він реально менший: webp/mp3 уже стиснуті, і
+  // «стиснута» копія виходила більшою за оригінал — ми слали зайві байти
+  const gzTry = buf.length > 1024 ? zlib.gzipSync(buf, { level: 8 }) : null;
+  const gz = gzTry && gzTry.length < buf.length * 0.92 ? gzTry : null;
   return { buf, gz, type, etag };
 }
 
@@ -223,9 +232,12 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/assets/')) {
     const [rawPath, query] = req.url.split('?');
     const name = decodeURIComponent(rawPath.slice('/assets/'.length));
+    // Медіа (картинки, моделі, звуки) кешуємо на тиждень: з 'no-cache' браузер
+    // перепитував КОЖЕН файл, і бій на 80 моделях витрачав ~13 кіл RTT на самі
+    // лише 304-і. Код (js/css/html) лишається no-cache — він міняється щодеплою
     sendAsset(req, res, name, /(^|&)v=/.test(query || '')
       ? 'public, max-age=31536000, immutable'
-      : 'no-cache');
+      : (MEDIA_RE.test(name) ? 'public, max-age=604800' : 'no-cache'));
     return;
   }
 

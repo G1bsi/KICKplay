@@ -1,0 +1,214 @@
+/* ══════════════════════════════════════════════════════════════
+   🔮 МАРБЛС — оверлей 3D-гонки кульок (HUD як у Marbles on Stream).
+   Підключається ПІСЛЯ app.css. Все під #marbles-overlay, класи з
+   префіксом mb- — щоб не чіпати чужі правила.
+   ══════════════════════════════════════════════════════════════ */
+
+#marbles-overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay, 9990);
+  display: none; background: #dfe9f3;
+  font-family: var(--font-ui); color: var(--text);
+  overflow: hidden;
+}
+#marbles-overlay.visible { display: block; }
+
+#mb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ── Верхній лівий HUD: пігулка «режим | кульки | таймер» + червоний відлік ── */
+#mb-hud {
+  position: absolute; top: 12px; left: 12px;
+  display: none; align-items: center; gap: 8px;
+  pointer-events: none; z-index: 3;
+}
+.mb-pill {
+  display: inline-flex; align-items: center; gap: 12px;
+  height: 36px; padding: 0 14px; border-radius: 9px;
+  background: rgba(14, 16, 22, 0.78); border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff; font-weight: var(--fw-black); font-size: var(--fs-md);
+  letter-spacing: 0.2px; white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+.mb-pill-name { color: #fff; }
+.mb-pill-item { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
+.mb-pill-item + .mb-pill-item::before { content: ''; }
+.mb-ico-ball {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: linear-gradient(135deg, #fff 0 50%, #333 50% 100%);
+  border: 1.5px solid #fff; box-sizing: border-box;
+}
+.mb-ico-clock {
+  width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-sizing: border-box;
+  position: relative;
+}
+.mb-ico-clock::after {
+  content: ''; position: absolute; left: 5px; top: 2px; width: 2px; height: 5px; background: #fff;
+  box-shadow: 2px 4px 0 0 #fff;
+}
+/* червоний бейдж відліку 60с після першого фінішу */
+.mb-pill.mb-cd {
+  display: none; padding: 0 12px; color: #ff3b3b; font-family: var(--font-ui);
+  background: rgba(20, 12, 12, 0.82); border-color: rgba(255, 60, 60, 0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Лідерборд топ-10 праворуч: кружечок з номером + нік на темній плашці ── */
+#mb-board {
+  position: absolute; top: 60px; right: 16px; width: 300px;
+  height: 380px; /* 10 рядів × 36px + запас на в'їзд нових плашок */
+  pointer-events: none; z-index: 3;
+}
+.mb-row {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 12px 0 6px;
+  background: rgba(14, 16, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  /* перестановки — плавний переїзд плашки на нове місце */
+  transition: transform 0.45s var(--ease-out), opacity 0.3s ease, background var(--t-base);
+}
+.mb-row.mb-enter { opacity: 0; }
+.mb-row.mb-exit  { opacity: 0; }
+.mb-place {
+  flex: 0 0 auto; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: #3a3f4a; border: 1px solid rgba(255, 255, 255, 0.35);
+  font-size: 12px; font-weight: var(--fw-black); color: #fff; line-height: 1;
+}
+.mb-nick {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-md); font-weight: var(--fw-black); color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+/* вже фінішував — зелений кружечок з галочкою, місце зафіксоване */
+.mb-row.mb-fin .mb-place { background: #2fb75a; border-color: #7be39a; }
+
+/* ── Відлік 5-4-3-2-1 ────────────────────────────────────────── */
+#mb-count {
+  position: absolute; inset: 0; display: none;
+  align-items: center; justify-content: center;
+  font-size: clamp(90px, 20vh, 190px); font-weight: var(--fw-black);
+  color: #fff; pointer-events: none; z-index: 4;
+  text-shadow: 0 0 2px #000, 0 0 6px #000, 0 6px 26px rgba(0, 0, 0, 0.55);
+  -webkit-text-stroke: 3px #14161c;
+}
+
+/* ── Подіум топ-3 (3с до загальної заставки переможця) ───────── */
+#mb-podium {
+  position: absolute; inset: 0; display: none; z-index: 5;
+  align-items: center; justify-content: center; gap: 18px;
+  background: rgba(8, 8, 10, 0.62);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#mb-podium.visible { display: flex; animation: mbPodIn 0.35s var(--ease-out); }
+@keyframes mbPodIn { from { opacity: 0; } to { opacity: 1; } }
+.mb-pod-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: 220px; padding: 26px 18px 22px;
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-3);
+  animation: mbPodUp 0.5s var(--ease-spring) backwards;
+}
+.mb-pod-card.mb-pod-2 { animation-delay: 0.10s; }
+.mb-pod-card.mb-pod-3 { animation-delay: 0.20s; }
+@keyframes mbPodUp { from { opacity: 0; transform: translateY(46px); } to { opacity: 1; transform: none; } }
+.mb-pod-card.mb-pod-1 {
+  width: 260px; padding: 34px 20px 28px;
+  border-color: rgba(var(--accent-rgb), 0.6);
+  box-shadow: var(--shadow-3), var(--bloom-accent);
+}
+.mb-pod-card.mb-pod-2 { border-color: rgba(200, 205, 215, 0.45); }
+.mb-pod-card.mb-pod-3 { border-color: rgba(205, 127, 50, 0.5); }
+.mb-pod-medal { font-size: 44px; line-height: 1; }
+.mb-pod-1 .mb-pod-medal { font-size: 62px; }
+/* червона глянцева кулька — як у грі */
+.mb-pod-ball {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ff9aa0 0, #d81e2a 45%, #7a0c14 100%);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+.mb-pod-nick {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-lg); font-weight: var(--fw-bold); color: var(--text);
+}
+.mb-pod-1 .mb-pod-nick { font-size: var(--fs-xl); font-weight: var(--fw-black); color: var(--accent); }
+.mb-pod-place {
+  font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: var(--fw-bold);
+  letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted);
+}
+
+/* ── Кнопки після фінішу ─────────────────────────────────────── */
+#mb-controls {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  display: none; gap: 10px; z-index: 6;
+}
+#mb-controls .btn-primary, #mb-controls .btn-dark { min-width: 150px; }
+
+/* ── Камербар (політ / авто) — стиль so-cambtn з shootout ───── */
+#mb-cambar {
+  position: absolute; bottom: 22px; right: 18px;
+  display: none; gap: 8px; z-index: 6;
+}
+.mb-cambtn {
+  min-width: 40px; height: 34px; padding: 0 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text-muted);
+  font-size: var(--fs-sm); font-weight: var(--fw-black); letter-spacing: 0.4px;
+  cursor: pointer;
+}
+.mb-cambtn:hover { background: var(--surface-3); color: var(--text); border-color: var(--accent); }
+.mb-cambtn.mb-on { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent); }
+.mb-flyhint {
+  position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(10, 10, 14, 0.78); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--r-full);
+  font-size: var(--fs-sm); color: var(--text-muted); white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 0.6s ease; z-index: 6;
+}
+.mb-flyhint.show { opacity: 1; }
+
+/* ── Вибір карти на старті: картки з іконкою, назвою, орієнтовним часом ── */
+#mb-picker {
+  position: absolute; inset: 0; display: none; z-index: 7;
+  flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: rgba(8, 10, 14, 0.66);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.mb-picker-title {
+  font-size: var(--fs-xl); font-weight: var(--fw-black); color: #fff;
+  letter-spacing: 0.5px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+.mb-picker-sub { font-size: var(--fs-sm); color: var(--text-muted); margin-top: -10px; }
+#mb-picker-cards {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 14px;
+  max-width: min(92vw, 1100px);
+}
+.mb-card {
+  width: 236px; min-height: 176px; padding: 18px 16px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-3);
+  color: var(--text); font-family: var(--font-ui); cursor: pointer; text-align: center;
+  transition: transform var(--t-base), border-color var(--t-base), box-shadow var(--t-base);
+}
+.mb-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: var(--shadow-3), var(--bloom-accent); }
+.mb-card-last { border-color: rgba(var(--accent-rgb), 0.55); }
+.mb-card-ico { font-size: 44px; line-height: 1; }
+.mb-card-name { font-size: var(--fs-lg); font-weight: var(--fw-black); }
+.mb-card-time {
+  font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: var(--fw-bold);
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.mb-card-desc { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.35; }
+.mb-card-rnd { border-style: dashed; }
+
+/* вибулі (карти з вибуванням): сірий рядок із черепом */
+.mb-row.mb-dead { opacity: 0.55; }
+.mb-row.mb-dead .mb-place { background: #5a2a2a; border-color: #a35050; font-size: 11px; }
+
+/* глобальні кнопки сайту — капсом; картки карт мають лишатись звичайним текстом */
+#mb-picker .mb-card, #mb-picker .mb-card * { text-transform: none; letter-spacing: 0; }

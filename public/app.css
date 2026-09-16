@@ -588,7 +588,7 @@
   #cannon-base {
     position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
     width: 116px; height: 52px;
-    background: url('/assets/cannon-base.png') center bottom / contain no-repeat;
+    background: url('/assets/cannon-base.webp') center bottom / contain no-repeat;
     border: none; border-radius: 0; box-shadow: none;
     z-index: 3;
   }
@@ -601,7 +601,7 @@
     transform-origin: 50% 100%;   /* pivot = центр казенної кулі внизу спрайта */
     transform: rotate(var(--aim, 0deg));
     transition: transform 0.42s var(--ease-out);
-    background: url('/assets/cannon-barrel.png') center / contain no-repeat;
+    background: url('/assets/cannon-barrel.webp') center / contain no-repeat;
     border-radius: 0; box-shadow: none;
     filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.18));
     z-index: 2;
@@ -1771,7 +1771,7 @@
        (борд-height + прогрес + пушка + слот кнопок + gaps ≈ 92vh) */
     width: min(96vw, 132vh);
     max-height: none;
-    background: url('/assets/board.png') center / 100% 100% no-repeat;
+    background: url('/assets/board.webp') center / 100% 100% no-repeat;
     border: none;
     box-shadow: none;               /* фон картинки прозорий — прямокутна тінь виказала б межі */
     border-radius: 0;
@@ -1913,7 +1913,7 @@
     width: 92%; height: 92%;
     border-radius: 50%;
     border: none;
-    background: url('/assets/revolver/cylinder.png') center / contain no-repeat;
+    background: url('/assets/revolver/cylinder.webp') center / contain no-repeat;
     box-shadow: 0 30px 70px rgba(0,0,0,0.85), 0 0 60px rgba(var(--accent-rgb), 0.08);
     position: relative; z-index: 2;
   }
@@ -1926,7 +1926,7 @@
     width: 13%; height: 17%;
     margin-left: -6.5%;
     border: none; transform: none;
-    background: url('/assets/revolver/hammer.png') center bottom / contain no-repeat;
+    background: url('/assets/revolver/hammer.webp') center bottom / contain no-repeat;
     filter: drop-shadow(0 6px 14px rgba(0,0,0,0.8)) drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.25));
     transform-origin: 50% 90%;
     animation: none;
@@ -1959,7 +1959,7 @@
 
   /* Камора = патрон-спрайт з ніком на латунному денці */
   .rev-chamber {
-    background: url('/assets/revolver/live.png') center / contain no-repeat !important;
+    background: url('/assets/revolver/live.webp') center / contain no-repeat !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 50%;
@@ -1993,7 +1993,7 @@
 
   /* Вибито: гільза замість патрона, нік зникає */
   .rev-chamber.eliminated {
-    background-image: url('/assets/revolver/spent.png') !important;
+    background-image: url('/assets/revolver/spent.webp') !important;
     filter: brightness(0.75) saturate(0.6);
   }
   .rev-chamber.eliminated::after { content: none; }
@@ -2001,7 +2001,7 @@
 
   /* Переможець: патрон горить жовтим */
   .rev-chamber.winner {
-    background-image: url('/assets/revolver/live.png') !important;
+    background-image: url('/assets/revolver/live.webp') !important;
     filter: brightness(1.15) drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.9)) drop-shadow(0 0 40px rgba(var(--accent-rgb), 0.45));
   }
   .rev-chamber.winner .rev-chamber-inner { color: #000; font-size: clamp(9px, 12cqw, 14px); }

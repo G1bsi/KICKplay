@@ -25,7 +25,9 @@ const RL_LABEL_MAX = 30;               // до стількох живих — �
    будь-якому форматі. Слот без жодного файла поступається іншому;
    коли не лишилось жодного — лобі показує плейсхолдер. */
 const RL_MAP_SLOTS = ['map1', 'map2', 'map3'];
-const RL_MAP_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+// webp першим: усі карти лобі — webp/jpg, а кожна невдала спроба розширення —
+// окремий 404 по мережі (на хостингу це помітна пауза перед показом карти)
+const RL_MAP_EXTS = ['webp', 'jpg', 'png', 'jpeg', 'gif'];
 const RL_EXT_KEY = 'royaleMapExts';
 const rlMapUrl = (slot, ext) => '/assets/pubg/' + slot + '.' + ext;
 /* памʼять форматів: коли слот один раз завантажився, його розширення
