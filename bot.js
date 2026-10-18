@@ -11,8 +11,32 @@ const MP_ENABLED = process.env.MP === '1';   // мультиплеєр зако�
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Настройки ──────────────────────────────────────────────
-const CHATROOM_ID = 235222;
+// Чат Kick, який слухає бот. Раніше id був зашитий у код: якщо він не той —
+// бот мовчки слухав чужий чат, і панель виглядала «робочою» з порожнім чатом.
+// Тепер: KICK_CHANNEL=<нік каналу> (id підтягнеться сам) або KICK_CHATROOM=<id>
+const KICK_CHANNEL = (process.env.KICK_CHANNEL || '').trim().toLowerCase();
+// Безкоштовний Render присипляє сервіс після 15 хв без запитів ззовні. Сплячий
+// бот — це зупинений процес: сокет до чату Kick мертвий, повідомлення тих хвилин
+// утрачені назавжди, а файл стану може обнулитись при пробудженні. Тому раз на
+// KEEPALIVE_MIN хвилин смикаємо власний /healthz через зовнішню адресу (її Render
+// сам кладе в RENDER_EXTERNAL_URL) — для платформи це вхідний запит, і сон не настає.
+// Вимкнути: KEEPALIVE=0. Своя адреса: KEEPALIVE_URL=https://...
+const KEEPALIVE_URL = (process.env.KEEPALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+const KEEPALIVE_MIN = Number(process.env.KEEPALIVE_MIN) || 10;
+const KEEPALIVE_ON = KEEPALIVE_URL && process.env.KEEPALIVE !== '0';
+let CHATROOM_ID = Number(process.env.KICK_CHATROOM) || 235222;
 const STATE_FILE  = path.join(__dirname, 'marble_state.json');
+
+// Стан звʼязку з чатом — його показує лампочка BOT STATUS у панелі
+const kick = {
+  state: 'init',        // init | connecting | open | subscribed | closed
+  subscribed: false,
+  msgs: 0,              // скільки повідомлень чату прийшло за цю сесію
+  lastMsgAt: 0,
+  lastError: '',
+  reconnects: 0,
+  since: Date.now(),
+};
 
 // Пароль береться з Environment Variables на Render:
 const WEB_PASSWORD = process.env.WEB_PASSWORD;
@@ -54,10 +78,25 @@ if (!WEB_PASSWORD) {
 }
 // ───────────────────────────────────────────────────────────
 
-const PUSHER_WS =
-  'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679' +
-  '?protocol=7&client=js&version=8.4.0-rc2&flash=false';
+// Kick вимкнув свій публічний Pusher (сокет рвався з кодом 4001 «App key not in
+// this cluster») і перейшов на власний Centrifugo. Нинішній шлях: взяти гостьовий
+// токен по HTTP, підключитись і підписатись на канал чату.
+const KICK_WS_URL = process.env.KICK_WS_URL || 'wss://realtime.us-east-1.platform.kick.com/connection/websocket';
+const KICK_TOKEN_URL = process.env.KICK_TOKEN_URL || 'https://web.kick.com/api/v1/realtime/auth/connection';
 
+// Гостьовий токен живе ~45 хв; після розриву беремо новий
+async function fetchRealtimeToken() {
+  const r = await fetch(KICK_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Origin': 'https://kick.com', 'User-Agent': 'Mozilla/5.0' },
+    body: JSON.stringify({ client_id: 'js' }),
+  });
+  if (!r.ok) throw new Error('токен: HTTP ' + r.status);
+  const j = await r.json();
+  const token = j && j.data && j.data.token;
+  if (!token) throw new Error('у відповіді немає токена: ' + JSON.stringify(j).slice(0, 120));
+  return token;
+}
 // ── Розіграш (Cash Hunt) ─────────────────────────────────────
 let rafflePlayers   = [];
 let raffleAccepting = false;
@@ -248,6 +287,25 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Публічна перевірка живості — без пароля, щоб її міг смикати пінгер
+  // (і щоб із телефона було видно, чи бот узагалі слухає чат)
+  if (req.url === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({
+      ok: kick.subscribed,
+      state: kick.state,
+      chatroom: CHATROOM_ID,
+      msgs: kick.msgs,
+      lastMsgAgo: kick.lastMsgAt ? Math.round((Date.now() - kick.lastMsgAt) / 1000) : null,
+      reconnects: kick.reconnects,
+      error: kick.lastError || null,
+      accepting: raffleAccepting,
+      players: rafflePlayers.length,
+      uptimeSec: Math.round(process.uptime()),
+    }));
+    return;
+  }
+
   // SSE маршрут для живого чату
   if (req.url === '/api/chat/stream') {
     res.writeHead(200, {
@@ -310,6 +368,17 @@ const server = http.createServer((req, res) => {
       game: raffleGame,
       savedWinners,
       savedChatgameWinners,
+      // звʼязок із чатом Kick — щоб «бот не реєструє» було видно одразу в панелі
+      kick: {
+        ok: kick.subscribed,
+        state: kick.state,
+        chatroom: CHATROOM_ID,
+        channel: KICK_CHANNEL || null,
+        msgs: kick.msgs,
+        lastMsgAgo: kick.lastMsgAt ? Math.round((Date.now() - kick.lastMsgAt) / 1000) : null,
+        error: kick.lastError || null,
+        reconnects: kick.reconnects,
+      },
     }));
     return;
   }
@@ -846,102 +915,198 @@ server.listen(process.env.PORT || 3000, () => {
   console.log(`[WEB] Сервер запущен на порту ${process.env.PORT || 3000}`);
 });
 
-// ── Kick WebSocket ──────────────────────────────────────────
-function connect() {
-  const ws = new WebSocket(PUSHER_WS);
-  let pingInterval = null;
+// ── Kick realtime (Centrifugo) ──────────────────────────────
+async function connect() {
+  kick.state = 'connecting';
+  let token;
+  try {
+    token = await fetchRealtimeToken();
+  } catch (e) {
+    kick.lastError = 'токен: ' + e.message;
+    console.error('[WS] Не вдалось отримати токен Kick: ' + e.message + ' — повтор через 10с');
+    setTimeout(connect, 10000);
+    return;
+  }
+  const ws = new WebSocket(KICK_WS_URL, { headers: { Origin: 'https://kick.com' } });
+  let aliveTimer = null, subTimer = null;
+  // будь-який байт = звʼязок живий; тиша довше 90с означає напівмертвий сокет
+  // (на хмарному хостингу так буває після простою): сокет «відкритий», а чату вже нема
+  const bump = () => {
+    if (aliveTimer) clearTimeout(aliveTimer);
+    aliveTimer = setTimeout(() => {
+      console.log('[WS] 90с тиші від Kick — перепідключаюсь');
+      kick.lastError = 'тиша 90с, перепідключення';
+      try { ws.terminate(); } catch { try { ws.close(); } catch {} }
+    }, 90000);
+  };
 
   ws.on('open', () => {
-    console.log('[WS] Подключено к Kick Pusher');
-    ws.send(JSON.stringify({
-      event: 'pusher:subscribe',
-      data: { auth: '', channel: `chatrooms.${CHATROOM_ID}.v2` }
-    }));
-    pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN)
-        ws.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
-    }, 30000);
+    kick.state = 'open'; kick.lastError = '';
+    console.log('[WS] Подключено к Kick realtime');
+    ws.send(JSON.stringify({ connect: { token, name: 'js' }, id: 1 }));
+    ws.send(JSON.stringify({ subscribe: { channel: `chatrooms.${CHATROOM_ID}.v2`, flag: 1 }, id: 2 }));
+    bump();
+    // підписка не підтвердилась за 15с — сокет є, а чату не буде: пробуємо заново
+    subTimer = setTimeout(() => {
+      if (kick.subscribed) return;
+      console.log('[WS] Підписка на chatroom ' + CHATROOM_ID + ' не підтвердилась за 15с — перепідключаюсь');
+      kick.lastError = 'підписка не підтвердилась';
+      try { ws.terminate(); } catch { try { ws.close(); } catch {} }
+    }, 15000);
   });
 
   ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+    bump();
+    // Centrifugo шле кілька кадрів в одному повідомленні, розділених \n
+    for (const line of String(raw).split('\n')) {
+      if (!line.trim()) continue;
+      let msg;
+      try { msg = JSON.parse(line); } catch { continue; }
 
-    if (msg.event === 'pusher:ping') {
-      ws.send(JSON.stringify({ event: 'pusher:pong', data: {} }));
-      return;
-    }
+      // порожній кадр — пінг сервера, відповідаємо тим самим
+      if (Object.keys(msg).length === 0) { ws.send('{}'); continue; }
 
-    if (msg.event === 'pusher_internal:subscription_succeeded') {
-      console.log(`[WS] Подписка на chatroom ${CHATROOM_ID} активна`);
-      console.log('[BOT] Бот работает! Жду команды в чате...\n');
-      return;
-    }
-
-    if (msg.event === 'App\\Events\\ChatMessageEvent') {
-      let data;
-      try { data = JSON.parse(msg.data); } catch { return; }
-
-      const username = data?.sender?.username;
-      const content  = data?.content?.trim();
-      const color = data?.sender?.identity?.color || '#53fc18';
-      const badges = data?.sender?.identity?.badges || [];
-      
-      if (!username || !content) return;
-
-      // Відправляємо повідомлення у кастомний чат на фронтенді
-      const chatMsg = JSON.stringify({ username, content, color, badges });
-      chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
-
-      // Привʼязка гравця перестрілки: у повідомленні є 4-значний код зі
-      // сторінки гравця → реле привʼязує його сокет до цього ніка
-      try { playRelay.chatCode(username, content); } catch (e) { /* реле не валить чат */ }
-
-      const lower = content.toLowerCase();
-
-      // Шукаємо переможця case-insensitive
-      const checkKey = Object.keys(raffleChecks).find(
-        k => k.toLowerCase() === username.toLowerCase()
-      );
-      console.log(`[CHAT] ${username}: "${content}" | keys: ${JSON.stringify(Object.keys(raffleChecks))} | found key: ${checkKey} | active: ${raffleChecks[checkKey]?.active}`);
-
-      if (checkKey && raffleChecks[checkKey].active) {
-        raffleChecks[checkKey].active = false;
-        raffleChecks[checkKey].message = content;
-        raffleChecks[checkKey].messageAt = Date.now();
-        console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
-        // Push до клієнта — не чекаємо наступного poll
-        const pushMsg = JSON.stringify({ type: 'winner_reply', name: checkKey, message: content });
-        chatClients.forEach(c => c.write(`data: ${pushMsg}\n\n`));
+      if (msg.id === 1) {
+        if (msg.error) {
+          kick.lastError = 'connect: ' + JSON.stringify(msg.error).slice(0, 120);
+          console.error('[WS] Kick відмовив у підключенні: ' + kick.lastError);
+          try { ws.terminate(); } catch {}
+        }
+        continue;
+      }
+      if (msg.id === 2) {
+        if (msg.error) {
+          kick.lastError = 'subscribe: ' + JSON.stringify(msg.error).slice(0, 120);
+          console.error('[WS] Не вдалось підписатись на chatroom ' + CHATROOM_ID + ': ' + kick.lastError);
+          try { ws.terminate(); } catch {}
+          continue;
+        }
+        kick.state = 'subscribed'; kick.subscribed = true;
+        console.log(`[WS] Подписка на chatroom ${CHATROOM_ID} активна`);
+        console.log('[BOT] Бот работает! Жду команды в чате...\n');
+        continue;
       }
 
-      if (raffleAccepting && raffleJoinCmd && lower === raffleJoinCmd) {
-        if (!rafflePlayers.includes(username)) {
-          rafflePlayers.push(username);
-          saveState();
-          console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
-        }
-        return;
+      const pub = msg.push && msg.push.pub && msg.push.pub.data;
+      if (!pub || pub.event !== 'App\\Events\\ChatMessageEvent') continue;
+      let data;
+      try { data = JSON.parse(pub.data); } catch { continue; }
+
+    const username = data?.sender?.username;
+    const content  = data?.content?.trim();
+    const color = data?.sender?.identity?.color || '#53fc18';
+    const badges = data?.sender?.identity?.badges || [];
+    
+      if (!username || !content) continue;
+    kick.msgs++; kick.lastMsgAt = Date.now();
+
+    // Відправляємо повідомлення у кастомний чат на фронтенді
+    const chatMsg = JSON.stringify({ username, content, color, badges });
+    chatClients.forEach(c => c.write(`data: ${chatMsg}\n\n`));
+
+    // Привʼязка гравця перестрілки: у повідомленні є 4-значний код зі
+    // сторінки гравця → реле привʼязує його сокет до цього ніка
+    try { playRelay.chatCode(username, content); } catch (e) { /* реле не валить чат */ }
+
+    const lower = content.toLowerCase();
+
+    // Шукаємо переможця case-insensitive
+    const checkKey = Object.keys(raffleChecks).find(
+      k => k.toLowerCase() === username.toLowerCase()
+    );
+    console.log(`[CHAT] ${username}: "${content}" | keys: ${JSON.stringify(Object.keys(raffleChecks))} | found key: ${checkKey} | active: ${raffleChecks[checkKey]?.active}`);
+
+    if (checkKey && raffleChecks[checkKey].active) {
+      raffleChecks[checkKey].active = false;
+      raffleChecks[checkKey].message = content;
+      raffleChecks[checkKey].messageAt = Date.now();
+      console.log(`[РОЗІГРАШ✓] ${username} ответил: ${content}`);
+      // Push до клієнта — не чекаємо наступного poll
+      const pushMsg = JSON.stringify({ type: 'winner_reply', name: checkKey, message: content });
+      chatClients.forEach(c => c.write(`data: ${pushMsg}\n\n`));
+    }
+
+    // слово збігається з точністю до знаку «!»: стрімер пише в панель «призи»,
+    // а глядачі в чаті — «!призи» (і навпаки), і реєстрація мовчки не працювала
+    const cmdMatch = raffleJoinCmd && (lower === raffleJoinCmd
+      || lower === '!' + raffleJoinCmd
+      || (raffleJoinCmd[0] === '!' && lower === raffleJoinCmd.slice(1)));
+    if (raffleAccepting && cmdMatch) {
+      if (!rafflePlayers.includes(username)) {
+      rafflePlayers.push(username);
+      saveState();
+      console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
+      }
+        continue;
       }
     }
   });
 
-  ws.on('error', (err) => console.error('[WS] Ошибка:', err.message));
+  ws.on('error', (err) => { kick.lastError = err.message; console.error('[WS] Ошибка:', err.message); });
 
-  ws.on('close', () => {
-    if (pingInterval) clearInterval(pingInterval);
-    console.log('[WS] Соединение закрыто, переподключение через 5с...');
+  ws.on('close', (code, reason) => {
+    if (aliveTimer) clearTimeout(aliveTimer);
+    if (subTimer) clearTimeout(subTimer);
+    kick.state = 'closed'; kick.subscribed = false; kick.reconnects++;
+    const why = code ? (' код ' + code + (reason ? ' ' + String(reason).slice(0, 120) : '')) : '';
+    console.log('[WS] Соединение закрыто' + why + ', переподключение через 5с...');
     setTimeout(connect, 5000);
   });
 }
 
 // ── Старт ───────────────────────────────────────────────────
-console.log('╔══════════════════════════════════════╗');
-console.log('║   Kick Cash Hunt — Розыгрыш BOT      ║');
-console.log('╠══════════════════════════════════════╣');
-console.log(`║  Chatroom: ${CHATROOM_ID}                  ║`);
-console.log('║  Защита: пароль через env variable   ║');
-console.log('╚══════════════════════════════════════╝\n');
+// Нік каналу → id чату. Без цього id був зашитий у код, і бот міг слухати
+// чужий чат: панель працює, чат порожній, реєстрація «не бачить» нікого
+async function resolveChatroom() {
+  if (!KICK_CHANNEL) return;
+  try {
+    const r = await fetch('https://kick.com/api/v2/channels/' + encodeURIComponent(KICK_CHANNEL), {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const id = j && j.chatroom && j.chatroom.id;
+    if (!id) throw new Error('у відповіді немає chatroom.id');
+    if (id !== CHATROOM_ID) console.log(`[KICK] chatroom каналу ${KICK_CHANNEL}: ${id} (було ${CHATROOM_ID})`);
+    CHATROOM_ID = id;
+  } catch (e) {
+    // Kick часто ріже запити з хмарних IP — тоді лишаємось на KICK_CHATROOM/дефолті
+    kick.lastError = 'не вдалось знайти chatroom для ' + KICK_CHANNEL + ': ' + e.message;
+    console.error('[KICK] ' + kick.lastError + ' — слухаю chatroom ' + CHATROOM_ID);
+  }
+}
+
+console.log('╔══════════════════════════════════════════════════╗');
+console.log('║   KICKPLAY — бот розіграшів для Kick              ║');
+console.log('╚══════════════════════════════════════════════════╝');
+console.log('  Канал (KICK_CHANNEL):  ' + (KICK_CHANNEL || '— не задано, беру id нижче'));
+console.log('  Чат (KICK_CHATROOM):   ' + CHATROOM_ID);
+console.log('  Realtime:              ' + KICK_WS_URL.replace('wss://', '').split('/')[0]);
+console.log('  Пароль панелі:         ' + (WEB_PASSWORD ? 'задано' : 'НЕ ЗАДАНО'));
+console.log('  Бот пише в чат:        ' + (BOT_TOKEN ? 'так (BOT_TOKEN задано)' : 'ні (BOT_TOKEN порожній)'));
+console.log('  Антисон (keepalive):   ' + (KEEPALIVE_ON ? KEEPALIVE_URL + '/healthz кожні ' + KEEPALIVE_MIN + ' хв' : 'вимкнено — на безкоштовному Render бот засне за 15 хв без відкритої панелі'));
+console.log('  Далі чекай рядок «Подписка на chatroom ... активна» і [CHAT] на кожне повідомлення.');
+console.log('  Якщо [CHAT] нема, а в чаті пишуть — це не той chatroom: постав KICK_CHANNEL.\n');
 
 loadState();
-connect();
+resolveChatroom().then(connect);
+
+// сам себе будить: інакше після 15 хв сну в чаті можна писати слово скільки завгодно —
+// бот його не побачить, бо процес зупинено
+if (KEEPALIVE_ON) {
+  setInterval(() => {
+    fetch(KEEPALIVE_URL + '/healthz', { headers: { 'User-Agent': 'KICKplay-keepalive' } })
+      .then(r => { if (!r.ok) console.log('[KEEPALIVE] ' + KEEPALIVE_URL + ' відповів ' + r.status); })
+      .catch(e => console.log('[KEEPALIVE] не достукався: ' + e.message));
+  }, KEEPALIVE_MIN * 60000);
+}
+
+// Раз на хвилину нагадуємо в логи, якщо чат мовчить при відкритій реєстрації:
+// саме так виглядає «бот не реєструє» — підписка є, а повідомлень нема
+setInterval(() => {
+  if (!raffleAccepting) return;
+  const quiet = kick.lastMsgAt ? Math.round((Date.now() - kick.lastMsgAt) / 1000) : null;
+  if (!kick.subscribed) console.log('[ДІАГ] Немає підписки на чат Kick (стан: ' + kick.state + ', помилка: ' + (kick.lastError || 'нема') + ')');
+  else if (quiet === null) console.log('[ДІАГ] Підписка на chatroom ' + CHATROOM_ID + ' є, але жодного повідомлення ще не прийшло — перевір, чи це твій чат');
+  else if (quiet > 300) console.log('[ДІАГ] Останнє повідомлення чату ' + quiet + 'с тому (chatroom ' + CHATROOM_ID + ')');
+}, 60000);

@@ -187,7 +187,8 @@ chatEvtSource.onmessage = (e) => {
   }
 
   const { username, content, color, badges = [] } = parsed;
-  
+  chatSeen++;
+
   const empty = chatBox.querySelector('.empty-box');
   if (empty) empty.remove();
 
@@ -236,7 +237,7 @@ async function loadState() {
   raffleOpen = state.accepting;
 
   document.getElementById('participants-count-title').textContent = state.count;
-  document.getElementById('conn-dot').className = 'dot ' + (state.accepting ? 'open' : 'closed');
+  renderBotStatus(state);
 
   const regBtn = document.getElementById('btn-reg-toggle');
   if (raffleOpen) {
@@ -262,10 +263,19 @@ async function loadState() {
   if (phase === 'idle') renderParticipants(state.participants);
 }
 
+/* скільки повідомлень чату прийшло в панель (для підказки нижче) */
+let chatSeen = 0;
+
 function renderParticipants(list) {
   const box = document.getElementById('main-box');
   if (!list.length) {
-    box.innerHTML = '<div class="empty-box">Ожидание регистрации...</div>';
+    /* найчастіша причина «бот не реєструє»: чат іде, але слово в панелі не
+       збігається з тим, що пишуть глядачі — інша розкладка (лес/les) або
+       зайвий «!». Показуємо це прямо тут, а не залишаємо гадати */
+    const stuck = raffleOpen && chatSeen >= 10;
+    box.innerHTML = stuck
+      ? '<div class="empty-box">Сообщения из чата идут, но слово <b>' + escapeHtml(state.joinCmd || '—') + '</b> никто не написал.<br>Проверь раскладку (лес / les) и знак «!» — бот принимает слово и с ним, и без него.</div>'
+      : '<div class="empty-box">Ожидание регистрации...</div>';
     return;
   }
   /* нові учасники ЗВЕРХУ (номер лишається порядком реєстрації) —
@@ -2620,6 +2630,29 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Лампочка BOT STATUS ───────────────────────────────────────────────
+   Раніше вона світилась просто від того, що реєстрація ввімкнена, і коли бот
+   слухав не той чат Kick, панель виглядала справною: реєстрація «йде»,
+   учасників нуль. Тепер лампочка показує саме звʼязок із чатом, а підказка
+   на наведення — id чату, скільки повідомлень прийшло і що робити. */
+function renderBotStatus(state) {
+  const dot = document.getElementById('conn-dot');
+  const pill = document.getElementById('floating-status');
+  const k = state.kick;
+  if (!k) { // старий бот без діагностики
+    dot.className = 'dot ' + (state.accepting ? 'open' : 'closed');
+    return;
+  }
+  const silent = k.ok && (k.lastMsgAgo === null || k.lastMsgAgo > 300);
+  dot.className = 'dot ' + (k.ok ? (silent ? 'warn' : 'open') : 'closed');
+  let txt;
+  if (!k.ok) txt = 'нет связи с чатом Kick (' + k.state + ')' + (k.error ? ': ' + k.error : '');
+  else if (k.lastMsgAgo === null) txt = 'подключён к чату ' + k.chatroom + ', но ни одного сообщения не пришло — проверь, твой ли это чат (KICK_CHANNEL)';
+  else txt = 'чат Kick: ' + k.chatroom + ' · сообщений ' + k.msgs + ' · последнее ' + k.lastMsgAgo + 'с назад';
+  pill.title = txt;
+  pill.firstChild.textContent = k.ok ? (silent ? 'чат тихий ' : 'чат Kick ') : 'нет чата ';
 }
 
 renderWinners();

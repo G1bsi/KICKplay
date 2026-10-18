@@ -84,6 +84,8 @@
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:var(--space-2); background:var(--surface-4); transition: var(--t-base); }
   .dot.open   { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
   .dot.closed { background: var(--danger); box-shadow: var(--glow-danger); }
+  /* підписка на чат є, але повідомлень давно не було — привід перевірити chatroom */
+  .dot.warn   { background: #ff9d00; box-shadow: 0 0 10px #ff9d00; }
 
   /* ── Сітка Layout ──────────────────────── */
   .layout {
