@@ -430,10 +430,10 @@ const GAME_MODES = [
   { id: 'cashhunt', icon: '🎯', label: 'Cash Hunt' },
   { id: 'royale',   icon: '🪂', label: 'Батл Рояль' },
   { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
-  /* «Гонка» і «Марблс» тимчасово приховані з перемикача (код ігор лишився цілим —
-     щоб повернути, розкоментуй рядок тут і скрипти в index.html) */
+  { id: 'marbles',  icon: '🔮', label: 'Марблс' },
+  /* «Гонка» тимчасово прихована з перемикача (код гри лишився цілим —
+     щоб повернути, розкоментуй рядок тут і скрипт f1race.js в index.html) */
   // { id: 'race',     icon: '🏎️', label: 'Гонка' },
-  // { id: 'marbles',  icon: '🔮', label: 'Марблс' },
 ];
 
 // Перемикання режиму стрілками (з циклічним переходом)
@@ -2685,6 +2685,8 @@ function warmAssetCache() {
   for (let i = 1; i <= 16; i++) list.push('/assets/targets/t' + String(i).padStart(2, '0') + '.webp');
   list.push('/assets/pubg/map1.webp', '/assets/pubg/map2.webp', '/assets/pubg/map3.webp');
   if (typeof RSO !== 'undefined' && RSO.assets) list.push.apply(list, RSO.assets());
+  // фізика Марблс (Rapier, ~2 МБ) — інакше перше відкриття режиму чекає на завантаження
+  if (typeof startMarblesGame === 'function') list.push('/assets/vendor/rapier3d-compat.mjs');
   // три потоки: по одному файлу за раз прогрів тягнувся б хвилини, а стрімер
   // часто тисне «Старт» через пів хвилини після відкриття панелі
   let i = 0;

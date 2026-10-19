@@ -42,6 +42,7 @@ const MB_VMAX = 32;               // м/с: страховий кап швидк
 const MB_STUCK_V = 0.3;           // |v| нижче — кандидат на застряглого
 const MB_STUCK_T = 2.5;           // секунд нерухомості до поштовху
 const MB_COUNTDOWN = 60;          // сек після першого фінішу — далі ранжування за прогресом
+const MB_FIN_HIDE = 3.5;          // сек після фінішу — кулька зникає з чаші (як у грі)
 const MB_TRAY_TILT = 22;          // градусів нахилу лотка
 const MB_TRAY_SEC = 2.5;          // за скільки секунд нахиляється
 const MB_TRAY_COLS = 14;          // кульок у ряду на лотку
@@ -504,6 +505,9 @@ function mbTrackBuilder() {
     v: { add: vAdd, sub: vSub, scale: vScale, dot: vDot, cross: vCross, len: vLen, norm: vNorm, lerp: vLerp },
     C: { R: MB_R, WALL_H: MB_WALL_H, WALL_T: MB_WALL_T, LANE_T: MB_LANE_T, FLOOR_T: MB_FLOOR_T, DS: MB_DS, JOIN_DROP: MB_JOIN_DROP, JOIN_EXT: MB_JOIN_EXT, TRAY_COLS: MB_TRAY_COLS, TRAY_STEP: MB_TRAY_STEP, TRAY_TILT: MB_TRAY_TILT, TRAY_SEC: MB_TRAY_SEC },
     finish: null, tray: null, startSlots: null, gate: null, extra: {}, extraPoints: [],
+    zones: [],
+    // зона-ефект на жолобі (див. mbZoneAt): B.zone('jump', seg, 12, { len: 3 })
+    zone(type, seg, sLoc, o) { const z = mbZoneAt(type, seg, sLoc, o); this.zones.push(z); return z; },
   };
   return B;
 }
@@ -538,7 +542,9 @@ function mbBuildTrack(mapId) {
     if (g.boxes && g.kind !== 'tray') for (const b of g.boxes) { const e = b.size[0] + b.size[1] + b.size[2]; grow(b.pos[0] - e, b.pos[1] - e, b.pos[2] - e); grow(b.pos[0] + e, b.pos[1] + e, b.pos[2] + e); }
   }
   for (const p of B.extraPoints) grow(p[0], p[1], p[2]);
-  return { id: map.id, map, segments, stages, cl, finish, tray, disc, startSlots: B.startSlots, gate: B.gate, extra: B.extra, bbox, pathLen: S, tris, byId: Object.fromEntries(segments.map(g => [g.id, g])) };
+  // прогрес зон (сегменти отримали s0/sScale лише в addStage) і радіус перевірки
+  for (const z of B.zones) { z.s = (z.seg.s0 || 0) + z.sLoc * (z.seg.sScale || 1); z.reach = z.h[0] * (z.seg.sScale || 1) + 12; z.segId = z.seg.id; }
+  return { id: map.id, map, segments, stages, cl, finish, tray, disc, startSlots: B.startSlots, gate: B.gate, extra: B.extra, bbox, pathLen: S, tris, zones: B.zones, byId: Object.fromEntries(segments.map(g => [g.id, g])) };
 }
 // зсув сегмента (усі копії геометрії: mesh, frames, center, boxes, balls)
 function mbTranslateSeg(g, d) {
@@ -666,6 +672,104 @@ function mbBuildWorld(track) {
 }
 
 // ═════════════════════════════════════════════════════════════
+//  ЗОНИ ТРАСИ: батут, прискорювач, липка зона, лазер
+//  Зона — орієнтований бокс на жолобі (x — уздовж траси, y — нормаль підлоги,
+//  z — поперек). Фізики не має: ефект накладає mbSimStep на кульки всередині.
+//  Усе детерміноване від st.raceT — headless-прогін і живий показ однакові.
+//    jump  {launch, fwd}   — підкидає вздовж нормалі на launch м/с (+fwd уперед)
+//    boost {vt, acc}       — розганяє вздовж траси до vt м/с
+//    slow  {k, vmin}       — «желе»: швидкість гасне з темпом k/с, не нижче vmin
+//    laser {period, on, phase, back} — промінь вмикається на on с з кожних period;
+//                            кого зачепив — відкидає на back м назад по жолобу
+// ═════════════════════════════════════════════════════════════
+const MB_ZONE_DEF = {
+  jump: { launch: 10, fwd: 2, hh: 0.9 },
+  boost: { vt: 17, acc: 26, hh: 1.0 },
+  slow: { k: 2.6, vmin: 2.2, hh: 1.0 },
+  laser: { period: 3.2, on: 1.1, phase: 0, back: 12, hh: 1.6, len: 0.9 },
+};
+// зона на сегменті seg на відстані sLoc від його початку; o: {len, w, lat, ...параметри}
+function mbZoneAt(type, seg, sLoc, o) {
+  o = Object.assign({}, MB_ZONE_DEF[type], o || {});
+  const F = seg.frames;
+  let i = 0; while (i + 1 < F.length && F[i + 1].s < sLoc) i++;
+  const f = F[i], hh = o.hh, lat = o.lat || 0;
+  const w = o.w != null ? o.w : f.w;
+  const z = {
+    type, seg, sLoc, o,
+    c: vAdd(vAdd(f.p, vScale(f.u, hh - 0.05)), vScale(f.r, lat)),
+    x: f.t.slice(), y: f.u.slice(), z: f.r.slice(),
+    h: [(o.len || 2) / 2, hh, w / 2],
+    s: 0, reach: 0,
+  };
+  if (type === 'laser') {
+    // точка повернення: на back м раніше по тому ж сегменту
+    let j = i; while (j > 0 && F[j].s > sLoc - o.back) j--;
+    const g = F[j];
+    z.respawn = vAdd(g.p, vScale(g.u, MB_R + 0.15)); z.respawnDir = g.t.slice(); z.respawnR = g.r.slice(); z.respawnW = g.w;
+  }
+  return z;
+}
+// стан лазера в момент t: 0 — вимкнено, 1 — горить, 0.5 — попередження (блимає перед увімкненням)
+function mbLaserState(z, t) {
+  const o = z.o, ph = ((t + o.phase) % o.period + o.period) % o.period;
+  if (ph < o.on) return 1;
+  return ph > o.period - 0.45 ? 0.5 : 0;
+}
+// ефекти зон на кульку b (викликається з mbSimStep для активних кульок)
+function mbApplyZones(st, b, dt) {
+  const Z = st.track.zones;
+  for (let k = 0; k < Z.length; k++) {
+    const z = Z[k];
+    if (Math.abs(b.prog - z.s) > z.reach) continue;
+    const dx = b.x - z.c[0], dy = b.y - z.c[1], dz = b.z - z.c[2];
+    const lx = dx * z.x[0] + dy * z.x[1] + dz * z.x[2];
+    if (lx > z.h[0] || lx < -z.h[0]) continue;
+    const ly = dx * z.y[0] + dy * z.y[1] + dz * z.y[2];
+    if (ly > z.h[1] || ly < -z.h[1]) continue;
+    const lz = dx * z.z[0] + dy * z.z[1] + dz * z.z[2];
+    if (lz > z.h[2] || lz < -z.h[2]) continue;
+    const o = z.o, body = b.body;
+    let vx = b.vx, vy = b.vy, vz = b.vz;
+    if (z.type === 'jump') {
+      const vn = vx * z.y[0] + vy * z.y[1] + vz * z.y[2];
+      if (vn > o.launch * 0.5 || st.raceT - (b.jumpT || -9) < 0.35) continue;
+      const add = o.launch - vn;
+      vx += z.y[0] * add + z.x[0] * o.fwd; vy += z.y[1] * add + z.x[1] * o.fwd; vz += z.y[2] * add + z.x[2] * o.fwd;
+      b.jumpT = st.raceT; st.zoneHits.jump++;
+    } else if (z.type === 'boost') {
+      const vt = vx * z.x[0] + vy * z.x[1] + vz * z.x[2];
+      if (vt >= o.vt) continue;
+      const a = Math.min(o.acc * dt, o.vt - vt);
+      vx += z.x[0] * a; vy += z.x[1] * a; vz += z.x[2] * a;
+      if (b.boostT !== st.frame - 1) st.zoneHits.boost++;
+      b.boostT = st.frame;
+    } else if (z.type === 'slow') {
+      const v = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      if (v <= o.vmin) continue;
+      const kk = Math.max(o.vmin / v, Math.exp(-o.k * dt));
+      vx *= kk; vy *= kk; vz *= kk;
+    } else if (z.type === 'laser') {
+      if (mbLaserState(z, st.raceT) !== 1) continue;
+      // зап: назад по жолобу, з поперечним розкидом (детермінованим від номера кульки),
+      // щоб відкинуті не ставали одна в одну
+      const j = ((b.idx * 0.618034) % 1 - 0.5) * Math.max(0, z.respawnW - 1.4);
+      const p = vAdd(z.respawn, vScale(z.respawnR, j));
+      st.zapFx.push({ p: [b.x, b.y, b.z], t: st.raceT }, { p: p.slice(), t: st.raceT });
+      if (st.zapFx.length > 40) st.zapFx.splice(0, st.zapFx.length - 40);
+      body.setTranslation({ x: p[0], y: p[1], z: p[2] }, true);
+      b.x = b.px = p[0]; b.y = b.py = p[1]; b.z = b.pz = p[2];
+      vx = z.respawnDir[0] * 3; vy = z.respawnDir[1] * 3; vz = z.respawnDir[2] * 3;
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      b.zapT = st.raceT; b.zaps = (b.zaps || 0) + 1; st.zoneHits.laser++;
+      b.prog = mbProject(st.track, p);
+    } else continue;
+    b.vx = vx; b.vy = vy; b.vz = vz;
+    body.setLinvel({ x: vx, y: vy, z: vz }, true);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════
 //  СИМУЛЯЦІЯ
 // ═════════════════════════════════════════════════════════════
 // Палітра: HSL через золотий кут — сусідні кульки контрастні навіть у пелетоні
@@ -699,8 +803,9 @@ function mbCreateSim(nicks, opts) {
       .setCcdEnabled(true).setCanSleep(true));
     w.world.createCollider(R.ColliderDesc.ball(MB_R).setMass(1).setFriction(P.frBall != null ? P.frBall : MB_FR_BALL).setRestitution(P.eBall != null ? P.eBall : MB_E_BALL), body);
     return {
-      nick, hue: mbHue(i), color: mbColor(i), r: MB_R, body,
+      nick, idx: i, hue: mbHue(i), color: mbColor(i), r: MB_R, body,
       x, y, z, vx: 0, vy: 0, vz: 0, q: [0, 0, 0, 1],
+      px: x, py: y, pz: z, pq: [0, 0, 0, 1], gone: false, goneT: 0,
       prog: 0, stuck: 0, finished: false, finishT: 0, inWorld: true, kicks: 0,
     };
   });
@@ -712,6 +817,7 @@ function mbCreateSim(nicks, opts) {
     teleported: 0, rankedByProgress: 0,
     oobCount: 0, stuckKicks: 0, kickBySeg: {}, oobLog: [], stepMs: 0, maxStepMs: 0, sumMs: 0, steps: 0,
     onWinner: null, onDone: null,
+    zoneHits: { jump: 0, boost: 0, laser: 0 }, zapFx: [],
   };
 }
 
@@ -735,6 +841,7 @@ const mbProjOut = { dist: 0, i: 0, tol: 0, seg: '', dir: null, q: null };
 function mbEliminate(st, b) {
   if (b.eliminated) return;
   b.finished = true; b.eliminated = true; b.inWorld = false; b.elimT = st.raceT;
+  b.gone = true; b.goneT = st.raceT;
   try { st.world.removeRigidBody(b.body); } catch (e) { /* уже видалено */ }
   st.eliminated.push(b.nick);
   st.active = st.active.filter(x => x !== b);
@@ -783,12 +890,19 @@ function mbSimStep(st, dt) {
       sp.body.setNextKinematicTranslation({ x: g.c[0] + up[0] * sp.off, y: g.c[1] + up[1] * sp.off, z: g.c[2] + up[2] * sp.off });
     }
   }
+  // попередня поза — для інтерполяції рендера між фіксованими кроками (60 Гц фізики
+  // на 120–144 Гц моніторі без неї дає «двоїння» і ривки кульок)
+  const balls = st.balls;
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    b.px = b.x; b.py = b.y; b.pz = b.z;
+    b.pq[0] = b.q[0]; b.pq[1] = b.q[1]; b.pq[2] = b.q[2]; b.pq[3] = b.q[3];
+  }
   world.step();
   st.simT += dt;
   st.frame++;
 
-  // дзеркало позицій усіх кульок (фінішери лишаються в чаші — рендер їх бачить)
-  const balls = st.balls;
+  // дзеркало позицій усіх кульок у світі
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
     if (!b.inWorld) continue;
@@ -814,6 +928,7 @@ function mbSimStep(st, dt) {
       b.vx *= k; b.vy *= k; b.vz *= k;
       body.setLinvel({ x: b.vx, y: b.vy, z: b.vz }, true);
     }
+    if (st.raceOn && track.zones.length) mbApplyZones(st, b, dt);
     const dx = b.x - fin.p[0], dy = b.y - fin.p[1], dz = b.z - fin.p[2];
     if (dx * fin.f[0] + dy * fin.f[1] + dz * fin.f[2] > 0 && dx * dx + dy * dy + dz * dz < fin.r * fin.r) {
       b.finished = true; anyFinish = true;
@@ -826,6 +941,18 @@ function mbSimStep(st, dt) {
     }
   }
   if (anyFinish) st.active = st.active.filter(b => !b.finished);
+
+  // фінішер за MB_FIN_HIDE с зникає з чаші, як у грі: інакше 150+ кульок
+  // переповнюють чашу, і нові виштовхують старих через борт у небо
+  if (st.raceOn && (st.frame % 6) === 0) {
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i];
+      if (b.inWorld && b.finished && !b.ranked && !b.eliminated && st.raceT - b.finishT > MB_FIN_HIDE) {
+        try { world.removeRigidBody(b.body); } catch (e) { /* уже видалено */ }
+        b.inWorld = false; b.gone = true; b.goneT = st.raceT;
+      }
+    }
+  }
 
   // прогрес + OOB-контроль 4 рази на секунду
   if ((st.frame % 15) === 0) {
@@ -969,6 +1096,7 @@ function mbRunHeadless(nicks, opts) {
     teleported: st.teleported,
     eliminated: st.eliminated.length,
     oob: st.oobCount,
+    zoneHits: st.zoneHits,
     stuckKicks: st.stuckKicks,
     kickBySeg: st.kickBySeg,
     maxStepMs: Math.round(st.maxStepMs * 100) / 100,
@@ -1066,8 +1194,13 @@ function mbMixC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]
 // синьо-білий мармур (еталон — стінка лійки в грі): хмарні білі плями на
 // блакитній базі + тонкі темні й світлі прожилки (ridged fbm)
 const MB_PAL_DEFAULT = { base: '#86a2d4', light: '#e6ecf5', dark: '#4763a8', white: '#f2f5fa', a0: 0.3, a1: 0.8, dk: 0.6, wk: 0.5, grain: 8 };
+// «граніт» — палітра траси за замовчуванням (карта без theme.marble): глибока синя
+// база, світліші хмарні плями, дрібний білий крап і рідкі тонкі жилки — як камінь у грі.
+// Стара пастельна схема з білими жилами разом із туманом читалась як потріскана крига
+const MB_GRANITE_DEFAULT = { granite: true, base: '#4767ab', light: '#8ea8db', dark: '#22397a', white: '#e9f0fb', lk: 0.75, wk: 0.45, sk: 0.5, dk: 0.35 };
 function mbMarbleTexture(size, pal) {
-  pal = Object.assign({}, MB_PAL_DEFAULT, pal || {});
+  if (!pal || pal.granite) return mbGraniteTexture(size, Object.assign({}, MB_GRANITE_DEFAULT, pal || {}));
+  pal = Object.assign({}, MB_PAL_DEFAULT, pal);
   const c = document.createElement('canvas'); c.width = size; c.height = size;
   const g = c.getContext('2d'), img = g.createImageData(size, size), d = img.data;
   // мʼякіше за перший варіант (контрастні «крижані» уламки читались як лід, не мармур):
@@ -1091,21 +1224,46 @@ function mbMarbleTexture(size, pal) {
 }
 
 // хмарний шар: біле покриття з синьо-сірими тінями, альфа — розриви
-function mbCloudTexture(size) {
+function mbGraniteTexture(size, P) {
   const c = document.createElement('canvas'); c.width = size; c.height = size;
   const g = c.getContext('2d'), img = g.createImageData(size, size), d = img.data;
-  const n = mbFbm(size, 6, 3, 71), n2 = mbFbm(size, 4, 7, 91);
-  const shade = mbHex('#aebfd6'), white = mbHex('#ffffff');
+  const n1 = mbFbm(size, 6, 4, 11), n2 = mbFbm(size, 6, 6, 29), n3 = mbFbm(size, 5, 5, 37), n4 = mbFbm(size, 3, 96, 53);
+  const base = mbHex(P.base), light = mbHex(P.light), dark = mbHex(P.dark), white = mbHex(P.white);
   for (let i = 0; i < size * size; i++) {
-    const v = n[i] * 0.8 + n2[i] * 0.2;
-    const cov = mbSmooth(0.38, 0.72, v);
-    const col = mbMixC(shade, white, Math.pow(cov, 0.6));
-    d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2];
-    d[i * 4 + 3] = 255 * mbSmooth(0.3, 0.55, v);
+    let col = mbMixC(dark, base, mbSmooth(0.28, 0.55, n1[i]));          // темні й базові плями
+    col = mbMixC(col, light, mbSmooth(0.5, 0.78, n2[i]) * P.lk);          // світлі «хмари»
+    const r3 = 1 - Math.abs(2 * n3[i] - 1);
+    col = mbMixC(col, white, P.wk * mbSmooth(0.93, 0.995, r3));           // рідкі тонкі жилки
+    col = mbMixC(col, white, P.sk * mbSmooth(0.62, 0.8, n4[i]));          // білий крап
+    col = mbMixC(col, dark, P.dk * mbSmooth(0.62, 0.8, 1 - n4[i]));       // темний крап
+    d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8;
+  return t;
+}
+
+// хмарний шар: купчасті хмари з самозатіненням (шум, зсунутий до сонця, темнить
+// «тіньовий» бік кожної купи) і розриви, крізь які видно синю глибину неба
+function mbCloudTexture(size) {
+  const c = document.createElement('canvas'); c.width = size; c.height = size;
+  const g = c.getContext('2d'), img = g.createImageData(size, size), d = img.data;
+  const n = mbFbm(size, 7, 4, 71), n2 = mbFbm(size, 5, 12, 91);
+  const lit = mbHex('#ffffff'), mid = mbHex('#e2eaf6'), shade = mbHex('#8ea6c8');
+  const off = Math.max(2, Math.round(size / 340));
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x, j = ((y + off) % size) * size + ((x + off) % size);
+    const v = n[i] * 0.82 + n2[i] * 0.18, vs = n[j] * 0.82 + n2[j] * 0.18;
+    const sh = mbClamp(0.5 + (v - vs) * 9, 0, 1);
+    let col = mbMixC(shade, mid, sh);
+    col = mbMixC(col, lit, mbSmooth(0.6, 0.8, v) * sh);
+    d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2];
+    d[i * 4 + 3] = 255 * mbSmooth(0.47, 0.66, v);
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8;
   return t;
 }
 
@@ -1129,17 +1287,29 @@ function mbLogoTexture() {
 
 // кулька: базовий колір + мʼякий білий завиток і темна пляма. Без візерунка
 // однотонна сфера виглядає як каменюка, що ковзає, — обертання не видно
-function mbBallTexture(color) {
+// Основа біла: колір кожної кульки дає instanceColor (множиться на текстуру), тож
+// візерунок зроблено ТЕМНІШИМИ відтінками — смуга-завиток і пляма того ж кольору
+function mbBallTexture() {
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
-  g.fillStyle = color || '#c0101c'; g.fillRect(0, 0, 256, 128);
-  const gr = g.createRadialGradient(150, 50, 4, 150, 50, 46);
-  gr.addColorStop(0, 'rgba(255,240,240,0.95)'); gr.addColorStop(0.45, 'rgba(255,200,200,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
-  const gr2 = g.createRadialGradient(50, 90, 2, 50, 90, 30);
-  gr2.addColorStop(0, 'rgba(40,0,6,0.8)'); gr2.addColorStop(1, 'rgba(40,0,6,0)');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 128);
+  g.lineCap = 'round';
+  g.strokeStyle = 'rgba(0,0,0,0.30)'; g.lineWidth = 16;
+  g.beginPath();
+  for (let x = -8; x <= 264; x += 8) { const y = 64 + Math.sin(x / 256 * Math.PI * 4) * 26; if (x === -8) g.moveTo(x, y); else g.lineTo(x, y); }
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 5; g.stroke();
+  const gr2 = g.createRadialGradient(60, 26, 2, 60, 26, 22);
+  gr2.addColorStop(0, 'rgba(0,0,0,0.45)'); gr2.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr2; g.fillRect(0, 0, 256, 128);
   const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding;
   return t;
+}
+// колір кульки i: золотий кут по тону + три рівні насиченості/яскравості, щоб
+// сусіди в пелетоні не зливались; лінійний простір (instanceColor у r128 — лінійний)
+function mbBallColor(i, out) {
+  const h = ((i * 137.508) % 360) / 360, k = i % 3;
+  out.setHSL(h, [0.82, 0.7, 0.9][k], [0.52, 0.6, 0.45][k]);
+  return out.convertSRGBToLinear();
 }
 
 // стрічка обідка фінішної чаші: жовті світлодіоди пунктиром + напис FINISH!
@@ -1312,17 +1482,17 @@ function mbGfxInit() {
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(0xdfe9f3, 1);
+  renderer.setClearColor(0xa9c3ea, 1);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0xe3ebf4, 0.0021);
+  scene.fog = new THREE.FogExp2(0xa9c3ea, 0.0011);
   const camera = new THREE.PerspectiveCamera(52, 16 / 9, 0.5, 5000);
   scene.add(camera);
 
   // небо: купол-градієнт горизонт → зеніт (без текстур)
   const skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { hor: { value: new THREE.Color(0xdfe9f3) }, zen: { value: new THREE.Color(0x6d9be0) } },
+    uniforms: { hor: { value: new THREE.Color(0xa9c3ea) }, zen: { value: new THREE.Color(0x2f62c4) } },
     vertexShader: 'varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position,1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: 'uniform vec3 hor; uniform vec3 zen; varying vec3 vW; void main(){ float h = clamp(normalize(vW - cameraPosition).y, 0.0, 1.0); gl_FragColor = vec4(mix(hor, zen, pow(h, 0.55)), 1.0); }',
   });
@@ -1335,7 +1505,7 @@ function mbGfxInit() {
   const cloudTex = mbCloudTexture(1024);
   const cloudY = 0, cx = 0, cz = 0;
   const cloudGeo = new THREE.PlaneGeometry(7000, 7000);
-  const floorMat = new THREE.MeshBasicMaterial({ color: 0xc4d3e6 });
+  const floorMat = new THREE.MeshBasicMaterial({ color: 0x3d68b5 });
   const cloudFloor = new THREE.Mesh(cloudGeo, floorMat);
   cloudFloor.rotation.x = -Math.PI / 2; cloudFloor.position.set(cx, cloudY - 30, cz);
   scene.add(cloudFloor);
@@ -1343,7 +1513,7 @@ function mbGfxInit() {
   for (let l = 0; l < 2; l++) {
     const tex = l ? cloudTex.clone() : cloudTex;
     tex.needsUpdate = true;
-    tex.repeat.set(l ? 5 : 9, l ? 5 : 9);
+    tex.repeat.set(l ? 4 : 7, l ? 4 : 7);
     const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: l ? 0.9 : 1 });
     const mesh = new THREE.Mesh(cloudGeo, m);
     mesh.rotation.x = -Math.PI / 2; mesh.position.set(cx, cloudY + l * 18, cz);
@@ -1369,18 +1539,29 @@ function mbGfxInit() {
   {
     const g = envCv.getContext('2d');
     const gr = g.createLinearGradient(0, 0, 0, 64);
-    gr.addColorStop(0, '#6d9be0'); gr.addColorStop(0.45, '#c9dbef'); gr.addColorStop(0.5, '#dfe9f3'); gr.addColorStop(0.56, '#d3deea'); gr.addColorStop(1, '#b9c8da');
+    gr.addColorStop(0, '#3f72cf'); gr.addColorStop(0.45, '#b4cbec'); gr.addColorStop(0.5, '#d6e3f4'); gr.addColorStop(0.56, '#e9eff8'); gr.addColorStop(1, '#5d82c2');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 64);
+    // сонце (той самий бік, що й DirectionalLight): мала яскрава пляма → блік на кульках
   }
   const envTex = new THREE.CanvasTexture(envCv);
   envTex.mapping = THREE.EquirectangularReflectionMapping; envTex.encoding = THREE.sRGBEncoding;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const env = pmrem.fromEquirectangular(envTex).texture;
+  // для кульок — те саме небо + сонце (мала яскрава пляма): блік, без якого глянець виглядав матовим.
+  // Трасі сонце в envMap не даємо — на гладкому жолобі воно засвічувало цілі ділянки
+  {
+    const g = envCv.getContext('2d');
+    const sg = g.createRadialGradient(78, 11, 0, 78, 11, 9);
+    sg.addColorStop(0, 'rgba(255,255,250,1)'); sg.addColorStop(0.35, 'rgba(255,250,235,0.8)'); sg.addColorStop(1, 'rgba(255,250,235,0)');
+    g.fillStyle = sg; g.fillRect(60, 0, 40, 26);
+    envTex.needsUpdate = true;
+  }
+  const envBall = pmrem.fromEquirectangular(envTex).texture;
   pmrem.dispose(); envTex.dispose();
 
   const mats = {
     red: new THREE.MeshStandardMaterial({ color: 0xd0202a, roughness: 0.35, metalness: 0.05, envMap: env, envMapIntensity: 0.25 }), // 0.8 — яскраве небо в envMap робило бампери рожевими
-    ball: new THREE.MeshStandardMaterial({ map: mbBallTexture('#c0101c'), color: 0xffffff, roughness: 0.25, metalness: 0.05, envMap: env, envMapIntensity: 0.35 }),
+    ball: new THREE.MeshStandardMaterial({ map: mbBallTexture(), color: 0xffffff, roughness: 0.16, metalness: 0.0, envMap: envBall, envMapIntensity: 0.75 }),
     logo: new THREE.MeshBasicMaterial({ map: mbLogoTexture(), transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     finish: new THREE.MeshBasicMaterial({ map: mbFinishTexture(), transparent: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     start: new THREE.MeshBasicMaterial({ map: mbStartTexture(), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
@@ -1399,7 +1580,8 @@ function mbGfxInit() {
 }
 
 // ── Тема карти: небо/туман/хмари (карта може задати theme.sky {hor, zen}, theme.fog, theme.cloudTint, theme.cloudFloor) ──
-const MB_THEME_DEFAULT = { sky: { hor: '#dfe9f3', zen: '#6d9be0' }, fog: '#e3ebf4', fogDensity: 0.0021, cloudFloor: '#c4d3e6', cloudTint: '#ffffff', clear: '#dfe9f3', hemi: ['#d6e4f6', '#93a9c6', 0.7], sun: ['#fff6e6', 1.0], marble: null, roughness: 0.5, metalness: 0.05, envInt: 0.45, ballColor: '#ffffff', redColor: '#d0202a' };
+// ballColors: 'rainbow' — кожна кулька свого кольору (легше знайти свою), 'mono' — усі ballColor
+const MB_THEME_DEFAULT = { sky: { hor: '#a9c3ea', zen: '#2f62c4' }, fog: '#a9c3ea', fogDensity: 0.0011, cloudFloor: '#3d68b5', cloudTint: '#ffffff', clear: '#a9c3ea', hemi: ['#d6e4f6', '#6f89b3', 0.75], sun: ['#fff4e2', 1.1], marble: null, roughness: 0.42, metalness: 0.05, envInt: 0.55, ballColor: '#ffffff', ballColors: 'rainbow', redColor: '#d0202a' };
 function mbApplyTheme(map) {
   const G = mbG, T = Object.assign({}, MB_THEME_DEFAULT, map.theme || {});
   G.skyMat.uniforms.hor.value.set(T.sky.hor || MB_THEME_DEFAULT.sky.hor);
@@ -1413,6 +1595,7 @@ function mbApplyTheme(map) {
   // нічні теми: хмари підфарбовуються (theme.cloudTint), інакше вони білі, як удень
   for (const c of G.clouds) { c.mesh.visible = T.clouds !== false; c.mesh.material.color.set(T.cloudTint || '#ffffff'); }
   G.cloudFloor.visible = T.clouds !== false;
+  G.theme = T;
   return T;
 }
 
@@ -1420,9 +1603,9 @@ function mbApplyTheme(map) {
 function mbTrackGfxDispose() {
   const G = mbG; if (!G || !G.tg) return;
   const t = G.tg;
-  for (const o of [t.trackMesh, t.redMesh, t.gateMesh, t.trayGroup, t.decor]) if (o) G.scene.remove(o);
+  for (const o of [t.trackMesh, t.redMesh, t.gateMesh, t.trayGroup, t.decor, t.zones]) if (o) G.scene.remove(o);
   const kill = o => { if (!o) return; o.traverse(x => { if (x.geometry) x.geometry.dispose(); }); };
-  kill(t.trackMesh); kill(t.redMesh); kill(t.gateMesh); kill(t.trayGroup); kill(t.decor);
+  kill(t.trackMesh); kill(t.redMesh); kill(t.gateMesh); kill(t.trayGroup); kill(t.decor); kill(t.zones);
   for (const sp of (t.spinners || [])) { G.scene.remove(sp.grp); kill(sp.grp); }
   if (t.marbleTex) t.marbleTex.dispose();
   if (t.marbleMat) t.marbleMat.dispose();
@@ -1495,12 +1678,141 @@ function mbTrackGfxBuild(track) {
       track.map.decor(track, { THREE, scene: tg.decor, trayGroup: tg.trayGroup, mats, env: G.env, mergeParts: mbMergeParts, boxPart: mbBoxPart, spherePart: mbSpherePart, texM: MB_TEX_M, textures: { logo: mbLogoTexture, finish: mbFinishTexture, start: mbStartTexture, marble: mbMarbleTexture, cloud: mbCloudTexture } });
     } catch (e) { console.error('[marbles] декор карти ' + track.id + ' впав', e); }
   }
+  if (track.zones && track.zones.length) mbZonesGfxBuild(track, tg);
   // хмари під трасою і по центру
   const bb = track.bbox, cloudY = bb.min[1] - 45, cx = (bb.min[0] + bb.max[0]) / 2, cz = (bb.min[2] + bb.max[2]) / 2;
   G.cloudFloor.position.set(cx, cloudY - 30, cz);
   for (const c of G.clouds) c.mesh.position.set(cx, cloudY + c.dy, cz);
   G.tg = tg;
   return tg;
+}
+
+// ── Зони на екрані: наліпки на підлозі (батут, прискорювач, желе), лазерні рамки ──
+function mbZoneTexture(type) {
+  const W = 256, H = 256, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  if (type === 'jump') {
+    // батут: жовто-чорна рамка + помаранчеве полотно з концентричними кільцями
+    g.fillStyle = '#ff7a1a'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,220,120,0.9)'; g.lineWidth = 10;
+    for (let r = 30; r < 130; r += 30) { g.beginPath(); g.arc(W / 2, H / 2, r, 0, 6.2832); g.stroke(); }
+    for (let k = 0; k < 16; k++) { g.fillStyle = (k & 1) ? '#111' : '#ffd93d'; g.fillRect(k * 16, 0, 16, 18); g.fillRect(k * 16, H - 18, 16, 18); g.fillRect(0, k * 16, 18, 16); g.fillRect(W - 18, k * 16, 18, 16); }
+  } else if (type === 'boost') {
+    // прискорювач: бірюзові шеврони вздовж руху (u текстури — уздовж траси)
+    g.fillStyle = '#062a33'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#21f3ff'; g.strokeStyle = '#bffcff'; g.lineWidth = 4;
+    for (let k = 0; k < 2; k++) {
+      const x0 = 30 + k * 120;
+      g.beginPath(); g.moveTo(x0, 30); g.lineTo(x0 + 70, H / 2); g.lineTo(x0, H - 30); g.lineTo(x0 + 34, H - 30); g.lineTo(x0 + 104, H / 2); g.lineTo(x0 + 34, 30); g.closePath(); g.fill(); g.stroke();
+    }
+  } else {
+    // желе: фіолетові бульбашки
+    const gr = g.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, W * 0.7);
+    gr.addColorStop(0, '#c04dff'); gr.addColorStop(1, '#5a1a9a'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    for (let k = 0; k < 40; k++) {
+      const x = mbHash(k, 1, 7) * W, y = mbHash(k, 2, 7) * H, r = 6 + mbHash(k, 3, 7) * 16;
+      g.fillStyle = 'rgba(240,200,255,0.35)'; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.25, 0, 6.2832); g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+  if (type === 'boost') { t.wrapS = THREE.RepeatWrapping; }
+  return t;
+}
+// смуга на підлозі сегмента між sLoc a..b, поперек lat±hw, піднята на lift уздовж нормалі
+function mbFloorStrip(seg, a, b, lat, hw, lift, uRep) {
+  const F = seg.frames, rows = [];
+  for (let i = 0; i < F.length; i++) if (F[i].s >= a - 0.6 && F[i].s <= b + 0.6) rows.push(F[i]);
+  if (rows.length < 2) { let i = 0; while (i + 2 < F.length && F[i + 1].s < a) i++; rows.length = 0; rows.push(F[i], F[i + 1]); }
+  const n = rows.length, pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx = [];
+  for (let i = 0; i < n; i++) {
+    const f = rows[i], s = mbClamp(f.s, a, b);
+    // точка на центрі сегмента з тим самим s (рамки рідкі — інтерполюємо до краю зони)
+    const p = f.p, t = (s - f.s);
+    for (let j = 0; j < 2; j++) {
+      const l = lat + (j ? hw : -hw), k = (i * 2 + j) * 3;
+      pos[k] = p[0] + f.t[0] * t + f.r[0] * l + f.u[0] * lift;
+      pos[k + 1] = p[1] + f.t[1] * t + f.r[1] * l + f.u[1] * lift;
+      pos[k + 2] = p[2] + f.t[2] * t + f.r[2] * l + f.u[2] * lift;
+      uv[(i * 2 + j) * 2] = (s - a) / Math.max(0.01, b - a) * (uRep || 1); uv[(i * 2 + j) * 2 + 1] = j;
+    }
+    if (i) { const q = (i - 1) * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  return geo;
+}
+function mbZonesGfxBuild(track, tg) {
+  const G = mbG;
+  if (!G.zoneMats) {
+    G.zoneMats = {
+      jump: new THREE.MeshBasicMaterial({ map: mbZoneTexture('jump'), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+      boost: new THREE.MeshBasicMaterial({ map: mbZoneTexture('boost'), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+      slow: new THREE.MeshBasicMaterial({ map: mbZoneTexture('slow'), transparent: true, opacity: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+      post: new THREE.MeshStandardMaterial({ color: '#23232b', roughness: 0.4, metalness: 0.6 }),
+      tip: new THREE.MeshBasicMaterial({ color: '#ff2a2a' }),
+      beam: new THREE.MeshBasicMaterial({ color: '#ff3030', fog: false }),
+      glow: new THREE.MeshBasicMaterial({ color: '#ff2020', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+    };
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,80,60,0.9)'); gr.addColorStop(1, 'rgba(255,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    G.zoneMats.zap = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false });
+  }
+  const M = G.zoneMats, grp = new THREE.Group();
+  tg.lasers = [];
+  for (const z of track.zones) {
+    const o = z.o, half = z.h[0];
+    if (z.type === 'laser') {
+      // рамка: дві стійки на бортах (за губою), два промені між ними на 0.5 і 1.15 м
+      const span = z.h[2] + 1.0, fl = vSub(z.c, vScale(z.y, z.h[1] - 0.05));
+      const lg = new THREE.Group();
+      const basis = new THREE.Matrix4().makeBasis(new THREE.Vector3(...z.x), new THREE.Vector3(...z.y), new THREE.Vector3(...z.z));
+      lg.quaternion.setFromRotationMatrix(basis); lg.position.set(fl[0], fl[1], fl[2]);
+      for (const sd of [-1, 1]) {
+        // стійка помітна й тоді, коли промінь вимкнено: чорна колона з червоною неоновою смугою і «очима» випромінювачів
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.75, 3.6, 0.75), M.post); post.position.set(0, 1.8, sd * span); post.castShadow = true; lg.add(post);
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.18, 0.78), M.tip); strip.position.set(0, 3.45, sd * span); lg.add(strip);
+        for (const hy of [0.5, 1.15]) { const tp = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), M.tip); tp.position.set(0, hy, sd * (span - 0.4)); lg.add(tp); }
+      }
+      const beams = new THREE.Group();
+      for (const hy of [0.5, 1.15]) {
+        const core = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, span * 2 - 0.6, 6), M.beam); core.rotation.x = Math.PI / 2; core.position.y = hy; beams.add(core);
+        const gl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, span * 2 - 0.6, 10, 1, true), M.glow); gl.rotation.x = Math.PI / 2; gl.position.y = hy; beams.add(gl);
+      }
+      lg.add(beams); grp.add(lg);
+      tg.lasers.push({ z, beams });
+      continue;
+    }
+    const geo = mbFloorStrip(z.seg, z.sLoc - half, z.sLoc + half, o.lat || 0, z.h[2], 0.06, z.type === 'boost' ? Math.max(1, Math.round(half * 2 / 2.5)) : 1);
+    const m = new THREE.Mesh(geo, M[z.type]); m.renderOrder = 1; m.receiveShadow = false;
+    grp.add(m);
+  }
+  // спалахи «запу»: пул спрайтів
+  tg.zapPool = [];
+  for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(M.zap.clone()); s.visible = false; grp.add(s); tg.zapPool.push(s); }
+  tg.zones = grp;
+  G.scene.add(grp);
+}
+function mbZonesGfxUpdate(st) {
+  const tg = mbG && mbG.tg; if (!tg || !tg.zones) return;
+  const t = st.raceOn ? st.raceT : 0;
+  for (const L of tg.lasers) {
+    const s = st.raceOn ? mbLaserState(L.z, t) : 0;
+    // попередження — швидке блимання за 0.45 с до ввімкнення
+    L.beams.visible = s === 1 || (s === 0.5 && Math.floor(t * 12) % 2 === 0);
+  }
+  const fx = st.zapFx, pool = tg.zapPool;
+  let k = 0;
+  for (let i = fx.length - 1; i >= 0 && k < pool.length; i--) {
+    const a = (t - fx[i].t) / 0.45;
+    if (a < 0 || a > 1) continue;
+    const s = pool[k++]; s.visible = true; s.position.set(fx[i].p[0], fx[i].p[1], fx[i].p[2]);
+    s.scale.setScalar(0.8 + a * 3.5); s.material.opacity = 1 - a;
+  }
+  for (; k < pool.length; k++) pool[k].visible = false;
 }
 
 function mbSetLowQuality() {
@@ -1528,6 +1840,11 @@ function mbRaceGfxBuild(st) {
   const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(MB_R, 20, 14), G.mats.ball, N);
   balls.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   balls.castShadow = true; balls.receiveShadow = false; balls.frustumCulled = false;
+  {
+    const col = new THREE.Color(), mono = !G.theme || G.theme.ballColors !== 'rainbow';
+    for (let i = 0; i < N; i++) balls.setColorAt(i, mono ? col.setRGB(1, 1, 1) : mbBallColor(i, col));
+    balls.instanceColor.needsUpdate = true;
+  }
   G.scene.add(balls);
   const atlas = mbLabelAtlas(st.balls.map(b => b.nick));
   const quad = new THREE.PlaneGeometry(1, MB_SLOT_H / MB_SLOT_W);
@@ -1542,16 +1859,20 @@ function mbRaceGfxBuild(st) {
   quad.setAttribute('gold', new THREE.InstancedBufferAttribute(gold, 1).setUsage(THREE.DynamicDrawUsage));
   const labelMat = new THREE.ShaderMaterial({
     transparent: true, depthTest: false, depthWrite: false,
-    uniforms: { map: { value: atlas.tex }, slotSz: { value: new THREE.Vector2(MB_SLOT_W / atlas.W, MB_SLOT_H / atlas.H) }, k: { value: 0.1 }, goldCol: { value: new THREE.Color(MB_C_GOLD) } },
+    uniforms: { map: { value: atlas.tex }, slotSz: { value: new THREE.Vector2(MB_SLOT_W / atlas.W, MB_SLOT_H / atlas.H) }, k: { value: 0.1 }, goldCol: { value: new THREE.Color(MB_C_GOLD) }, fade: { value: new THREE.Vector2(95, 170) } },
+    // gold: 1 — лідер (золота, завжди видно), 0 — звичайна, -1 — схована (кулька зникла).
+    // Далекі плашки блякнуть: у пелетоні на 150+ кульок вони зливались у сіру хмару
     vertexShader: [
-      'attribute vec2 slot; attribute float gold; uniform vec2 slotSz; uniform float k;',
-      'varying vec2 vUv; varying float vGold;',
+      'attribute vec2 slot; attribute float gold; uniform vec2 slotSz; uniform float k; uniform vec2 fade;',
+      'varying vec2 vUv; varying float vGold; varying float vA;',
       'void main(){ vec4 mv = modelViewMatrix * instanceMatrix * vec4(0.0,0.0,0.0,1.0); float d = max(1.0, -mv.z);',
-      '  mv.xy += position.xy * d * k; gl_Position = projectionMatrix * mv; vUv = slot + uv * slotSz; vGold = gold; }',
+      '  vGold = max(gold, 0.0); vA = gold > 0.5 ? 1.0 : 1.0 - smoothstep(fade.x, fade.y, d);',
+      '  if (gold < -0.5 || vA < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vUv = vec2(0.0); return; }',
+      '  mv.xy += position.xy * d * k; gl_Position = projectionMatrix * mv; vUv = slot + uv * slotSz; }',
     ].join('\n'),
     fragmentShader: [
-      'uniform sampler2D map; uniform vec3 goldCol; varying vec2 vUv; varying float vGold;',
-      'void main(){ vec4 c = texture2D(map, vUv); if (c.a < 0.03) discard; c.rgb *= mix(vec3(1.0), goldCol, vGold); gl_FragColor = c; }',
+      'uniform sampler2D map; uniform vec3 goldCol; varying vec2 vUv; varying float vGold; varying float vA;',
+      'void main(){ vec4 c = texture2D(map, vUv); c.a *= vA; if (c.a < 0.03) discard; c.rgb *= mix(vec3(1.0), goldCol, vGold); gl_FragColor = c; }',
     ].join('\n'),
   });
   const labels = new THREE.InstancedMesh(quad, labelMat, N);
@@ -1592,7 +1913,6 @@ function mbIntroCam(track, pos, look) {
 // точка центральної лінії за 34 м позаду, +19 м угору, погляд трохи вперед
 function mbAutoCamTarget(st, leader, pos, look) {
   const track = st.track;
-  if (track.map.camera && track.map.camera(st, leader, pos, look, mbCenterAt)) return;
   const s = leader.prog;
   const lp = [leader.x, leader.y, leader.z];
   const back = mbCenterAt(track, Math.max(0, s - 34), lp);
@@ -1605,8 +1925,144 @@ function mbAutoCamTarget(st, leader, pos, look) {
   // камера трохи збоку від лінії руху, щоб бачити пелетон і жолоб попереду;
   // висота — і над точкою позаду, і над лідером (спіралі/петлі: позаду може бути нижче)
   pos.set(bx - dx / hl * 4 + dz / hl * 6, Math.max(back[1] + 19, leader.y + 13), bz - dz / hl * 4 - dx / hl * 6);
+  mbCamAboveDisc(track, pos);
   look.set(fwd[0] * 0.5 + leader.x * 0.5, leader.y - 2, fwd[2] * 0.5 + leader.z * 0.5);
 }
+// тарілка-лійка (track.disc) — суцільна: камера над нею або далеко збоку, не під нею
+// (точка «позаду по трасі» біля горла давала камеру під дном тарілки)
+function mbCamAboveDisc(track, pos) {
+  const d = track.disc; if (!d) return;
+  if (Math.hypot(pos.x - d.c[0], pos.z - d.c[2]) < d.rDisc + 12 && pos.y < d.c[1] + d.yRim + 22) pos.y = d.c[1] + d.yRim + 22;
+}
+// ── Режисер «прямого ефіру»: план 4–9 с, потім склейка на інший ──────────
+// Пріоритет: спецплан карти на її секції (map.camera → true, підібрано під
+// перекриття трасою) → камера на фініші, коли лідер на підході → «бій за
+// лідерство», коли двоє поруч → чергування загальних планів. Кожен план перед
+// склейкою перевіряється на перекриття: відрізок камера→ціль не має проходити
+// поруч з іншою ділянкою траси (центральна лінія ± ширина жолоба)
+const MB_SHOT_W = { wide: 3, chase: 3, side: 2, top: 1.4, pack: 1.6 };
+const MB_SHOT_DUR = { wide: [6, 9], chase: [5, 8], side: [4, 6], top: [4, 6], pack: [5, 7], battle: [4, 6] };
+const MB_FIN_CAM = 42;     // м до фінішу — склейка на камеру фінішу
+const MB_BATTLE_GAP = 2.2; // м між першим і другим — «бій за лідерство»
+// чи перекриває траса відрізок a→b (окрім ділянки біля цілі: |s − sT| < skip)
+function mbOccluded(track, a, b, sT, skip) {
+  const dsc = track.disc;
+  if (dsc) {
+    // відрізок проходить крізь «шайбу» тарілки (від горла до обідка)?
+    for (let k = 1; k < 8; k++) {
+      const t = k / 8, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t, pz = a[2] + (b[2] - a[2]) * t;
+      if (py > dsc.c[1] + dsc.yThroat && py < dsc.c[1] + dsc.yRim + 2 && Math.hypot(px - dsc.c[0], pz - dsc.c[2]) < dsc.rDisc + 1) return true;
+    }
+  }
+  const cl = track.cl, ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], uu = ux * ux + uy * uy + uz * uz;
+  for (let i = 0; i < cl.length; i += 2) {
+    const c = cl[i];
+    if (Math.abs(c.s0 - sT) < skip) continue;
+    // найближчі точки двох відрізків (камера→ціль і шматок осі траси)
+    const vx = c.d[0], vy = c.d[1], vz = c.d[2], wx = a[0] - c.a[0], wy = a[1] - c.a[1], wz = a[2] - c.a[2];
+    const bb = ux * vx + uy * vy + uz * vz, cc = c.L2, dd = ux * wx + uy * wy + uz * wz, ee = vx * wx + vy * wy + vz * wz;
+    const den = uu * cc - bb * bb;
+    let sc = den > 1e-9 ? (bb * ee - cc * dd) / den : 0; sc = sc < 0 ? 0 : (sc > 1 ? 1 : sc);
+    let tc = (ee + bb * sc) / cc; tc = tc < 0 ? 0 : (tc > 1 ? 1 : tc);
+    sc = (bb * tc - dd) / uu; sc = sc < 0 ? 0 : (sc > 1 ? 1 : sc);
+    if (sc > 0.97) continue; // сама ціль
+    const px = wx + ux * sc - vx * tc, py = wy + uy * sc - vy * tc, pz = wz + uz * sc - vz * tc;
+    if (px * px + py * py + pz * pz < 12) return true;
+  }
+  return false;
+}
+// напрям траси в плані біля прогресу s (одиничний [x, z])
+function mbDirAt(track, s, near) {
+  const a = mbCenterAt(track, Math.max(0, s - 4), near), b = mbCenterAt(track, s + 4, near);
+  const dx = b[0] - a[0], dz = b[2] - a[2], L = Math.hypot(dx, dz);
+  if (L < 0.5) return [1, 0];
+  return [dx / L, dz / L];
+}
+// загальний план за кулькою b
+function mbShotTarget(shot, st, b, sorted, pos, look, D) {
+  const track = st.track, s = b.prog, lp = [b.x, b.y, b.z];
+  const d = mbDirAt(track, s, lp), nx = -d[1], nz = d[0];
+  if (shot === 'chase') {
+    const back = mbCenterAt(track, Math.max(0, s - 15), lp), f = mbCenterAt(track, s + 9, lp);
+    pos.set(back[0] - d[0] * 3 + nx * 3, Math.max(back[1] + 10, b.y + 9), back[2] - d[1] * 3 + nz * 3);
+    look.set(f[0] * 0.4 + b.x * 0.6, b.y - 0.5, f[2] * 0.4 + b.z * 0.6);
+  } else if (shot === 'side') {
+    const sd = D.side || 1;
+    pos.set(b.x + nx * 19 * sd - d[0] * 2, b.y + 13, b.z + nz * 19 * sd - d[1] * 2);
+    look.set(b.x + d[0] * 4, b.y - 0.5, b.z + d[1] * 4);
+  } else if (shot === 'top') {
+    pos.set(b.x - d[0] * 7, b.y + 36, b.z - d[1] * 7);
+    look.set(b.x + d[0] * 5, b.y, b.z + d[1] * 5);
+  } else if (shot === 'battle') {
+    const a2 = sorted[1] || b, my = (b.y + a2.y) / 2;
+    const back = mbCenterAt(track, Math.max(0, s - 13), lp);
+    pos.set(back[0] + nx * 3, Math.max(back[1] + 9, my + 8), back[2] + nz * 3);
+    look.set((b.x + a2.x) / 2 + d[0] * 3, my - 0.3, (b.z + a2.z) / 2 + d[1] * 3);
+  } else { mbAutoCamTarget(st, b, pos, look); return; } // 'wide' і 'pack' — загальний план позаду й згори
+  mbCamAboveDisc(track, pos);
+}
+// камера на фініші: за чашею, дивиться назустріч кулькам, що підлітають
+function mbFinishCam(track, pos, look) {
+  const fin = track.finish, inc = mbCenterAt(track, track.pathLen - 26);
+  let dx = fin.p[0] - inc[0], dz = fin.p[2] - inc[2]; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+  pos.set(fin.p[0] + dx * 15 - dz * 7, fin.p[1] + 11, fin.p[2] + dz * 15 + dx * 7);
+  look.set(inc[0] * 0.6 + fin.p[0] * 0.4, inc[1] * 0.6 + fin.p[1] * 0.4, inc[2] * 0.6 + fin.p[2] * 0.4);
+}
+// хто в кадрі: на «пелетоні» — кулька на 30% поля, інакше лідер
+function mbShotSubject(shot, sorted) { return (shot === 'pack' && sorted.length > 10) ? sorted[Math.floor(sorted.length * 0.3)] : sorted[0]; }
+const mbDirTmp = { p: null };
+// повертає true, якщо щойно була склейка (камера переходить жорстко)
+function mbDirector(st, dt, sorted, pos, look) {
+  const G = mbG, track = st.track, leader = sorted[0];
+  const D = G.dir || (G.dir = { shot: '', t: 0, dur: 0, side: 1, occT: 0, last: '' });
+  D.t += dt;
+  let cut = false;
+  const setShot = (id, dur) => { if (D.shot !== id) { D.last = D.shot; D.shot = id; cut = true; } D.t = 0; D.occT = 0; D.dur = dur || 0; };
+  // 1) спецплан карти на її секції
+  if (track.map.camera && track.map.camera(st, leader, pos, look, mbCenterAt)) { if (D.shot !== 'map') setShot('map'); return cut; }
+  // 2) лідер на підході до фінішу
+  if (!st.winner && track.pathLen - leader.prog < MB_FIN_CAM) { if (D.shot !== 'finish') setShot('finish'); mbFinishCam(track, pos, look); return cut; }
+  // 3) склейка: план вичерпано, щойно вийшли зі спецплану, або почався бій за лідерство
+  const battle = sorted.length > 1 && leader.prog - sorted[1].prog < MB_BATTLE_GAP && st.raceT > 8;
+  const generic = D.shot !== 'map' && D.shot !== 'finish' && D.shot !== '';
+  if (!generic || D.t > D.dur || (battle && D.shot !== 'battle' && D.last !== 'battle' && D.t > 2.5)) {
+    const pick = [];
+    if (battle && D.shot !== 'battle') pick.push('battle');
+    const pool = Object.keys(MB_SHOT_W).filter(k => k !== D.shot && (k !== 'pack' || sorted.length > 10));
+    while (pool.length) {
+      let tot = 0; for (const k of pool) tot += MB_SHOT_W[k];
+      let r = Math.random() * tot, k = 0;
+      while (k < pool.length - 1 && (r -= MB_SHOT_W[pool[k]]) > 0) k++;
+      pick.push(pool.splice(k, 1)[0]);
+    }
+    const P = mbDirTmp.p || (mbDirTmp.p = new THREE.Vector3()), L = new THREE.Vector3();
+    let chosen = 'wide';
+    for (const id of pick) {
+      const b = mbShotSubject(id, sorted);
+      D.side = Math.random() < 0.5 ? 1 : -1;
+      let ok = false;
+      for (let tr = 0; tr < (id === 'side' ? 2 : 1) && !ok; tr++) {
+        if (tr) D.side = -D.side;
+        mbShotTarget(id, st, b, sorted, P, L, D);
+        ok = id === 'wide' || !mbOccluded(track, [P.x, P.y, P.z], [b.x, b.y, b.z], b.prog, 14);
+      }
+      if (ok) { chosen = id; break; }
+    }
+    const r = MB_SHOT_DUR[chosen];
+    setShot(chosen, r[0] + Math.random() * (r[1] - r[0]));
+  }
+  const b = mbShotSubject(D.shot, sorted);
+  mbShotTarget(D.shot, st, b, sorted, pos, look, D);
+  // перекриття посеред плану (траса пройшла між камерою й кулькою) — склейка на загальний
+  D.occAcc = (D.occAcc || 0) + dt;
+  if (D.occAcc >= 0.33 && D.shot !== 'wide' && D.shot !== 'pack') {
+    D.occAcc = 0;
+    if (mbOccluded(track, [pos.x, pos.y, pos.z], [b.x, b.y, b.z], b.prog, 14)) D.occT += 0.33; else D.occT = 0;
+    if (D.occT > 0.6) { setShot('wide', 6); mbShotTarget('wide', st, leader, sorted, pos, look, D); }
+  }
+  return cut;
+}
+
 function mbUpdateCamera(st, dt, sorted) {
   const G = mbG, cam = G.camera, track = st.track;
   if (G.fly.on) { mbFlyUpdate(dt, track); return; }
@@ -1630,7 +2086,10 @@ function mbUpdateCamera(st, dt, sorted) {
     tl.set(fin.p[0] + 8, fin.p[1] - 1, fin.p[2]);
     kPos = 1 - Math.exp(-dt / 0.45);
   } else if (leader) {
-    mbAutoCamTarget(st, leader, tp, tl);
+    // склейка — жорсткий перехід, як у трансляції; усередині плану — мʼякий супровід
+    if (mbDirector(st, dt, sorted, tp, tl)) hard = true;
+    const sh = G.dir.shot;
+    if (sh === 'side' || sh === 'top' || sh === 'battle' || sh === 'chase') { kPos = 1 - Math.exp(-dt / 0.35); kLook = 1 - Math.exp(-dt / 0.18); }
   } else {
     tp.set(fin.p[0] - 22, fin.p[1] + 14, fin.p[2] - 14); tl.set(fin.p[0] + 8, fin.p[1] - 1, fin.p[2]);
   }
@@ -1970,7 +2429,7 @@ function mbStartRace(order, mapId) {
   };
   window.mbLastResults = null;
   mbRaceGfxBuild(mbSt);
-  mbG.camInit = false; mbG.orbitT = 0;
+  mbG.camInit = false; mbG.orbitT = 0; mbG.dir = null;
   if (mbG.fly.on) mbFlyStop();
   mbBoardAcc = 1; // перше оновлення лідерборду — одразу
   mbBoardReset();
@@ -2107,20 +2566,34 @@ function mbRender(dtReal) {
     }
   }
 
+  if (G.tg && G.tg.zones) mbZonesGfxUpdate(st);
+
   // кульки + плашки
   const balls = st.balls, inst = mbRace.balls, lab = mbRace.labels, gold = mbRace.goldAttr;
   const leadIdx = leader ? mbRace.idxByNick.get(leader.nick) : -1;
+  // частка кроку, що вже «накопичилась» в акумуляторі: малюємо між попередньою і поточною позою
+  const al = st.phase === 'done' ? 1 : mbClamp(mbAcc / MB_DT, 0, 1);
+  const Q0 = mbM4.q0 || (mbM4.q0 = new THREE.Quaternion());
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
-    P.set(b.x, b.y, b.z); Q.set(b.q[0], b.q[1], b.q[2], b.q[3]);
-    M.compose(P, Q, S1);
+    let sc = 1, g = i === leadIdx ? 1 : 0;
+    if (b.gone) {
+      // зникнення: за 0.35 с стискається в точку, плашка ховається одразу
+      sc = mbClamp(1 - (st.raceT - b.goneT) / 0.35, 0, 1);
+      g = -1;
+    }
+    P.set(b.px + (b.x - b.px) * al, b.py + (b.y - b.py) * al, b.pz + (b.z - b.pz) * al);
+    Q0.set(b.pq[0], b.pq[1], b.pq[2], b.pq[3]); Q.set(b.q[0], b.q[1], b.q[2], b.q[3]);
+    Q0.slerp(Q, al);
+    S1.setScalar(sc);
+    M.compose(P, Q0, S1);
     inst.setMatrixAt(i, M);
     P.y += MB_R * 0.6;
     M.makeTranslation(P.x, P.y, P.z);
     lab.setMatrixAt(i, M);
-    const g = i === leadIdx ? 1 : 0;
     if (gold.array[i] !== g) { gold.array[i] = g; gold.needsUpdate = true; }
   }
+  S1.setScalar(1);
   inst.instanceMatrix.needsUpdate = true;
   lab.instanceMatrix.needsUpdate = true;
   // сталий розмір плашки на екрані: висота слота ≈ 3.4% висоти вʼюпорту

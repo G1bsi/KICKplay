@@ -248,8 +248,9 @@ const MAP = {
       look.set(f2.end[0] + 16, leader.y - 6, f2.end[2] + (leader.z - f2.end[2]) * 0.4);
       return true;
     }
-    // над тарілкою (перші рукави) — вище за її обідок, інакше обідок затуляє жолоб:
-    // рахуємо узагальнену камеру самі й лише піднімаємо
+    // далі — загальні плани режисера ядра; спецплан лише поки лідер біля тарілки
+    // (вище за її обідок, інакше обідок затуляє жолоб)
+    if (Math.hypot(leader.x - disc.c[0], leader.z - disc.c[2]) > disc.rDisc + 30) return false;
     const lp = [leader.x, leader.y, leader.z];
     const back = centerAt(track, Math.max(0, s - 34), lp), fwd = centerAt(track, s + 10, lp);
     let dx = leader.x - back[0], dz = leader.z - back[2], hl = Math.hypot(dx, dz) || 1;
