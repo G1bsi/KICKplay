@@ -543,8 +543,14 @@ function mbBuildTrack(mapId) {
   }
   for (const p of B.extraPoints) grow(p[0], p[1], p[2]);
   // прогрес зон (сегменти отримали s0/sScale лише в addStage) і радіус перевірки
-  for (const z of B.zones) { z.s = (z.seg.s0 || 0) + z.sLoc * (z.seg.sScale || 1); z.reach = z.h[0] * (z.seg.sScale || 1) + 12; z.segId = z.seg.id; }
-  return { id: map.id, map, segments, stages, cl, finish, tray, disc, startSlots: B.startSlots, gate: B.gate, extra: B.extra, bbox, pathLen: S, tris, zones: B.zones, byId: Object.fromEntries(segments.map(g => [g.id, g])) };
+  const trk = { id: map.id, map, segments, stages, cl, finish, tray, disc, startSlots: B.startSlots, gate: B.gate, extra: B.extra, bbox, pathLen: S, tris, zones: B.zones, byId: Object.fromEntries(segments.map(g => [g.id, g])) };
+  // прогрес зон: сегмент зі стадії — за його s0/sScale; шматок без власного прогресу
+  // (noProgress, напр. частина гілки) — проєкцією центру зони на вісь траси
+  for (const z of B.zones) {
+    z.s = z.seg.s0 != null && !z.seg.noProgress ? z.seg.s0 + z.sLoc * (z.seg.sScale || 1) : mbProject(trk, z.c);
+    z.reach = z.h[0] * (z.seg.sScale || 1) + 12; z.segId = z.seg.id;
+  }
+  return trk;
 }
 // зсув сегмента (усі копії геометрії: mesh, frames, center, boxes, balls)
 function mbTranslateSeg(g, d) {
@@ -963,6 +969,8 @@ function mbSimStep(st, dt) {
       b.prog = mbProject(track, [b.x, b.y, b.z], mbProjOut);
       const off = b.x < bb.min[0] - 2 || b.x > bb.max[0] + 2 || b.z < bb.min[2] - 2 || b.z > bb.max[2] + 2 || b.y < bb.min[1] - 1
         || mbProjOut.dist > mbProjOut.tol || b.y < mbProjOut.q[1] - 5;
+      // повернулась на трасу (напр. проскочила під верхнім рівнем і приземлилась) — відлік падіння скидається
+      if (!off) b.fallT = null;
       if (off && st.raceOn) {
         // карти з вибуванням (Few Will Survive): вилетіла — вибула, рятувати не треба
         if (track.map.eliminate) {
@@ -1486,7 +1494,7 @@ function mbGfxInit() {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0xa9c3ea, 0.0011);
-  const camera = new THREE.PerspectiveCamera(52, 16 / 9, 0.5, 5000);
+  const camera = new THREE.PerspectiveCamera(52, 16 / 9, 1.0, 5000); // near 1.0, не 0.5: удвічі точніша глибина вдалині — без мерехтіння стиків
   scene.add(camera);
 
   // небо: купол-градієнт горизонт → зеніт (без текстур)
@@ -1617,8 +1625,11 @@ function mbTrackGfxBuild(track) {
   mbTrackGfxDispose();
   const T = mbApplyTheme(track.map);
   const scene = G.scene, mats = G.mats;
-  const marbleTex = mbMarbleTexture(1024, T.marble);
-  const marbleMat = new THREE.MeshStandardMaterial({ map: marbleTex, roughness: T.roughness, metalness: T.metalness, envMap: G.env, envMapIntensity: T.envInt });
+  // map.customRender: карта малює все сама в decor (свої матеріали, свої меші);
+  // ядро лише створює порожні групи лотка й обертових елементів, які рухає кожен кадр
+  const custom = !!track.map.customRender;
+  const marbleTex = custom ? null : mbMarbleTexture(1024, T.marble);
+  const marbleMat = custom ? null : new THREE.MeshStandardMaterial({ map: marbleTex, roughness: T.roughness, metalness: T.metalness, envMap: G.env, envMapIntensity: T.envInt });
   mats.marble = marbleMat;
   const marbleParts = [], redParts = [], trayParts = [], gateParts = [];
   const spinGroups = [];
@@ -1626,11 +1637,11 @@ function mbTrackGfxBuild(track) {
     if (g.kind === 'spinner') {
       const grp = new THREE.Group(); grp.position.set(g.c[0], g.c[1], g.c[2]);
       const parts = [];
-      for (const b of g.boxes) parts.push(mbBoxPart(b));
-      for (const s2 of (g.balls || [])) parts.push(mbSpherePart(s2.pos, s2.r));
+      if (!custom) { for (const b of g.boxes) parts.push(mbBoxPart(b)); for (const s2 of (g.balls || [])) parts.push(mbSpherePart(s2.pos, s2.r)); }
       spinGroups.push({ g, grp, parts, red: !!g.red });
       continue;
     }
+    if (custom) continue;
     if (g.kind === 'sweep') marbleParts.push(mbSweepPart(g));
     else if (g.kind === 'lathe') marbleParts.push(mbLathePart(g));
     else if (g.kind === 'boxes') {
@@ -1639,10 +1650,14 @@ function mbTrackGfxBuild(track) {
     } else if (g.kind === 'tray') for (const b of g.boxes) trayParts.push(mbBoxPart(b));
   }
   const tg = { trackId: track.id, marbleTex, marbleMat, trackMesh: null, redMesh: null, gateMesh: null, trayGroup: null, decor: null, spinners: [] };
+  const spinById = {};
   for (const sp of spinGroups) {
-    const m = new THREE.Mesh(mbMergeParts(sp.parts), sp.red ? mats.red : marbleMat);
-    m.castShadow = true; m.receiveShadow = true;
-    sp.grp.add(m); scene.add(sp.grp);
+    if (sp.parts.length) {
+      const m = new THREE.Mesh(mbMergeParts(sp.parts), sp.red ? mats.red : marbleMat);
+      m.castShadow = true; m.receiveShadow = true;
+      sp.grp.add(m);
+    }
+    scene.add(sp.grp); spinById[sp.g.id] = sp.grp;
     tg.spinners.push({ id: sp.g.id, grp: sp.grp, axis: sp.g.axis || [0, 1, 0], c: sp.g.c, up: (sp.g.lift && sp.g.lift.up) || [0, 1, 0], lift: !!sp.g.lift });
   }
   if (marbleParts.length) {
@@ -1665,9 +1680,11 @@ function mbTrackGfxBuild(track) {
     const tr = track.tray;
     tg.trayGroup = new THREE.Group();
     tg.trayGroup.position.set(tr.hinge[0], tr.hinge[1], tr.hinge[2]);
-    const trayMesh = new THREE.Mesh(mbMergeParts(trayParts), marbleMat);
-    trayMesh.castShadow = true; trayMesh.receiveShadow = true;
-    tg.trayGroup.add(trayMesh);
+    if (trayParts.length) {
+      const trayMesh = new THREE.Mesh(mbMergeParts(trayParts), marbleMat);
+      trayMesh.castShadow = true; trayMesh.receiveShadow = true;
+      tg.trayGroup.add(trayMesh);
+    }
     scene.add(tg.trayGroup);
   }
   // декор карти (логотипи, LED, шаховки, ферми…) — рендер-only
@@ -1675,7 +1692,7 @@ function mbTrackGfxBuild(track) {
   scene.add(tg.decor);
   if (track.map.decor) {
     try {
-      track.map.decor(track, { THREE, scene: tg.decor, trayGroup: tg.trayGroup, mats, env: G.env, mergeParts: mbMergeParts, boxPart: mbBoxPart, spherePart: mbSpherePart, texM: MB_TEX_M, textures: { logo: mbLogoTexture, finish: mbFinishTexture, start: mbStartTexture, marble: mbMarbleTexture, cloud: mbCloudTexture } });
+      track.map.decor(track, { THREE, scene: tg.decor, trayGroup: tg.trayGroup, spinners: spinById, renderer: G.renderer, mats, env: G.env, mergeParts: mbMergeParts, boxPart: mbBoxPart, spherePart: mbSpherePart, texM: MB_TEX_M, textures: { logo: mbLogoTexture, finish: mbFinishTexture, start: mbStartTexture, marble: mbMarbleTexture, cloud: mbCloudTexture } });
     } catch (e) { console.error('[marbles] декор карти ' + track.id + ' впав', e); }
   }
   if (track.zones && track.zones.length) mbZonesGfxBuild(track, tg);
@@ -1786,6 +1803,7 @@ function mbZonesGfxBuild(track, tg) {
       tg.lasers.push({ z, beams });
       continue;
     }
+    if (o.noGfx) continue; // наліпку малює сама карта (customRender)
     const geo = mbFloorStrip(z.seg, z.sLoc - half, z.sLoc + half, o.lat || 0, z.h[2], 0.06, z.type === 'boost' ? Math.max(1, Math.round(half * 2 / 2.5)) : 1);
     const m = new THREE.Mesh(geo, M[z.type]); m.renderOrder = 1; m.receiveShadow = false;
     grp.add(m);
