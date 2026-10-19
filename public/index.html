@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/assets/royale.css">
 <link rel="stylesheet" href="/assets/shootout.css">
 <link rel="stylesheet" href="/assets/marbles.css">
-<link rel="stylesheet" href="/assets/f1race.css">
+<!-- Гонка прихована (див. GAME_MODES в app.js): <link rel="stylesheet" href="/assets/f1race.css"> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="/assets/vendor/GLTFLoader.js"></script>
@@ -463,7 +463,9 @@
 <script src="/assets/app.js"></script>
 <script src="/assets/royale.js"></script>
 <script src="/assets/shootout.js"></script>
+<!-- Гонка прихована — не вантажимо ~70КБ на кожне відкриття панелі. Щоб повернути, розкоментуй:
 <script src="/assets/f1race.js"></script>
+-->
 <!-- Марблс тимчасово вимкнено (режим прихований у GAME_MODES, app.js): ядро й карти
      не вантажаться зовсім — це ~170КБ JS на кожне відкриття панелі. Щоб повернути,
      розкоментуй ці рядки і рядок marbles у GAME_MODES
