@@ -429,11 +429,11 @@ const GAME_MODES = [
   { id: 'revolver', icon: '🔫', label: 'Револьвер' },
   { id: 'cashhunt', icon: '🎯', label: 'Cash Hunt' },
   { id: 'royale',   icon: '🪂', label: 'Батл Рояль' },
+  { id: 'race',     icon: '🏎️', label: 'Гонка' },
   { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
-  /* «Гонка» і «Марблс» тимчасово приховані з перемикача (код ігор лишився цілим —
+  /* «Марблс» тимчасово прихований з перемикача (код гри лишився цілим —
      щоб повернути, просто розкоментуй рядок) */
   // { id: 'marbles',  icon: '🔮', label: 'Марблс' },
-  // { id: 'race',     icon: '🏎️', label: 'Гонка' },
 ];
 
 // Перемикання режиму стрілками (з циклічним переходом)
@@ -505,6 +505,8 @@ function setGameMode(mode) {
 }
 
 function hideRaceOverlay() {
+  // нова гонка: тихо закрити без запису переможця (це скидання, а не фініш)
+  if (typeof closeF1Race === 'function') closeF1Race(true);
   if (raceAnimId) { cancelAnimationFrame(raceAnimId); raceAnimId = null; }
   document.getElementById('race-overlay').classList.remove('visible');
   document.getElementById('race-overlay-controls').style.display = 'none';
@@ -565,6 +567,7 @@ async function startGame() {
 }
 
 async function reroll() {
+  if (gameMode === 'race' && typeof startF1Race === 'function') return startRaceGame();
   if (gameMode === 'race') {
     // В гонці ліміт до 300
     const n = raceQualifiers.length || Math.min(parseInt(document.getElementById('race-count').value) || 10, 300);
@@ -779,6 +782,12 @@ function pickRandom(arr, n) {
 }
 
 async function startRaceGame() {
+  // нова гонка — Гран-прі в стилі трансляції F1 (f1race.js); стара лишається запасною
+  if (typeof startF1Race === 'function') {
+    const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 20, 2), 24);
+    const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 2, 1), 3);
+    return startF1Race(n, laps);
+  }
   const n = Math.min(Math.max(parseInt(document.getElementById('race-count').value) || 10, 2), 300);
   const laps = Math.min(Math.max(parseInt(document.getElementById('race-laps').value) || 3, 1), 20);
   if (state.participants.length < 2) return alert('Нужно минимум 2 участника');

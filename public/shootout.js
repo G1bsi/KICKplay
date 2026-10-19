@@ -36,7 +36,10 @@ function esc(s) {
    «Blocked attempt to create a WebMediaPlayer». Пул із 6 багаторазових
    клонів дає ті самі накладені постріли без нових плеєрів. */
 let _shotPool = null, _shotPoolI = 0;
+/* дебаг-прогін (__RSO_SIM): звук глушимо, статистику збираємо в simStats */
+let simMute = false, simStats = null;
 function sfx(name, vol, rate, maxMs) {
+  if (simMute) return;
   /* тимчасово, на прохання власника: у перестрілці звучать ЛИШЕ постріли */
   if (name !== 'pubg-shot') return;
   try {
@@ -492,6 +495,10 @@ function initPlayers(finalists) {
       /* керування глядачем із телефону (hostNet): human=true — AI вимкнений,
          inp — останній пакет вводу {mx,my,aim,fire,at} */
       human: false, inp: null,
+      /* «рука»: кутова швидкість прицілу (пружина з перельотом), огляд кутів, свій темп */
+      aimVel: 0, glanceAt: 0, glanceUntil: 0, glanceOff: 0,
+      tremPh: frnd() * TAU, tremPh2: frnd() * TAU,
+      tempo: 0.94 + frnd() * 0.12, plant: false, strafeHold: false, strafeAmp: 60,
       /* «характер»: агресивність, влучність, швидкість реакції (роль призначає assignRoles) */
       persona: { aggr: 0.2 + frnd() * 0.5, acc: 0.6 + frnd() * 0.4, react: 220 + fint(260), role: 'RUSHER', spreadMul: 1 },
     };
@@ -501,6 +508,15 @@ function initPlayers(finalists) {
 /* ── Архетипи: роль на бій, детерміновано від сіда ──
    Базова четвірка перемішується (щоб у малих боях були різні), решта
    добирає випадково — у 2-3 бійців ролі можуть збігатись, це ок. */
+/* «Рука» за ролями: aimW — швидкість (рад/с), aimZ — демпфування (менше → більший переліт),
+   reactAim — скільки мс людина «не помічає» нову ціль. Числа — з типових дуелей PUBG/CS:
+   реакція 180–400 мс, ривок із перельотом 5–15% і довід за ~0.25 с */
+const AIM_ROLE = {
+  RUSHER:   { w: 21, z: 0.55, r0: 170, rr: 110 },
+  CAMPER:   { w: 17, z: 0.72, r0: 220, rr: 140 },
+  SNIPER:   { w: 14, z: 0.86, r0: 250, rr: 160 },
+  SURVIVOR: { w: 16, z: 0.65, r0: 230, rr: 150 },
+};
 function assignRoles() {
   const ROLES = ['RUSHER', 'CAMPER', 'SNIPER', 'SURVIVOR'];
   const bag = ROLES.slice();
@@ -526,6 +542,11 @@ function assignRoles() {
     } else {                         // SURVIVOR: уникає боїв, у фіналі — агресія
       ps.aggr = 0.12 + frnd() * 0.12; ps.react = 230 + fint(200); ps.spreadMul = 1;
     }
+    /* індивідуальна рука: ±10% до рольової — двоє рашерів цілятся по-різному */
+    const A = AIM_ROLE[role];
+    ps.aimW = A.w * (0.9 + frnd() * 0.2);
+    ps.aimZ = A.z * (0.9 + frnd() * 0.2);
+    ps.reactAim = A.r0 + fint(A.rr);
   }
 }
 
@@ -597,6 +618,8 @@ function hurt(v, dmg, attacker, opts) {
     v.vx = -ay / ad * v.strafeSide * 150;
     v.vy = ax / ad * v.strafeSide * 150;
     v.serpUntil = perfNow + 1200;
+    /* «aim punch» як у CS/PUBG: влучання збиває руку — приціл смикається */
+    v.aimVel += (frnd() * 2 - 1) * (3 + dmg * 0.12);
     /* під вогнем реагуємо швидше за звичайну «реакцію» */
     if (v.decideAt > perfNow + 260) v.decideAt = perfNow + 140 + fint(140);
   }
@@ -1097,6 +1120,9 @@ function setGoal(p, x, y) {
   }
 }
 function followGoal(p, dt, sprint) {
+  /* «встав і стріляй»: на дальній дистанції живі гравці зупиняються перед чергою
+     (контрстрейф у CS, стоячий спрей у PUBG) — на бігу кулі летять у молоко */
+  if (p.plant) { const kk = 1 - Math.exp(-dt * 16); p.vx -= p.vx * kk; p.vy -= p.vy * kk; return; }
   const gx = p.goalX, gy = p.goalY;
   const dGoal = hyp(gx - p.x, gy - p.y);
   if (dGoal < 8) { p.vx *= 0.8; p.vy *= 0.8; return; }
@@ -1109,12 +1135,15 @@ function followGoal(p, dt, sprint) {
     }
     if (p.path) {
       while (p.pathI < p.path.length - 1 && hyp(p.path[p.pathI].x - p.x, p.path[p.pathI].y - p.y) < 26) p.pathI++;
+      /* зрізаємо кут, якщо наступна точка вже на прямій видимості: людина не біжить
+         «по клітинках» ламаною, а веде дугою до далекої точки */
+      if (p.pathI < p.path.length - 1 && walkClear(p.x, p.y, p.path[p.pathI + 1].x, p.path[p.pathI + 1].y)) p.pathI++;
       const wp = p.path[Math.min(p.pathI, p.path.length - 1)];
       tx = wp.x; ty = wp.y;
     }
   } else { p.path = null; }
   const d = hyp(tx - p.x, ty - p.y) || 1;
-  const sp = sprint ? 150 : 115;                     // px/с (повільніше — глядач встигає стежити)
+  const sp = (sprint ? 150 : 115) * p.tempo;         // px/с; tempo — свій крок у кожного, щоб не бігли в ногу
   let ddx = (tx - p.x) / d, ddy = (ty - p.y) / d;
   /* серпантин після влучання: напрямок «гойдається», модуль швидкості той самий */
   if (p.serpUntil > perfNow) {
@@ -1191,6 +1220,13 @@ function fire(p) {
   }
   const t = p.target;
   const d = t ? hyp(t.x - p.x, t.y - p.y) : 300;
+  if (simStats && t) {
+    const S = simStats; S.shots++;
+    const sp = hyp(p.vx, p.vy);
+    if (d > 220) { S.farShots++; if (sp > 45) S.farMoving++; }
+    S.aimErr += Math.abs(angDiff(p.aim, Math.atan2(t.y - p.y, t.x - p.x))); S.dist += d;
+    if (!p._shotSinceLos) { p._shotSinceLos = true; S.react += now - p.firstLosAt; S.reactN++; }
+  }
   /* упередження за швидкістю цілі — краще у влучніших персонажів */
   let aimX = t ? t.x + t.vx * (d / GUN.speed) * p.persona.acc : p.x + Math.cos(p.aim) * 100;
   let aimY = t ? t.y + t.vy * (d / GUN.speed) * p.persona.acc : p.y + Math.sin(p.aim) * 100;
@@ -1228,6 +1264,54 @@ function requestReload(p) {
   setGoal(p, cp.x, cp.y);
   p.decideAt = perfNow + 600;
 }
+/* ── Людський приціл ──
+   Пружина другого порядку замість експоненти: ω — швидкість руки, ζ < 1 — невеликий
+   переліт і довід, як у людини при ривку мишею. Експонента наводилась ідеально
+   рівно й ніколи не перелітала — саме це й видавало бота. Кадр ділимо на кроки
+   ≤1/60 с: на великому dt (лаг вкладки) пружина інакше розгойдується */
+function aimSpring(p, want, dt, w, z) {
+  const n = Math.max(1, Math.ceil(dt * 60)), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    const err = angDiff(want, p.aim);
+    p.aimVel += (w * w * err - 2 * z * w * p.aimVel) * h;
+    /* стеля кутової швидкості: швидший розворот за людську руку = аімбот */
+    if (p.aimVel > 13) p.aimVel = 13; else if (p.aimVel < -13) p.aimVel = -13;
+    p.aim += p.aimVel * h;
+  }
+  /* тримаємо кут у [-π, π]: інакше за довгий бій він накопичується без меж */
+  if (p.aim > Math.PI || p.aim < -Math.PI) p.aim = Math.atan2(Math.sin(p.aim), Math.cos(p.aim));
+}
+/* тремор руки: дві повільні синусоїди зі своєю фазою; на бігу й після влучання — більший */
+function aimTremor(p) {
+  const t = perfNow;
+  let a = 0.009;
+  if (hyp(p.vx, p.vy) > 60) a += 0.008;
+  if (t - p.lastHurtAt < 700) a += 0.02;
+  return (Math.sin(t * 0.0071 + p.tremPh) + Math.sin(t * 0.0113 + p.tremPh2) * 0.6) * a;
+}
+/* Огляд без цілі: людина не дивиться строго туди, куди біжить. Тримає приціл на
+   небезпеці (свіжий звук, остання відома позиція ворога) і час від часу кидає
+   погляд убік — «перевіряє кут». Бот, у якого приціл приклеєний до руху, видно одразу */
+function lookAround(p, dt) {
+  const now = perfNow;
+  let base;
+  if (p.memNoise && now - p.memNoise.at < 5000) base = Math.atan2(p.memNoise.y - p.y, p.memNoise.x - p.x);
+  else {
+    let best = null;
+    p.mem.forEach(function (m) { if (now - m.at < 6000 && (!best || m.at > best.at)) best = m; });
+    if (best) base = Math.atan2(best.y - p.y, best.x - p.x);
+    else if (hyp(p.vx, p.vy) > 20) base = Math.atan2(p.vy, p.vx);
+    else base = Math.atan2(zone.cy - p.y, zone.cx - p.x);
+  }
+  if (now > p.glanceAt) {
+    p.glanceOff = (frnd() < 0.5 ? -1 : 1) * (0.6 + frnd() * 0.7);
+    p.glanceUntil = now + 280 + fint(420);
+    p.glanceAt = now + 1400 + fint(2200);
+  }
+  const off = now < p.glanceUntil ? p.glanceOff : 0;
+  aimSpring(p, base + off + aimTremor(p), dt, 9, 0.85);
+}
+
 /* бойова частина кадру: доворот прицілу + черги */
 function combat(p, dt) {
   const t = p.target, now = perfNow;
@@ -1238,24 +1322,39 @@ function combat(p, dt) {
       (now >= p.reloadForceAt || !t || !t.alive || !canSee(p, t))) startReload(p);
   if (!t || !t.alive || p.healUntil) return;
   const los = canSee(p, t);
-  if (los && !p.hadLos) p.firstLosAt = now;   // ціль щойно з'явилась у прицілі
+  if (los && !p.hadLos) { p.firstLosAt = now; p._shotSinceLos = false; }   // ціль щойно з'явилась у прицілі
   p.hadLos = los;
   p.losToTarget = los;
   if (los) { memRemember(p, t); p.lastSeenX = t.x; p.lastSeenY = t.y; p.lastSeenAt = now; p.noLosSince = 0; }
   const d = hyp(t.x - p.x, t.y - p.y);
   const want = los ? Math.atan2(t.y - p.y, t.x - p.x)
                    : Math.atan2(p.lastSeenY - p.y, p.lastSeenX - p.x);
-  p.aim = lerpAng(p.aim, want, Math.min(1, dt * 7));   // швидкість довороту
+  const ps = p.persona;
+  /* реакція: перші ~200–400 мс людина ще не помітила ворога — рука стоїть */
+  if (los && now - p.firstLosAt < ps.reactAim) p.aimVel *= 0.85;
+  else aimSpring(p, want + aimTremor(p), dt, los ? ps.aimW : ps.aimW * 0.6, ps.aimZ);
   /* тактична перезарядка, поки ворога не видно */
   if (!los && !p.reloading && p.ammo < 10) startReload(p);
   if (!los || p.reloading || d > GUN.range) return;
-  if (Math.abs(angDiff(p.aim, want)) > 0.14) return;
+  /* на дальній дистанції жива людина не поливає на бігу: або спершу встає, або,
+     якщо тікає/біжить в укриття, не стріляє зовсім. Ціль — менше «кулі в молоко» */
+  if (d > 240 && hyp(p.vx, p.vy) > 55) {
+    const st = p.state;
+    if (st !== 'ESCAPE_ZONE' && st !== 'ESCAPE_FIRE' && st !== 'SEEK_COVER' && st !== 'HEAL') p.plantReq = true;
+    return;
+  }
+  /* стріляє, коли приціл реально на цілі: допуск — кутовий розмір тіла. Колишні
+     сталі 8° на дальній дистанції означали стрільбу «в той бік» */
+  const tol = Math.max(0.045, Math.atan2(PR * 1.15, Math.max(40, d)) * 1.5);
+  if (Math.abs(angDiff(p.aim, want)) > tol) return;
   if (p.ammo <= 0) { requestReload(p); return; }
   if (now < p.burstRestUntil || now < p.nextShotAt) return;
-  if (p.burstLeft <= 0) p.burstLeft = 3 + fint(4);      // черга 3–6
+  /* дисципліна вогню за дистанцією, як у живих: впритул — спрей, на середній —
+     черги, на дальній — одиночні/двійки з паузою на відновлення розкиду */
+  if (p.burstLeft <= 0) p.burstLeft = d < 170 ? 6 + fint(7) : (d < 360 ? 3 + fint(3) : 1 + fint(2));
   fire(p);
   p.burstLeft--; p.nextShotAt = now + GUN.rof;
-  if (p.burstLeft <= 0) p.burstRestUntil = now + 520 + fint(650);
+  if (p.burstLeft <= 0) p.burstRestUntil = now + (d < 170 ? 160 + fint(220) : (d < 360 ? 320 + fint(360) : 380 + fint(380)));
 }
 
 /* ── Керування людиною (глядач із телефону через hostNet) ──
@@ -1315,6 +1414,7 @@ function updatePlayer(p, dt, aliveN) {
   }
 
   if (now >= p.decideAt) decide(p, aliveN);
+  p.plant = false;
 
   /* поведінка стану (цілі руху) */
   let sprint = false;
@@ -1322,13 +1422,26 @@ function updatePlayer(p, dt, aliveN) {
   switch (p.state) {
     case 'ENGAGE': {
       /* стрейф боком, тримаємо СВОЮ дистанцію (архетипи різні) */
-      if (now > p.strafeAt) { p.strafeAt = now + 700 + fint(800); p.strafeSide = -p.strafeSide; }
+      /* нерівний ADAD: короткі смики, зрідка довгий відхід і короткі паузи —
+         маятник «рівно раз на секунду» видавав скрипт */
+      if (now > p.strafeAt) {
+        const r = frnd();
+        if (r < 0.18) { p.strafeHold = true; p.strafeAt = now + 160 + fint(220); }
+        else {
+          p.strafeHold = false; p.strafeSide = -p.strafeSide;
+          p.strafeAt = now + (r < 0.7 ? 200 + fint(320) : 650 + fint(650));
+        }
+        p.strafeAmp = 40 + frnd() * 55;
+      }
       if (t && t.alive) {
         const role = p.persona.role;
         const d = hyp(t.x - p.x, t.y - p.y) || 1;
         const px = -(t.y - p.y) / d, py = (t.x - p.x) / d;
-        const amp = role === 'CAMPER' ? 34 : 70;      // кемпер майже не міняє позицію
+        const amp = p.strafeHold ? 0 : (role === 'CAMPER' ? p.strafeAmp * 0.5 : p.strafeAmp);   // кемпер майже не міняє позицію
         let gx = p.x + px * p.strafeSide * amp, gy = p.y + py * p.strafeSide * amp;
+        /* стоїмо, поки приціл на цілі й черга не на паузі — далі знову рух */
+        p.plant = p.losToTarget && !p.reloading && now >= p.burstRestUntil && d > (role === 'RUSHER' ? 260 : 190)
+          && Math.abs(angDiff(p.aim, Math.atan2(t.y - p.y, t.x - p.x))) < 0.25;
         const far = role === 'SNIPER' ? 520 : 450;
         const near = role === 'RUSHER' ? 150 : (role === 'SNIPER' ? 300 : 210);
         if (d > far) { gx += (t.x - p.x) / d * 120; gy += (t.y - p.y) / d * 120; }
@@ -1350,12 +1463,7 @@ function updatePlayer(p, dt, aliveN) {
       break;
     case 'CAMP':
     case 'EDGE': {
-      /* сидимо на позиції; без цілі — фронт до загрози (звук) або всередину зони */
-      if (hyp(p.goalX - p.x, p.goalY - p.y) < 14 && (!t || !t.alive)) {
-        const nz = p.memNoise && now - p.memNoise.at < 6000;
-        const fx = nz ? p.memNoise.x : zone.cx, fy = nz ? p.memNoise.y : zone.cy;
-        p.aim = lerpAng(p.aim, Math.atan2(fy - p.y, fx - p.x), Math.min(1, dt * 4));
-      }
+      /* сидимо на позиції; фронт до загрози (звук, памʼять, центр зони) тримає lookAround */
       break;
     }
     case 'PUSH':
@@ -1389,6 +1497,8 @@ function updatePlayer(p, dt, aliveN) {
       } else {
         const pp = peekPoint(o, ex, ey, p.peekSide);
         setGoal(p, pp.x, pp.y);
+        /* виглянув і бачить — ставить ноги й стріляє, а не тицяє на ходу */
+        if (p.losToTarget && hyp(pp.x - p.x, pp.y - p.y) < 10 && now >= p.burstRestUntil) p.plant = true;
         if (now > p.peekAt) { p.peekPhase = 0; p.peekAt = now + 550 + fint(650); }
       }
       break;
@@ -1417,13 +1527,26 @@ function updatePlayer(p, dt, aliveN) {
       break;
   }
 
+  /* запит «встати» від combat() минулого кадру (далекий постріл на бігу) */
+  if (p.plantReq) p.plant = true;
+  p.plantReq = false;
   followGoal(p, dt, sprint);
   p.x += p.vx * dt; p.y += p.vy * dt;
   p.walk += hyp(p.vx, p.vy) * dt * 0.05;
-  /* без цілі дивимось за рухом */
-  if ((!t || !t.alive) && hyp(p.vx, p.vy) > 20)
-    p.aim = lerpAng(p.aim, Math.atan2(p.vy, p.vx), Math.min(1, dt * 5));
+  /* без цілі — огляд: небезпека, кути, напрямок руху (див. lookAround) */
+  if (!t || !t.alive) lookAround(p, dt);
   combat(p, dt);
+  if (simStats) {
+    const w = Math.abs(angDiff(p.aim, p._aimPrev == null ? p.aim : p._aimPrev)) / dt;
+    simStats.aimFrames++; if (w > 12) simStats.aimSnaps++;
+    if (t && t.alive && p.losToTarget) {
+      const e = angDiff(Math.atan2(t.y - p.y, t.x - p.x), p.aim);
+      if (p._errPrev != null && Math.sign(e) !== Math.sign(p._errPrev) && Math.abs(p._errPrev) > 0.04) simStats.overshoots++;
+      p._errPrev = e;
+    } else p._errPrev = null;
+    const sp = hyp(p.vx, p.vy); simStats.speedSum += sp; simStats.speedSq += sp * sp; simStats.speedN++;
+    p._aimPrev = p.aim;
+  }
 }
 
 /* ── Кулі: сегментний рейкаст (без тунелювання) ── */
@@ -1461,6 +1584,7 @@ function updateBullets(dt) {
         for (let q = 0; q < 5; q++)
           addPart(2, hx, hy, (frnd() * 2 - 1) * 150, (frnd() * 2 - 1) * 150, 0.4, 2, '#b01515');
         if (frnd() < 0.3) decalBlood(hx, hy, 0.6);
+        if (simStats) simStats.hits++;
         hurt(hitP, dmg, b.owner, { head: head });
         addFloat(hx + (frnd() * 20 - 10), hy - 22, '-' + Math.round(dmg), head ? '#ffe873' : '#ff6b60', head ? 13 : 11);
       } else if (hitOb) {
@@ -4909,6 +5033,32 @@ function apiStart(finalists, opts) {
   window.__RSO_FREEZE = function (ms) { goAt = performance.now() + (ms == null ? 1e9 : ms); };
   /* дебаг: покласти дим-завісу в точку — дивитись ефект без RNG бою */
   window.__RSO_SMOKE = function (x, y) { smokes.push({ x: x || W / 2, y: y || H / 2, r: 80, born: perfNow, until: perfNow + 7000 }); };
+  /* дебаг: прогнати бій БЕЗ рендера на віртуальному годиннику — щоб міряти поведінку
+     й баланс AI цифрами (тривалість, влучність, реакція, рух під час стрільби) */
+  window.__RSO_SIM = function (maxSec) {
+    const realNow = performance.now.bind(performance);
+    let vt = realNow(); const t0 = vt;
+    performance.now = function () { return vt; };
+    simMute = true;
+    simStats = { shots: 0, hits: 0, farShots: 0, farMoving: 0, aimErr: 0, dist: 0, react: 0, reactN: 0, aimFrames: 0, aimSnaps: 0, overshoots: 0, speedSum: 0, speedSq: 0, speedN: 0 };
+    const dt = 1 / 60;
+    try {
+      while (!endAt && vt - t0 < (maxSec || 240) * 1000 + 3400) { vt += dt * 1000; update(dt); }
+    } finally { performance.now = realNow; simMute = false; }
+    const S = simStats; simStats = null;
+    const r = x => Math.round(x * 100) / 100;
+    const mean = S.speedSum / Math.max(1, S.speedN);
+    return {
+      sec: r(((endAt ? endAt - 2000 : vt) - goAt) / 1000), done: !!endAt,
+      winner: winnerP ? winnerP.persona.role : null,
+      shots: S.shots, acc: r(S.hits / Math.max(1, S.shots) * 100),
+      farMovingPct: r(S.farMoving / Math.max(1, S.farShots) * 100),
+      aimErrDeg: r(S.aimErr / Math.max(1, S.shots) * 57.3), distAvg: Math.round(S.dist / Math.max(1, S.shots)),
+      reactMs: Math.round(S.react / Math.max(1, S.reactN)),
+      snapPct: r(S.aimSnaps / Math.max(1, S.aimFrames) * 100), overshoots: S.overshoots,
+      speedCv: r(Math.sqrt(Math.max(0, S.speedSq / Math.max(1, S.speedN) - mean * mean)) / Math.max(1, mean)),
+    };
+  };
   window.__RSO_GET = function () { return { T3: T3, players: players, heightAt: heightAt, renderer: t3Renderer, biome: BIO.key,
     obstacles: obstacles, zone: zone,
     roles: players.map(function (q) { return q.nick + ':' + q.persona.role; }) }; };

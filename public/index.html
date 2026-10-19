@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/assets/royale.css">
 <link rel="stylesheet" href="/assets/shootout.css">
 <link rel="stylesheet" href="/assets/marbles.css">
+<link rel="stylesheet" href="/assets/f1race.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="/assets/vendor/GLTFLoader.js"></script>
@@ -72,11 +73,11 @@
         <div class="field-row" style="margin-top:8px;">
           <div class="field">
             <label class="field-label">Участников гонки</label>
-            <input type="number" id="race-count" value="10" min="2" max="300">
+            <input type="number" id="race-count" value="20" min="2" max="24">
           </div>
           <div class="field small">
             <label class="field-label">Кругов</label>
-            <input type="number" id="race-laps" value="3" min="1" max="20">
+            <input type="number" id="race-laps" value="2" min="1" max="3">
           </div>
         </div>
       </div>
@@ -436,9 +437,33 @@
   </div>
 </div>
 
+<!-- 🏎️ Гонка — Гран-прі у стилі прямого ефіру F1 (рендер і режисура в f1race.js, графіка в f1race.css) -->
+<div id="f1-overlay">
+  <canvas id="f1-canvas"></canvas>
+  <div id="f1-tower"><div class="f1-tower-head"><span class="f1-tower-logo">KP</span><span id="f1-lap">LAP 1/2</span></div><div id="f1-rows"></div></div>
+  <div id="f1-bug"><span class="f1-live">LIVE</span><span>KICKPLAY GRAND PRIX</span></div>
+  <div id="f1-camtag"></div>
+  <div id="f1-lights"><div class="f1-lamp"></div><div class="f1-lamp"></div><div class="f1-lamp"></div><div class="f1-lamp"></div><div class="f1-lamp"></div></div>
+  <div id="f1-msg"></div>
+  <div id="f1-battle"></div>
+  <div id="f1-lower"></div>
+  <div id="f1-flag"></div>
+  <div id="f1-podium"></div>
+  <div id="f1-loading">ЖЕРЕБЬЁВКА ПИЛОТОВ…</div>
+  <div id="f1-controls">
+    <button class="f1-cbtn on" data-cam="" onclick="f1Cam('auto')" title="Камеры выбирает режиссёр трансляции">🎬 Режиссёр</button>
+    <button class="f1-cbtn" data-cam="onboard" onclick="f1Cam('onboard')">📹 Онборд</button>
+    <button class="f1-cbtn" data-cam="chase" onclick="f1Cam('chase')">🎥 Сзади</button>
+    <button class="f1-cbtn" data-cam="heli" onclick="f1Cam('heli')">🚁 Вертолёт</button>
+    <button class="f1-cbtn" onclick="closeF1Race()" title="Закрыть">✕</button>
+  </div>
+  <div id="f1-done"><button class="btn-dark" onclick="f1Again()">🔄 Ещё гонка</button><button class="btn-primary" onclick="closeF1Race()">Закрыть</button></div>
+</div>
+
 <script src="/assets/app.js"></script>
 <script src="/assets/royale.js"></script>
 <script src="/assets/shootout.js"></script>
+<script src="/assets/f1race.js"></script>
 <!-- Марблс тимчасово вимкнено (режим прихований у GAME_MODES, app.js): ядро й карти
      не вантажаться зовсім — це ~170КБ JS на кожне відкриття панелі. Щоб повернути,
      розкоментуй ці рядки і рядок marbles у GAME_MODES

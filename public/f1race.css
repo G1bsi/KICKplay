@@ -1,0 +1,156 @@
+/* ══════════════════════════════════════════════════════════════
+   🏎️ ГОНКА — графіка в стилі прямого ефіру F1: таблиця позицій,
+   стартові вогні, повідомлення дирекції, плашки пілотів, подіум.
+   Усе під #f1-overlay з префіксом f1- — щоб не чіпати чужі правила.
+   ══════════════════════════════════════════════════════════════ */
+#f1-overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay, 9990);
+  display: none; background: #0b0d12; overflow: hidden;
+  font-family: 'Inter', 'Arial', sans-serif; color: #fff;
+}
+#f1-overlay.visible { display: block; }
+#f1-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#f1-overlay * { box-sizing: border-box; }
+
+/* ── таблиця позицій зліва ── */
+#f1-tower {
+  position: absolute; top: 22px; left: 22px; width: 222px; display: none; z-index: 3;
+  background: rgba(16, 17, 26, 0.86); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35); pointer-events: none;
+}
+.f1-tower-head {
+  display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px;
+  background: linear-gradient(90deg, #e10600, #a30400); font-weight: 900; font-size: 15px; letter-spacing: 0.6px;
+}
+.f1-tower-logo { background: #fff; color: #e10600; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+#f1-rows { position: relative; height: calc(26px * var(--f1-n, 20)); min-height: 52px; }
+.f1-row {
+  position: absolute; left: 0; right: 0; top: 0; height: 26px;
+  display: flex; align-items: center; gap: 8px; padding: 0 10px 0 8px;
+  font-size: 14px; font-weight: 800; letter-spacing: 0.4px;
+  transition: transform 0.45s cubic-bezier(.2,.8,.2,1), background 0.2s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.f1-pos { width: 20px; text-align: right; color: #fff; font-variant-numeric: tabular-nums; }
+.f1-team { width: 4px; height: 16px; border-radius: 2px; }
+.f1-code { width: 44px; text-transform: uppercase; }
+.f1-gap { margin-left: auto; font-family: 'Roboto Mono', monospace; font-weight: 600; font-size: 12.5px; color: #c8ccd6; font-variant-numeric: tabular-nums; }
+.f1-row.f1-focus { background: #fff; color: #111; }
+.f1-row.f1-focus .f1-pos, .f1-row.f1-focus .f1-gap { color: #111; }
+.f1-row.f1-fast .f1-code::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #a855f7; margin-left: 5px; vertical-align: 1px; }
+.f1-row.f1-out { opacity: 0.55; }
+
+/* ── «жучок» каналу ── */
+#f1-bug {
+  position: absolute; top: 22px; right: 22px; z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 14px 0 6px;
+  background: rgba(255, 255, 255, 0.94); color: #111; border-radius: 6px;
+  font-weight: 900; font-size: 13px; letter-spacing: 1px;
+}
+.f1-live { background: #e10600; color: #fff; border-radius: 4px; padding: 3px 8px; font-size: 11px; letter-spacing: 1.5px; }
+.f1-live::before { content: '● '; animation: f1Blink 1.2s infinite; }
+@keyframes f1Blink { 50% { opacity: 0.25; } }
+#f1-camtag {
+  position: absolute; top: 64px; right: 22px; z-index: 3; display: none; pointer-events: none;
+  padding: 4px 10px; background: rgba(16, 17, 26, 0.8); border-radius: 4px;
+  font-size: 11px; font-weight: 800; letter-spacing: 1.6px; color: #e8e8ee;
+}
+
+/* ── стартові вогні ── */
+#f1-lights {
+  position: absolute; top: 26px; left: 50%; transform: translateX(-50%) translateY(-140%);
+  display: flex; gap: 10px; z-index: 4; transition: transform 0.4s cubic-bezier(.2,.8,.2,1); pointer-events: none;
+}
+#f1-lights.show { transform: translateX(-50%) translateY(0); }
+.f1-lamp {
+  width: 54px; height: 118px; border-radius: 10px; background: #15161c; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; align-items: center; justify-content: space-around; padding: 8px 0;
+}
+.f1-lamp::before, .f1-lamp::after { content: ''; width: 36px; height: 36px; border-radius: 50%; background: #2a0606; transition: background 0.08s, box-shadow 0.08s; }
+.f1-lamp.on::before, .f1-lamp.on::after { background: #ff1414; box-shadow: 0 0 22px #ff2a2a, 0 0 4px #fff inset; }
+
+/* ── повідомлення дирекції гонки ── */
+#f1-msg {
+  position: absolute; top: 166px; left: 50%; transform: translateX(-50%) scaleX(0.6); opacity: 0;
+  z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 10px;
+  padding: 9px 18px; background: rgba(16, 17, 26, 0.9); border-radius: 6px;
+  font-size: 18px; font-weight: 800; letter-spacing: 0.6px; white-space: nowrap;
+  transition: transform 0.3s, opacity 0.3s;
+}
+#f1-msg.show { transform: translateX(-50%) scaleX(1); opacity: 1; }
+.f1-tag { background: #e10600; padding: 2px 8px; border-radius: 4px; font-size: 13px; letter-spacing: 1.2px; }
+.f1-tag.f1-purple { background: #a855f7; }
+.f1-tag.f1-white { background: #fff; color: #111; }
+.f1-tag.f1-yellow { background: #ffd400; color: #111; }
+.f1-tag.f1-green { background: #00b050; }
+
+/* ── нижня плашка пілота і «битва» ── */
+#f1-lower {
+  position: absolute; left: 22px; bottom: 78px; z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 16px 0 0;
+  background: rgba(16, 17, 26, 0.9); border-radius: 6px; overflow: hidden;
+  transform: translateX(-120%); transition: transform 0.4s cubic-bezier(.2,.8,.2,1);
+}
+#f1-lower.show { transform: none; }
+.f1-lp { background: #fff; color: #111; height: 100%; display: flex; align-items: center; padding: 0 12px; font-weight: 900; font-size: 20px; }
+.f1-lc { width: 5px; height: 26px; border-radius: 2px; }
+.f1-ln { font-weight: 900; font-size: 20px; letter-spacing: 0.6px; text-transform: uppercase; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f1-ls { font-family: 'Roboto Mono', monospace; font-weight: 700; font-size: 18px; color: #ffd93d; margin-left: 6px; }
+.f1-ls small { font-size: 11px; color: #c8ccd6; }
+.f1-drs { background: #00b050; padding: 3px 8px; border-radius: 4px; font-weight: 900; font-size: 13px; letter-spacing: 1px; }
+#f1-battle {
+  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(30px); opacity: 0; z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: rgba(16, 17, 26, 0.9); border-radius: 6px;
+  font-weight: 900; font-size: 16px; letter-spacing: 1px; transition: transform 0.3s, opacity 0.3s;
+}
+#f1-battle.show { transform: translateX(-50%); opacity: 1; }
+#f1-battle span { border-left: 4px solid; padding-left: 7px; }
+#f1-battle b { font-family: 'Roboto Mono', monospace; color: #ffd93d; font-size: 15px; }
+
+/* ── фініш: шаховий прапор ── */
+#f1-flag {
+  position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0.4); opacity: 0;
+  z-index: 5; pointer-events: none; padding: 26px 46px; border-radius: 10px;
+  background-color: #fff;
+  background-image: linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%), linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%);
+  background-size: 40px 40px; background-position: 0 0, 20px 20px;
+  transition: transform 0.5s cubic-bezier(.2,1.3,.4,1), opacity 0.4s;
+  animation: f1Wave 1.2s ease-in-out infinite alternate;
+}
+#f1-flag::after {
+  content: 'CHEQUERED FLAG'; display: block; padding: 10px 22px; background: #e10600; color: #fff; border-radius: 6px;
+  font-size: 30px; font-weight: 900; letter-spacing: 3px;
+}
+#f1-flag.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+@keyframes f1Wave { to { background-position: 10px 4px, 30px 24px; } }
+
+/* ── подіум ── */
+#f1-podium {
+  position: absolute; inset: 0; z-index: 5; display: none; align-items: flex-end; justify-content: center; gap: 16px;
+  padding-bottom: 18vh; background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.7)); pointer-events: none;
+}
+#f1-podium.show { display: flex; }
+.f1-pod { width: 210px; background: rgba(16, 17, 26, 0.92); border-radius: 10px; padding: 18px 16px; text-align: center; animation: f1Up 0.6s cubic-bezier(.2,1.2,.4,1) backwards; }
+.f1-pod-1 { padding: 28px 16px; width: 250px; animation-delay: 0.15s; box-shadow: 0 0 40px rgba(255, 217, 61, 0.35); }
+.f1-pod-3 { animation-delay: 0.3s; }
+@keyframes f1Up { from { transform: translateY(60px); opacity: 0; } }
+.f1-pod-n { font-size: 46px; font-weight: 900; line-height: 1; }
+.f1-pod-1 .f1-pod-n { font-size: 64px; color: #ffd93d; }
+.f1-pod-bar { height: 5px; border-radius: 3px; margin: 12px auto; width: 60%; }
+.f1-pod-name { font-size: 18px; font-weight: 900; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f1-pod-1 .f1-pod-name { font-size: 22px; }
+.f1-pod-t { margin-top: 6px; font-family: 'Roboto Mono', monospace; font-size: 13px; color: #c8ccd6; }
+
+/* ── завантаження, керування ── */
+#f1-loading {
+  position: absolute; inset: 0; z-index: 6; display: none; align-items: center; justify-content: center;
+  background: #0b0d12; font-size: 22px; font-weight: 900; letter-spacing: 2px; color: #fff;
+}
+#f1-controls { position: absolute; right: 22px; bottom: 22px; z-index: 6; display: flex; gap: 8px; }
+.f1-cbtn {
+  height: 34px; padding: 0 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(16, 17, 26, 0.82); color: #dfe2ea; font-weight: 800; font-size: 12.5px; letter-spacing: 0.4px; cursor: pointer;
+}
+.f1-cbtn:hover { border-color: #ffd93d; color: #fff; }
+.f1-cbtn.on { background: #ffd93d; color: #111; border-color: #ffd93d; }
+#f1-done { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 6; display: none; gap: 10px; }
