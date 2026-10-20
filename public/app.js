@@ -430,10 +430,10 @@ const GAME_MODES = [
   { id: 'cashhunt', icon: '🎯', label: 'Cash Hunt' },
   { id: 'royale',   icon: '🪂', label: 'Батл Рояль' },
   { id: 'chatgame', icon: '💬', label: 'Бонусбуря с чатом' },
-  { id: 'marbles',  icon: '🔮', label: 'Марблс' },
-  /* «Гонка» тимчасово прихована з перемикача (код гри лишився цілим —
-     щоб повернути, розкоментуй рядок тут і скрипт f1race.js в index.html) */
+  /* «Гонка» і «Марблс» тимчасово приховані з перемикача (код ігор лишився цілим —
+     щоб повернути, розкоментуй рядок тут і скрипти в index.html) */
   // { id: 'race',     icon: '🏎️', label: 'Гонка' },
+  // { id: 'marbles',  icon: '🔮', label: 'Марблс' },
 ];
 
 // Перемикання режиму стрілками (з циклічним переходом)
@@ -2654,14 +2654,15 @@ function renderBotStatus(state) {
     dot.className = 'dot ' + (state.accepting ? 'open' : 'closed');
     return;
   }
-  const silent = k.ok && (k.lastMsgAgo === null || k.lastMsgAgo > 300);
-  dot.className = 'dot ' + (k.ok ? (silent ? 'warn' : 'open') : 'closed');
+  // напис завжди «чат Kick» (власник не хоче «чат тихий»/«нет чата»); стан — кольором крапки
+  // і в підказці при наведенні: зелена — підключено, червона — звʼязку з чатом немає
+  dot.className = 'dot ' + (k.ok ? 'open' : 'closed');
   let txt;
   if (!k.ok) txt = 'нет связи с чатом Kick (' + k.state + ')' + (k.error ? ': ' + k.error : '');
   else if (k.lastMsgAgo === null) txt = 'подключён к чату ' + k.chatroom + ', но ни одного сообщения не пришло — проверь, твой ли это чат (KICK_CHANNEL)';
   else txt = 'чат Kick: ' + k.chatroom + ' · сообщений ' + k.msgs + ' · последнее ' + k.lastMsgAgo + 'с назад';
   pill.title = txt;
-  pill.firstChild.textContent = k.ok ? (silent ? 'чат тихий ' : 'чат Kick ') : 'нет чата ';
+  pill.firstChild.textContent = 'чат Kick ';
 }
 
 renderWinners();
