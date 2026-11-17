@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 (function () {
 const PHYS_URL = '/assets/models/marbles/sky_phys.json';
-const GLB_URL = '/assets/models/marbles/sky.glb';
+const GLB_URL = '/assets/models/marbles/sky.glb?v=20261117';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
 let DATA = null, GLB_SCENE = null, GLB_PROM = null;
 
 function b2u8(b64) {

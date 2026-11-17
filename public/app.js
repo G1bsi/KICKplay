@@ -444,10 +444,10 @@ const GAME_MODES = [
   // { id: 'race',     icon: '🏎️', label: 'Гонка' },
   // { id: 'marbles',  icon: '🔮', label: 'Шарики' },
 ];
-// Марблс у розробці: видно лише на локальному сервері (localhost) — на Render прихований.
-// Скрипти ядра й карт index.html довантажує там само лише локально.
+// Шарики (marbles.js) — увімкнені і локально, і на Render.
+// Скрипти ядра й карт підключені в index.html звичайними тегами.
 const IS_LOCAL_DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-if (IS_LOCAL_DEV) GAME_MODES.push({ id: 'marbles', icon: '🔮', label: 'Шарики' });
+GAME_MODES.push({ id: 'marbles', icon: '🔮', label: 'Шарики' });   // Шарики увімкнені всюди (не лише локально)
 
 // Перемикання режиму стрілками (з циклічним переходом)
 function cycleGameMode(dir) {

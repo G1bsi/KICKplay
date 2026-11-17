@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 (function () {
 const PHYS_URL = '/assets/models/marbles/dog_phys.json';
-const GLB_URL = '/assets/models/marbles/dog.glb';
+const GLB_URL = '/assets/models/marbles/dog.glb?v=20261117';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
 let DATA = null, GLB_SCENE = null, GLB_PROM = null;
 
 function b2u8(b64) {
