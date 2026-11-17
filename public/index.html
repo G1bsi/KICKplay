@@ -4,12 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KICKPLAY</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ffd93d'/%3E%3Cpath d='M36 8 16 38h12l-4 18 24-32H34l6-16z' fill='%230a0a0c'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2353fc18'/%3E%3Cpath d='M36 8 16 38h12l-4 18 24-32H34l6-16z' fill='%230a0a0c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="/assets/tokens.css">
 <link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/assets/shell.css">
 <link rel="stylesheet" href="/assets/royale.css">
 <link rel="stylesheet" href="/assets/shootout.css">
 <link rel="stylesheet" href="/assets/marbles.css">
@@ -22,34 +23,45 @@
 </head>
 <body>
 
-<!-- ── Топбар: бренд + статус бота ─────────────────────────── -->
+<!-- Тло: неонові відсвіти + ледь помітна сітка (лише декор, клікам не заважає) -->
+<div class="bg-fx" aria-hidden="true"><span class="bg-glow g1"></span><span class="bg-glow g2"></span><span class="bg-glow g3"></span></div>
+
+<!-- ── Топбар: бренд · живі лічильники · статус чату ─────────── -->
 <header class="topbar">
   <div class="brand">
-    <span class="brand-badge">⚡</span>
-    <span class="brand-name">KICK<em>PLAY</em></span>
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32"><path d="M18.5 3 7 18h7.5L12 29l13-16h-7.8z"/></svg>
+    </span>
+    <span class="brand-text">
+      <span class="brand-name">KICK<em>PLAY</em></span>
+      <span class="brand-sub">розыгрыши для стрима</span>
+    </span>
   </div>
-  <div id="floating-status" class="status-pill">
-    чат Kick <span class="dot closed" id="conn-dot"></span>
+  <div class="top-stats">
+    <div class="tstat"><span class="tstat-k">Участники</span><span class="tstat-v" id="tstat-part">0</span></div>
+    <div class="tstat gold"><span class="tstat-k">Победители</span><span class="tstat-v" id="tstat-win">0</span></div>
+    <div class="tstat mode"><span class="tstat-k">Режим</span><span class="tstat-v" id="tstat-mode">—</span></div>
   </div>
+  <div id="floating-status" class="status-pill">чат Kick <span class="dot closed" id="conn-dot"></span></div>
 </header>
 
 <div class="layout">
 
-  <!-- ── Ліва колонка: керування ─────────────────────────── -->
-  <aside class="stack">
+  <!-- ── Ліва колонка: пульт ─────────────────────────────── -->
+  <aside class="stack deck">
 
     <section class="card">
       <div class="card-head">
-        <span class="card-chip"><i>🎟</i></span>
+        <span class="card-step">01</span>
         <h2>Регистрация</h2>
       </div>
       <div class="field-row">
         <div class="field" style="flex:1;">
-          <label class="field-label">Слово для участия</label>
+          <label class="field-label" for="raffle-cmd">Слово для участия</label>
           <input type="text" id="raffle-cmd" value="" placeholder="!join" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
         </div>
         <div class="field small">
-          <label class="field-label">Победителей</label>
+          <label class="field-label" for="winners-count">Победителей</label>
           <input type="number" id="winners-count" value="1" min="1" max="200">
         </div>
       </div>
@@ -59,14 +71,14 @@
 
     <section class="card">
       <div class="card-head">
-        <span class="card-chip"><i>🕹</i></span>
+        <span class="card-step">02</span>
         <h2>Режим игры</h2>
       </div>
-      <div class="mode-carousel">
+      <!-- Плитки режимів будує ui.js із GAME_MODES (app.js); карусель лишається прихованою — app.js оновлює її -->
+      <div class="mode-grid" id="mode-grid"></div>
+      <div class="mode-carousel" hidden>
         <button type="button" class="mode-arrow" onclick="cycleGameMode(-1)" aria-label="Предыдущий режим">&#8249;</button>
-        <div class="mode-current" id="mode-current">
-          <span class="mc-icon">🎰</span><span class="mc-label">Дефолт</span>
-        </div>
+        <div class="mode-current" id="mode-current"><span class="mc-icon">🎰</span><span class="mc-label">Дефолт</span></div>
         <button type="button" class="mode-arrow" onclick="cycleGameMode(1)" aria-label="Следующий режим">&#8250;</button>
       </div>
 
@@ -84,34 +96,25 @@
       </div>
 
       <div class="subfield">
-        <label class="field-label">⏱ Время на ответ</label>
-        <div class="mode-carousel slim">
-          <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(-1)" aria-label="Меньше времени">&#8249;</button>
+        <label class="field-label">Время на ответ победителя</label>
+        <div class="stepper">
+          <button type="button" class="step-btn" onclick="adjustConfirmSeconds(-1)" aria-label="Меньше времени">−</button>
           <div class="time-current" id="confirm-display">1 мин</div>
-          <button type="button" class="mode-arrow" onclick="adjustConfirmSeconds(1)" aria-label="Больше времени">&#8250;</button>
+          <button type="button" class="step-btn" onclick="adjustConfirmSeconds(1)" aria-label="Больше времени">+</button>
         </div>
         <input type="number" id="confirm-seconds" value="60" min="0" max="600" style="display:none;">
         <input type="checkbox" id="toggle-confirm" checked style="display:none;">
       </div>
     </section>
 
-    <!-- Головна дія — жовтий hero-блок -->
+    <!-- Головна дія -->
     <section class="hero-actions">
-      <button class="btn-primary hero-start" onclick="startGame()">▶&nbsp; СТАРТ</button>
+      <button class="btn-primary hero-start" onclick="startGame()">
+        <span class="hs-glyph" aria-hidden="true">▶</span><span class="hs-text">СТАРТ</span>
+      </button>
       <div class="hero-secondary">
-        <button class="btn-dark" onclick="downloadCSV()">🎱 Шарики</button>
-        <button class="btn-dark" onclick="resetRaffle()">🗑 Сброс</button>
-      </div>
-    </section>
-
-    <section class="card grow">
-      <div class="card-head">
-        <span class="card-chip"><i>🏆</i></span>
-        <h2>Победители <span class="count-badge" id="winners-count-title">0</span></h2>
-        <button class="btn-icon" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
-      </div>
-      <div class="box" id="winners-box">
-        <div class="empty-box">Победителей пока нет</div>
+        <button class="btn-dark" onclick="downloadCSV()">⬇ Список CSV</button>
+        <button class="btn-dark btn-danger-soft" onclick="resetRaffle()">↺ Сброс</button>
       </div>
     </section>
 
@@ -120,11 +123,14 @@
     <span id="progress" hidden></span>
   </aside>
 
-  <!-- ── Центр: учасники ─────────────────────────────────── -->
-  <main class="card" id="participants-col">
+  <!-- ── Центр: сцена учасників ──────────────────────────── -->
+  <main class="card stage" id="participants-col">
     <div class="card-head">
-      <span class="card-chip"><i>👥</i></span>
-      <h2>Участники <span class="count-badge" id="participants-count-title">0</span></h2>
+      <span class="card-step">03</span>
+      <h2>Участники</h2>
+      <span class="count-badge" id="participants-count-title">0</span>
+      <span class="head-spacer"></span>
+      <span class="live-tag" id="reg-live-tag">● регистрация</span>
     </div>
     <div class="box" id="main-box">
       <div class="empty-box">Ожидание регистрации...</div>
@@ -135,22 +141,39 @@
     </div>
   </main>
 
-  <!-- ── Права колонка: живий чат ────────────────────────── -->
-  <aside class="card" id="chat-col">
-    <div class="card-head">
-      <span class="card-chip"><i>💬</i></span>
-      <h2>Чат</h2>
-    </div>
-    <div class="box chat-flow" id="chat-box">
-      <div class="empty-box">Ожидание сообщений...</div>
-    </div>
+  <!-- ── Права колонка: переможці + живий чат ─────────────── -->
+  <aside class="side">
+    <section class="card winners-card">
+      <div class="card-head">
+        <span class="card-step gold">★</span>
+        <h2>Победители</h2>
+        <span class="count-badge gold" id="winners-count-title">0</span>
+        <span class="head-spacer"></span>
+        <button class="btn-icon" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
+      </div>
+      <div class="box" id="winners-box">
+        <div class="empty-box">Победителей пока нет</div>
+      </div>
+    </section>
+
+    <section class="card chat-card" id="chat-col">
+      <div class="card-head">
+        <span class="card-step violet">#</span>
+        <h2>Чат</h2>
+        <span class="head-spacer"></span>
+        <span class="live-tag violet">live</span>
+      </div>
+      <div class="box chat-flow" id="chat-box">
+        <div class="empty-box">Ожидание сообщений...</div>
+      </div>
+    </section>
   </aside>
 
 </div>
 
-<!-- Тестові учасники — невелика непомітна панель у лівому нижньому куті -->
+<!-- Тестові учасники — непомітна панель у лівому нижньому куті -->
 <details class="test-section-fixed" id="test-section-fixed">
-  <summary>🧪</summary>
+  <summary title="Тест без стрима">🧪</summary>
   <div class="field-row">
     <input type="text" id="test-name" placeholder="имя игрока" onkeydown="if(event.key==='Enter')addTestPlayer()">
     <button class="btn-green btn-small" onclick="addTestPlayer()">+1</button>
@@ -165,13 +188,26 @@
 
 <!-- Оголошення переможця -->
 <div id="winner-announce">
-  <div class="wa-label">Победитель</div>
-  <div class="wa-name" id="wa-name">—</div>
-  <div class="wa-timer" id="wa-timer"></div>
-  <div class="wa-msg" id="wa-msg" style="display:none;"></div>
-  <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
-  <a class="wa-source" id="wa-source" target="_blank" rel="noopener"></a>
-  <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+  <canvas id="wa-fx" aria-hidden="true"></canvas>
+  <div class="wa-stage">
+    <div class="wa-hero">
+      <div class="wa-rays" aria-hidden="true"></div>
+      <svg class="wa-ring" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="wa-ring-bg" cx="100" cy="100" r="92"></circle>
+        <circle class="wa-ring-fg" id="wa-ring" cx="100" cy="100" r="92"></circle>
+      </svg>
+      <div class="wa-avatar" id="wa-avatar"><span id="wa-av-letter"></span><img id="wa-av-img" alt=""></div>
+      <div class="wa-timer" id="wa-timer"></div>
+    </div>
+    <div class="wa-card">
+      <div class="wa-label">Победитель</div>
+      <div class="wa-name" id="wa-name">—</div>
+    </div>
+    <div class="wa-sub" id="wa-sub">Напишите сообщение в чат</div>
+    <div class="wa-msg" id="wa-msg" style="display:none;"></div>
+    <a class="wa-source" id="wa-source" target="_blank" rel="noopener"></a>
+    <button class="wa-close" onclick="closeAnnounce()">Закрыть</button>
+  </div>
 </div>
 
 <!-- Оверлей Cash Hunt -->
@@ -315,15 +351,22 @@
     <button class="so-cambtn" id="so-fly-btn" onclick="rsoToggleFly()" title="Свободный полёт">🚁 Полёт</button>
     <button class="so-cambtn" id="so-overview-btn" onclick="rsoToggleOverview()" title="К бою">⚔ К бою</button>
   </div>
-  <div class="so-flyhint" id="so-flyhint">WASD — движение · мышь — обзор · Space/C — вверх/вниз · колесо — скорость</div>
+  <div class="so-flyhint" id="so-flyhint">WASD — движение · мышь — обзор · Space/E — вверх · C/Q — вниз · колесо — скорость</div>
   <div id="so-countdown"></div>
   <div class="so-winner" id="so-winner">
-    <div class="so-winner-crown">👑</div>
-    <div class="so-winner-title">Winner Winner</div>
-    <div class="so-winner-sub">Chicken Dinner</div>
-    <div class="so-winner-name" id="so-winner-name"></div>
-    <div class="so-winner-stats" id="so-winner-stats"></div>
-    <button class="btn-primary so-winner-close" onclick="RSO.stop()">Закрыть</button>
+    <canvas class="wc-fx" aria-hidden="true"></canvas>
+    <div class="wc-hero">
+      <div class="wc-rays" aria-hidden="true"></div>
+      <div class="wc-ring-solid" aria-hidden="true"></div>
+      <div class="wc-avatar"><span></span><img alt=""></div>
+      <div class="wc-crown">👑</div>
+    </div>
+    <div class="wc-card">
+      <div class="wc-label">Winner winner · chicken dinner</div>
+      <div class="wc-name so-winner-name" id="so-winner-name"></div>
+    </div>
+    <div class="wc-stats so-winner-stats" id="so-winner-stats"></div>
+    <button class="wc-close so-winner-close" onclick="RSO.stop()">Закрыть</button>
   </div>
 </div>
 
@@ -359,11 +402,21 @@
   </div>
   <!-- Центральна колонка: поточний переможець + його повідомлення + кнопки -->
   <div id="chatgame-left">
-    <div id="chatgame-winner-name">—</div>
-    <div id="chatgame-timer-block">
-      <div id="chatgame-timer">—</div>
-      <div id="chatgame-sub">ВРЕМЯ НА ОТВЕТ</div>
+    <div class="wc-hero cg-hero">
+      <div class="wc-rays" aria-hidden="true"></div>
+      <svg class="wc-ring" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="wc-ring-bg" cx="100" cy="100" r="92"></circle>
+        <circle class="wc-ring-fg" id="cg-ring" cx="100" cy="100" r="92"></circle>
+      </svg>
+      <div class="wc-avatar" id="cg-avatar"><span></span><img alt=""></div>
+      <div id="chatgame-timer-block">
+        <div id="chatgame-timer">—</div>
+      </div>
     </div>
+    <div class="wc-card cg-card">
+      <div class="wc-name" id="chatgame-winner-name">—</div>
+    </div>
+    <div id="chatgame-sub">ВРЕМЯ НА ОТВЕТ</div>
     <div id="chatgame-msgs-label">Сообщения в чат:</div>
     <div id="chatgame-msgs">
       <div id="chatgame-no-msgs"></div>
@@ -408,7 +461,7 @@
   <!-- HUD як у грі: пігулка режим | кульки | таймер, поруч червоний відлік після першого фінішу -->
   <div id="mb-hud">
     <div class="mb-pill" id="mb-pill">
-      <span class="mb-pill-name" id="mb-pill-name">🔮 Марблс</span>
+      <span class="mb-pill-name" id="mb-pill-name">🔮 Шарики</span>
       <span class="mb-pill-item"><span class="mb-ico-ball"></span><span id="mb-alive">0/0</span></span>
       <span class="mb-pill-item"><span class="mb-ico-clock"></span><span id="mb-timer">00:00.000</span></span>
     </div>
@@ -423,7 +476,7 @@
     <button class="mb-cambtn" id="mb-fly-btn" onclick="mbToggleFly()" title="Свободный полёт">🚁 Полёт</button>
     <button class="mb-cambtn" onclick="mbAutoCam()" title="Камера за лидером">🎥 Авто</button>
   </div>
-  <div class="mb-flyhint" id="mb-flyhint">WASD — движение · мышь — обзор · Space/C — вверх/вниз · Shift — ускорение · колесо — скорость</div>
+  <div class="mb-flyhint" id="mb-flyhint">WASD — движение · мышь — обзор · Space/E — вверх · C/Q — вниз · Shift — ускорение · колесо — скорость</div>
   <div id="mb-controls">
     <button class="btn-dark" onclick="mbRestartRace()">🔄 Ещё раз</button>
     <button class="btn-dark" onclick="mbChangeMap()">🗺 Другая карта</button>
@@ -462,6 +515,12 @@
 </div>
 
 <script src="/assets/app.js"></script>
+<script src="/assets/ui.js"></script>
+<script src="/assets/revolver3d.js"></script>
+<script src="/assets/cashhunt3d.js"></script>
+<script src="/assets/roulette2.js"></script>
+<script src="/assets/winner-card.js"></script>
+<script src="/assets/wincard-modes.js"></script>
 <script src="/assets/royale.js"></script>
 <script src="/assets/shootout.js"></script>
 <!-- Гонка прихована — не вантажимо ~70КБ на кожне відкриття панелі. Щоб повернути, розкоментуй:
@@ -469,10 +528,16 @@
 -->
 <!-- 🔮 Марблс прихований (див. GAME_MODES в app.js) — ядро й карти не вантажимо. Щоб повернути, розкоментуй:
 <script src="/assets/marbles.js"></script>
-<script src="/assets/marbles-maps/endurance.js"></script>
-<script src="/assets/marbles-maps/few.js"></script>
-<script src="/assets/marbles-maps/pixel.js"></script>
-<script src="/assets/marbles-maps/neon.js"></script>
+<script src="/assets/marbles-maps/sky.js"></script>
+<script src="/assets/marbles-maps/zeus.js"></script>
+<script src="/assets/marbles-maps/dog.js"></script>
 -->
+<!-- Локально (localhost) Марблс увімкнений для тестів: ті самі скрипти вантажимо лише там -->
+<script>
+if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+  ['marbles.js', 'marbles-maps/sky.js', 'marbles-maps/zeus.js', 'marbles-maps/dog.js']
+    .forEach(f => { const s = document.createElement('script'); s.src = '/assets/' + f; s.async = false; document.body.appendChild(s); });
+}
+</script>
 </body>
 </html>

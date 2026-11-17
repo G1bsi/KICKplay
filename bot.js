@@ -262,6 +262,57 @@ function getCookie(req, name) {
 }
 
 // ── HTTP сервер ─────────────────────────────────────────────
+// ── Аватарки Kick для панелі ─────────────────────────────────
+// У подіях чату Kick аватарки немає — беремо її з профілю (api/v1/users/<нік>,
+// поле profilepic), кешуємо і віддаємо панелі як редирект на картинку
+// (files.kick.com / s3 — <img> тягне без CORS). Запити — чергою по 3, щоб на
+// розіграші з сотнями учасників не засипати Kick. Kick іноді ріже хмарні IP —
+// тоді кеш тримає «немає» 15 хв, а панель показує кольорову літеру.
+const avatarCache = new Map();        // нік (lower) → { url|null, t }
+const avatarQueue = [];               // ніки, що чекають запиту
+const avatarWaiters = new Map();      // нік (lower) → [resolve]
+let avatarActive = 0;
+function avatarFetchOne(name) {
+  const key = name.toLowerCase();
+  avatarActive++;
+  const ac = new AbortController(); const to = setTimeout(() => ac.abort(), 6000);
+  fetch('https://kick.com/api/v1/users/' + encodeURIComponent(name), { signal: ac.signal, headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } })
+    .then(r => r.ok ? r.json() : null)
+    .then(j => { const u = j && (j.profilepic || j.profile_pic); return typeof u === 'string' && /^https:\/\//.test(u) ? u : null; })
+    .catch(() => null)
+    .then(url => {
+      clearTimeout(to); avatarActive--;
+      avatarCache.set(key, { url, t: Date.now() });
+      (avatarWaiters.get(key) || []).forEach(fn => fn(url)); avatarWaiters.delete(key);
+      avatarPump();
+    });
+}
+function avatarPump() {
+  while (avatarActive < 3 && avatarQueue.length) avatarFetchOne(avatarQueue.shift());
+}
+function avatarFresh(key) {
+  const c = avatarCache.get(key);
+  if (!c) return false;
+  return Date.now() - c.t < (c.url ? 24 * 3600e3 : 15 * 60e3);
+}
+function avatarWant(name) {
+  const key = String(name || '').toLowerCase();
+  if (!/^[a-z0-9_\-.]{1,40}$/i.test(key) || avatarFresh(key)) return;
+  if (avatarQueue.some(n => n.toLowerCase() === key) || avatarWaiters.has(key)) return;
+  if (avatarCache.size > 5000) avatarCache.clear();
+  avatarQueue.push(name); avatarPump();
+}
+function avatarGet(name, ms) {
+  const key = String(name || '').toLowerCase();
+  if (avatarFresh(key)) return Promise.resolve(avatarCache.get(key).url);
+  if (!/^[a-z0-9_\-.]{1,40}$/i.test(key)) return Promise.resolve(null);
+  return new Promise(res => {
+    const list = avatarWaiters.get(key) || []; list.push(res); avatarWaiters.set(key, list);
+    if (!avatarQueue.some(n => n.toLowerCase() === key) && list.length === 1) { avatarQueue.push(name); avatarPump(); }
+    setTimeout(() => res(null), ms);
+  });
+}
+
 const server = http.createServer((req, res) => {
 
   // Статика — ДО перевірки сесії. Інакше при протухлій сесії гейт віддає login.html
@@ -354,6 +405,17 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/logout' && req.method === 'POST') {
     sessions.delete(token);
     res.writeHead(200); res.end();
+    return;
+  }
+
+  // аватарка учасника: 302 на картинку Kick або 404 (панель покаже літеру)
+  if (req.url.startsWith('/api/avatar/')) {
+    const name = decodeURIComponent(req.url.slice('/api/avatar/'.length).split('?')[0]);
+    avatarGet(name, 5000).then(url => {
+      if (url) res.writeHead(302, { 'Location': url, 'Cache-Control': 'private, max-age=86400' });
+      else res.writeHead(404, { 'Cache-Control': 'no-store' });
+      res.end();
+    });
     return;
   }
 
@@ -1034,6 +1096,7 @@ async function connect() {
     if (raffleAccepting && cmdMatch) {
       if (!rafflePlayers.includes(username)) {
       rafflePlayers.push(username);
+      avatarWant(username);
       saveState();
       console.log(`[РОЗІГРАШ +] ${username} (${rafflePlayers.length})`);
       }

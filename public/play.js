@@ -162,8 +162,8 @@ function resize() {
 window.addEventListener('resize', function () { if (!scrGame.classList.contains('hidden')) resize(); });
 
 /* тінти перешкод: прості форми, але типи розрізняються з першого погляду */
-const OB_FILL = { wall: '#3a3a3e', barrier: '#45453b', sandbag: '#5a5138', crate: '#6b5327', barrel: '#8a4a2a', bush: '#2f4a2b', tree: '#4a3b2a' };
-const OB_LINE = { wall: '#55555b', barrier: '#61614f', sandbag: '#7a6f4d', crate: '#8f7136', barrel: '#b06438', bush: '#41663a', tree: '#655139' };
+const OB_FILL = { wall: '#3a3a3e', barrier: '#45453b', sandbag: '#5a5138', crate: '#6b5327', barrel: '#8a4a2a', bush: '#2f4a2b', tree: '#4a3b2a', mapRect: '#56544f', mapRound: '#5a5c62' };
+const OB_LINE = { wall: '#55555b', barrier: '#61614f', sandbag: '#7a6f4d', crate: '#8f7136', barrel: '#b06438', bush: '#41663a', tree: '#655139', mapRect: '#77736b', mapRound: '#7b7e86' };
 
 function frame() {
   raf = requestAnimationFrame(frame);

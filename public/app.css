@@ -1,8 +1,7 @@
   /* ══════════════════════════════════════════════════════════
-     Панель керування — чорно-жовта мова з референсів:
-     великі скруглені чорні картки зі світлим кантом зверху,
-     один домінантний жовтий hero-блок, жовті pill-бейджі.
-     Палітра і шкали — у tokens.css.
+     Ігрові екрани й оверлеї панелі (Cash Hunt, рулетка, гонка,
+     револьвер, оголошення переможця, чат-гра…). Каркас панелі —
+     у shell.css, палітра і шкали — у tokens.css.
      Легасі-псевдоніми лишаються: старі імена змінних ще живуть
      у секціях мініігор нижче.
      ══════════════════════════════════════════════════════════ */
@@ -13,408 +12,11 @@
     --panel-bg:     var(--surface-1);
     --panel-border: var(--border);
     --text-main:    var(--text);
-    --gold:         var(--accent-hi);
+    --gold:         var(--winner);
     --red:          var(--danger);
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-ui);
-    height: 100vh;
-    overflow: hidden;
-    padding: var(--space-3) var(--space-4) var(--space-4);
-    background-image:
-      radial-gradient(120% 55% at 50% -12%, rgba(var(--accent-rgb), 0.07), transparent 60%);
-    user-select: none;
-    -webkit-user-select: none;
-    display: flex;
-    flex-direction: column;
-  }
-  /* Дозволяємо виділяти лише нікнейми учасників, переможців і чат */
-  .participant-row span:last-child,
-  .w-name,
-  .wa-name,
-  .chat-msg,
-  input[type=text], input[type=number], input[type=password] {
-    user-select: text;
-    -webkit-user-select: text;
-  }
-  /* Гарантуємо що кнопки клікаються незважаючи на user-select:none */
-  button, input, select, label, a, [onclick], summary, details {
-    pointer-events: auto !important;
-    cursor: pointer;
-  }
-  :focus-visible { outline: none; box-shadow: var(--focus-ring); }
-
-  /* ── Топбар ─────────────────────────────── */
-  .topbar {
-    max-width: 1750px; width: 100%; margin: 0 auto var(--space-3);
-    display: flex; align-items: center; justify-content: space-between;
-    flex-shrink: 0;
-  }
-  .brand { display: flex; align-items: center; gap: var(--space-3); }
-  .brand-badge {
-    width: 40px; height: 40px; border-radius: var(--r-md);
-    background: var(--accent-fill);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
-    box-shadow: var(--bloom-accent);
-  }
-  .brand-name {
-    font-size: 20px; font-weight: var(--fw-black); letter-spacing: 1px;
-    color: var(--text);
-  }
-  .brand-name em { font-style: normal; color: var(--accent); }
-  .status-pill {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--r-full);
-    font-size: var(--fs-xs);
-    font-weight: var(--fw-bold);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-muted);
-    display: flex; align-items: center;
-    box-shadow: var(--shadow-1);
-  }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:var(--space-2); background:var(--surface-4); transition: var(--t-base); }
-  .dot.open   { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-  .dot.closed { background: var(--danger); box-shadow: var(--glow-danger); }
-  /* підписка на чат є, але повідомлень давно не було — привід перевірити chatroom */
-  .dot.warn   { background: #ff9d00; box-shadow: 0 0 10px #ff9d00; }
-
-  /* ── Сітка Layout ──────────────────────── */
-  .layout {
-    max-width: 1750px; width: 100%; margin: 0 auto;
-    display: grid;
-    grid-template-columns: 340px minmax(320px, 1fr) 380px;
-    gap: var(--space-4);
-    flex: 1;
-    min-height: 0;
-  }
-  @media (max-width: 1200px) {
-    .layout { grid-template-columns: 340px 1fr; }
-    #chat-col { display: none; }
-  }
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; overflow-y: auto; }
-    body { overflow: auto; height: auto; }
-  }
-
-  .stack { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; overflow-y: auto; scrollbar-width: none; }
-  .stack::-webkit-scrollbar { display: none; }
-
-  /* ── Картки ─────────────────────────────── */
-  .card {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-xl);
-    padding: var(--space-4) var(--space-4);
-    display: flex; flex-direction: column;
-    min-height: 0;
-    box-shadow: var(--shadow-2);
-    flex-shrink: 0;
-  }
-  .card.grow { flex: 1; min-height: 180px; }
-  main.card, aside.card { flex-shrink: 1; }
-
-  .card-head {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: var(--space-3);
-    flex-shrink: 0;
-  }
-  .card-chip {
-    width: 32px; height: 32px; border-radius: var(--r-sm);
-    background: var(--accent-fill);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; flex-shrink: 0;
-    box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.25);
-  }
-  /* кольорові емодзі на жовтому читались погано — brightness(0) робить з них
-     суцільний чорний силует; фільтр на вкладеному <i>, бо на самій плитці
-     він зачорнив би і її жовтий фон */
-  .card-chip i { font-style: normal; filter: brightness(0); }
-  .card-head h2 {
-    font-size: var(--fs-md); font-weight: var(--fw-black);
-    text-transform: uppercase; letter-spacing: 0.8px;
-    display: flex; align-items: center; gap: var(--space-2);
-    flex: 1; min-width: 0;
-  }
-  .count-badge {
-    background: var(--accent); color: var(--on-accent);
-    font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: var(--fw-bold);
-    padding: 2px 10px; border-radius: var(--r-full);
-    letter-spacing: 0;
-  }
-  .btn-icon {
-    width: 30px; height: 30px; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--surface-2); color: var(--text-muted);
-    border: 1px solid var(--border); border-radius: var(--r-sm);
-    font-size: var(--fs-sm);
-  }
-  .btn-icon:hover { background: var(--surface-3); color: var(--text); border-color: var(--border-strong); }
-
-  /* ── Поля вводу ──────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
-  .field-row { display: flex; gap: var(--space-2); }
-  .field.small { flex: 0 0 96px; }
-  .subfield { margin-top: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
-  label.field-label { font-size: var(--fs-micro); color: var(--text-muted); font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.6px; }
-
-  input[type=text], input[type=number] {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md);
-    padding: 11px var(--space-3); color: var(--text); font-family: var(--font-mono);
-    font-size: var(--fs-md); outline: none; width: 100%;
-    transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
-  }
-  input[type=text]::placeholder, input[type=number]::placeholder { color: var(--text-faint); }
-  input:focus { border-color: var(--accent); background: var(--surface-3); box-shadow: var(--focus-ring); }
-  input:disabled { opacity: 0.5; }
-
-  #raffle-cmd { color: var(--accent); font-weight: var(--fw-bold); }
-  #winners-count, #confirm-seconds { text-align: center; }
-
-  /* ── Перемикач режиму гри (карусель) ─────────────────── */
-  .mode-carousel {
-    display: flex; align-items: stretch; gap: var(--space-2);
-    background: var(--surface-2); padding: 6px; border-radius: var(--r-lg);
-    border: 1px solid var(--border);
-  }
-  .mode-arrow {
-    flex: 0 0 auto; width: 44px; border: none; border-radius: var(--r-md);
-    background: transparent; color: var(--text-faint);
-    font-size: var(--fs-xl); font-weight: var(--fw-black); line-height: 1; cursor: pointer;
-    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-ui);
-  }
-  .mode-arrow:hover  { background: var(--surface-3); color: var(--text); }
-  .mode-arrow:active { transform: scale(0.93); }
-  /* Поточний режим — маленька жовта картка, як тайли на референсах */
-  .mode-current {
-    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 2px; text-align: center;
-    padding: 10px var(--space-2); min-height: 62px; border-radius: var(--r-md); user-select: none;
-    background: var(--accent-fill); color: var(--on-accent);
-    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.22);
-  }
-  .mode-current .mc-icon  { font-size: 22px; line-height: 1; }
-  .mode-current .mc-label { font-size: var(--fs-sm); font-weight: var(--fw-black); text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.15; }
-  .mode-current .mc-beta  { font-size: 9px; font-weight: var(--fw-bold); opacity: 0.55; text-transform: uppercase; letter-spacing: 1px; }
-  .mode-carousel.slim { padding: 4px; border-radius: var(--r-md); }
-  .mode-carousel.slim .mode-arrow { width: 38px; font-size: var(--fs-lg); border-radius: var(--r-sm); }
-  .time-current {
-    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center;
-    padding: 8px var(--space-2); min-height: 38px; border-radius: var(--r-sm); user-select: none;
-    background: var(--accent-dim); color: var(--accent);
-    border: 1px solid rgba(var(--accent-rgb), 0.25);
-    font-family: var(--font-mono);
-    font-size: var(--fs-md); font-weight: var(--fw-bold); letter-spacing: 0.5px;
-  }
-
-  /* ── Кнопки ──────────────────────────────
-     solid (головна дія) / tonal (альтернатива) / danger / ghost */
-  button {
-    padding: 10px var(--space-3); border: 1px solid transparent; border-radius: var(--r-md);
-    font-size: var(--fs-sm);
-    font-weight: var(--fw-black); cursor: pointer; font-family: var(--font-ui);
-    text-transform: uppercase; letter-spacing: 0.5px;
-    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast),
-                box-shadow var(--t-fast), transform var(--t-fast);
-    flex-shrink: 0;
-  }
-  button:hover  { transform: translateY(-1px); }
-  button:active { transform: scale(0.97); }
-  button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
-
-  .btn-primary {
-    background: var(--accent-fill); color: var(--on-accent);
-    padding: 13px var(--space-5); font-size: var(--fs-md);
-    box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.20);
-  }
-  .btn-primary:hover:not(:disabled) { box-shadow: 0 10px 30px rgba(var(--accent-rgb), 0.35); }
-
-  .btn-gold, .btn-orange, .btn-green {
-    background: var(--accent-dim); color: var(--accent);
-    border-color: rgba(var(--accent-rgb), 0.30);
-  }
-  .btn-gold:hover:not(:disabled),
-  .btn-orange:hover:not(:disabled),
-  .btn-green:hover:not(:disabled) {
-    background: rgba(var(--accent-rgb), 0.16);
-    border-color: rgba(var(--accent-rgb), 0.55);
-    color: var(--accent-hi);
-  }
-
-  .btn-red {
-    background: var(--danger-dim); color: var(--danger);
-    border-color: rgba(var(--danger-rgb), 0.35); width: 100%;
-  }
-  .btn-red:hover:not(:disabled) { background: rgba(var(--danger-rgb), 0.18); border-color: rgba(var(--danger-rgb), 0.6); }
-  .btn-red.fit { width: auto; }
-
-  .btn-dark {
-    background: var(--surface-2); color: var(--text-muted);
-    border-color: var(--border);
-  }
-  .btn-dark:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
-
-  .btn-small { padding: 6px 10px; font-size: var(--fs-xs); border-radius: var(--r-sm); }
-
-  .btn-row { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
-  .btn-row button { margin: 0; flex: 1; }
-
-  /* Кнопка реєстрації: стан задає JS через className, тому стилі — на id */
-  #btn-reg-toggle { width: 100%; padding: 12px; font-size: var(--fs-sm); }
-
-  #saved-msg, #test-msg { font-size: var(--fs-micro); font-family: var(--font-mono); margin-top: var(--space-1); display: block; height: 14px; }
-
-  /* ── Hero: головна дія ───────────────────── */
-  .hero-actions { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
-  .hero-start {
-    width: 100%;
-    padding: 18px;
-    font-size: 19px;
-    letter-spacing: 2px;
-    border-radius: var(--r-lg);
-    box-shadow: var(--bloom-accent);
-  }
-  .hero-start:hover:not(:disabled) { box-shadow: 0 22px 70px rgba(var(--accent-rgb), 0.32), 0 0 0 1px rgba(var(--accent-rgb), 0.4); }
-  .hero-secondary { display: flex; gap: var(--space-2); }
-  .hero-secondary button { flex: 1; }
-
-  /* ── Тестова панель ──────────────────────── */
-  .test-section-fixed {
-    position: fixed; bottom: 10px; left: 10px; z-index: var(--z-panel-tools);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    padding: var(--space-1) var(--space-2);
-    opacity: 0.3;
-    transition: opacity var(--t-base) var(--ease-out);
-    max-width: 220px;
-  }
-  .test-section-fixed:hover,
-  .test-section-fixed[open] { opacity: 1; }
-  .test-section-fixed summary {
-    font-size: var(--fs-sm); cursor: pointer; outline: none; list-style: none;
-    color: var(--text-muted); text-align: center;
-  }
-  .test-section-fixed summary::-webkit-details-marker { display: none; }
-  .test-section-fixed .field-row { margin-top: var(--space-2); gap: var(--space-1); }
-  .test-section-fixed input { font-size: var(--fs-micro); padding: 4px 6px; }
-  .test-section-fixed .btn-small { font-size: var(--fs-micro); padding: 4px 8px; }
-  .test-section-fixed #test-msg { font-size: 10px; }
-
-  /* ── Списки / Бокси ───────────────── */
-  .box {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg);
-    flex: 1; min-height: 50px; overflow-y: auto; overflow-x: hidden;
-    padding: 10px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--surface-4) transparent;
-  }
-  .box::-webkit-scrollbar { width: 6px; }
-  .box::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: var(--r-full); }
-  .box::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
-  .box::-webkit-scrollbar-track { background: transparent; }
-
-  .participants-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-  }
-  .participant-row {
-    display: flex; align-items: center; gap: var(--space-2);
-    padding: 7px 12px; border-radius: var(--r-full); font-size: var(--fs-sm); font-weight: var(--fw-medium);
-    color: var(--text); background: var(--surface-3);
-    border: 1px solid transparent;
-    transition: background var(--t-fast), border-color var(--t-fast);
-    min-width: 0; overflow: hidden;
-  }
-  .participant-row:hover { background: var(--surface-4); border-color: rgba(var(--accent-rgb), 0.25); }
-  .participant-row .p-num { color: var(--accent); font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-bold); width: 20px; flex-shrink: 0; }
-  .participant-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .empty-box { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-faint); font-size: var(--fs-sm); font-family: var(--font-mono); text-align: center; padding: var(--space-5); }
-
-  /* ── Чат ─────────────────────────────────── */
-  .chat-flow { display: flex; flex-direction: column; gap: 6px; }
-  .chat-msg {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    line-height: 1.45;
-    word-wrap: break-word;
-    padding: 8px 12px;
-    background: var(--surface-2);
-    border-radius: var(--r-md);
-    border-left: 3px solid rgba(var(--accent-rgb), 0.35);
-    transition: background var(--t-fast);
-  }
-  .chat-msg:hover { background: var(--surface-3); }
-  .chat-emote {
-    height: 1.6em; width: auto; vertical-align: middle;
-    margin: 0 1px; display: inline-block;
-  }
-  .kick-badge {
-    height: 1.2em; width: auto; vertical-align: middle;
-    margin-right: 2px; display: inline-block;
-  }
-
-  /* ── Список переможців ──────────────────── */
-  .winner-row {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md);
-    padding: 10px 12px; margin-bottom: var(--space-2);
-    animation: rowPop var(--t-slow) var(--ease-spring);
-    transition: transform var(--t-fast), border-color var(--t-fast);
-  }
-  .winner-row:hover { transform: translateX(4px); border-color: var(--border-strong); }
-  @keyframes rowPop {
-    from { transform: translateX(-20px); opacity: 0; }
-    to   { transform: translateX(0); opacity: 1; }
-  }
-  .winner-row.confirmed { border-left: 4px solid var(--accent); }
-  .winner-row.expired   { border-left: 4px solid var(--danger); opacity: 0.7; }
-
-  .winner-top { display: flex; align-items: center; gap: 10px; }
-  .w-status { font-size: var(--fs-sm); width: 20px; text-align: center; flex-shrink: 0; }
-  .w-status.ok { color: var(--accent); text-shadow: 0 0 6px rgba(var(--accent-rgb), 0.4); }
-  .w-status.pending { color: var(--accent-hi); font-family: var(--font-mono); font-size: var(--fs-xs); width: auto; font-weight: var(--fw-bold); }
-  .w-status.bad { color: var(--danger); }
-  .w-name { font-weight: var(--fw-bold); color: var(--text); flex: 1; font-size: var(--fs-sm); letter-spacing: 0.5px; }
-  .w-num {
-    font-size: 10px; color: var(--on-accent); font-family: var(--font-mono); font-weight: var(--fw-bold);
-    background: var(--accent); border-radius: var(--r-full);
-    min-width: 22px; padding: 2px 0; text-align: center; flex-shrink: 0;
-  }
-  .w-time { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); }
-
-  .w-msg {
-    margin-top: 6px; font-size: var(--fs-xs); color: var(--accent); font-family: var(--font-mono);
-    background: rgba(var(--accent-rgb), 0.06); border-radius: var(--r-sm); padding: 6px 10px;
-    border: 1px dashed rgba(var(--accent-rgb), 0.25);
-  }
-  .w-msg.empty { color: var(--text-faint); font-style: italic; background: var(--surface-3); border-color: transparent; }
-  .w-edit-btn, .w-del-btn {
-    background: transparent; border: 1px solid var(--border-strong); color: var(--text-faint);
-    border-radius: var(--r-xs); width: 26px; height: 26px; font-size: var(--fs-sm);
-    cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast); flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; padding: 0; margin-left: 3px;
-  }
-  .w-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .w-del-btn:hover  { border-color: var(--danger); color: var(--danger); }
-
-  /* ── Дрібнота нової розмітки ─────────────── */
-  .beta-tag { font-size: var(--fs-sm); color: var(--text-faint); letter-spacing: 1px; vertical-align: middle; }
-  .form-title {
-    font-size: var(--fs-micro); color: var(--accent); text-transform: uppercase;
-    letter-spacing: 1px; font-weight: var(--fw-bold);
-  }
+  /* каркас панелі (база, топбар, картки, поля, кнопки, учасники, чат, переможці) — у shell.css */
 
 /* ── Сітка Cash Hunt ─────────────────────── */
   /* Панельні hint/progress (стрічка слотів у головній картці) */
@@ -1491,171 +1093,7 @@
     transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
   .race-close-btn:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-dim); }
-  /* ── Оголошення переможця (кінематографічний оверлей) ──────── */
-  /* Головний кадр продукту: майже чорний скрим із легким жовтим
-     «диханням» по центру, ім'я переможця — величезним білим
-     із подвійним сяйвом, таймер — моно. Шари — з токенів. */
-  #winner-announce {
-    position: fixed; inset: 0; z-index: var(--z-announce);
-    background:
-      radial-gradient(120% 80% at 50% 42%, rgba(var(--accent-rgb), 0.07), transparent 65%),
-      rgba(8, 8, 10, 0.94);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: var(--space-5);
-    opacity: 0; pointer-events: none;
-    transition: opacity var(--t-slow) var(--ease-out);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-  }
-  #winner-announce.visible { opacity: 1; pointer-events: auto; }
-  /* Поки заставка схована, ніщо в ній не клікається. Потрібен !important:
-     глобальне правило button/a/[onclick] {pointer-events:auto !important}
-     інакше лишає всередині живі «привиди» поверх сторінки */
-  #winner-announce:not(.visible),
-  #winner-announce:not(.visible) * { pointer-events: none !important; }
-
-  /* Стаггерна поява заставки: лейбл → нік (пружина) → таймер → підпис → кнопка.
-     forwards тримає кінцевий стан; при повторному показі анімації стартують знову */
-  #winner-announce .wa-label, #winner-announce .wa-name, #winner-announce .wa-timer,
-  #winner-announce .wa-sub, #winner-announce .wa-msg, #winner-announce .wa-close { opacity: 0; }
-  #winner-announce.visible .wa-label { animation: waIn 0.5s var(--ease-out) 0.08s forwards; }
-  #winner-announce.visible .wa-name  { animation: waNameIn 0.65s var(--ease-spring) 0.26s forwards; }
-  #winner-announce.visible .wa-timer { animation: waIn 0.45s var(--ease-out) 0.6s forwards; }
-  #winner-announce.visible .wa-sub   { animation: waIn 0.45s var(--ease-out) 0.72s forwards; }
-  #winner-announce.visible .wa-msg   { animation: waIn 0.45s var(--ease-out) 0.3s forwards; }
-  #winner-announce.visible .wa-close { animation: waIn 0.45s var(--ease-out) 0.9s forwards; }
-  @keyframes waIn {
-    from { opacity: 0; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
-  }
-  @keyframes waNameIn {
-    0%   { opacity: 0; transform: scale(0.55); }
-    60%  { opacity: 1; transform: scale(1.07); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-
-  #winner-announce .wa-label {
-    font-family: var(--font-ui);
-    font-size: var(--fs-xl); font-weight: var(--fw-black);
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 9px; text-indent: 9px; /* компенсуємо трекінг, щоб центр не з'їжджав */
-    text-shadow: var(--glow-accent);
-  }
-
-  #winner-announce .wa-name {
-    font-family: var(--font-ui);
-    font-size: var(--fs-display);
-    font-weight: var(--fw-black);
-    color: #fff;
-    /* подвійне сяйво: біле ядро + тепле жовте гало */
-    text-shadow:
-      0 0 28px rgba(255, 255, 255, 0.25),
-      0 0 96px rgba(var(--accent-rgb), 0.30);
-    letter-spacing: 4px;
-    text-align: center;
-    max-width: 90vw;
-    word-break: break-word;
-    animation: waNameIn 0.7s var(--ease-spring) both;
-  }
-  /* Кульмінація: ім'я вилітає з глибини — scale + blur → у фокус */
-  @keyframes waNameIn {
-    from { transform: scale(0.72) translateY(36px); opacity: 0; filter: blur(16px); }
-    60%  { filter: blur(0); }
-    to   { transform: scale(1) translateY(0); opacity: 1; filter: blur(0); }
-  }
-
-  #winner-announce .wa-timer {
-    font-family: var(--font-mono);
-    font-size: clamp(44px, 6vw, 72px);
-    font-weight: var(--fw-bold);
-    font-variant-numeric: tabular-nums;
-    color: var(--accent-hi);
-    letter-spacing: 2px;
-    min-width: 120px;
-    text-align: center;
-    text-shadow: var(--glow-accent);
-  }
-  #winner-announce .wa-timer.expiring {
-    color: var(--danger);
-    text-shadow: var(--glow-danger);
-    animation: timerBlink 0.5s infinite alternate;
-  }
-  @keyframes timerBlink {
-    from { opacity: 1; transform: scale(1); }
-    to   { opacity: 0.45; transform: scale(0.94); }
-  }
-
-  /* Повідомлення переможця — чорна картка з жовтим dash-бордером,
-     як w-msg у панелі, але в масштабі кіно-кадру */
-  #winner-announce .wa-msg {
-    font-family: var(--font-mono);
-    font-size: clamp(26px, 3.6vw, 56px);
-    font-weight: var(--fw-bold);
-    color: var(--accent);
-    background: var(--surface-1);
-    border: 2px dashed rgba(var(--accent-rgb), 0.45);
-    border-radius: var(--r-xl);
-    padding: var(--space-5) var(--space-6);
-    max-width: 85vw; text-align: center;
-    letter-spacing: 1px;
-    box-shadow: var(--shadow-3), 0 0 60px rgba(var(--accent-rgb), 0.10);
-    animation: waMsgIn 0.5s var(--ease-spring) both;
-  }
-  @keyframes waMsgIn {
-    from { transform: translateY(24px) scale(0.9); opacity: 0; }
-    to   { transform: translateY(0) scale(1); opacity: 1; }
-  }
-
-  #winner-announce .wa-sub {
-    font-family: var(--font-ui);
-    font-size: var(--fs-md); font-weight: var(--fw-black);
-    color: var(--text-muted);
-    letter-spacing: 5px; text-indent: 5px;
-    text-transform: uppercase;
-  }
-
-  /* Ghost-кнопка: тиха, поки не наведеш — тоді жовтіє */
-  /* дрібний підпис джерела випадковості — прозорий доказ чесності розіграшу */
-  #winner-announce .wa-source {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 2px;
-    color: var(--text-faint); text-transform: uppercase; margin-top: 2px;
-    text-decoration: none;
-  }
-  /* коли ролл підписаний — підпис стає клікабельною кнопкою перевірки */
-  #winner-announce .wa-source.is-link {
-    color: var(--accent);
-    border: 1px solid rgba(var(--accent-rgb), 0.35);
-    border-radius: var(--r-full);
-    padding: 6px 14px;
-    margin-top: 6px;
-    cursor: pointer;
-    transition: background var(--t-fast), border-color var(--t-fast);
-  }
-  #winner-announce .wa-source.is-link:hover {
-    background: rgba(var(--accent-rgb), 0.12);
-    border-color: var(--accent);
-  }
-  #winner-announce.visible .wa-source { animation: waIn 0.45s var(--ease-out) 0.8s both; }
-  #winner-announce .wa-close {
-    margin-top: var(--space-4);
-    background: transparent;
-    border: 1px solid var(--border-strong);
-    color: var(--text-muted);
-    padding: 12px 36px; border-radius: var(--r-md);
-    font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: var(--fw-black);
-    cursor: pointer;
-    transition: border-color var(--t-fast), color var(--t-fast),
-                background var(--t-fast), box-shadow var(--t-fast);
-    text-transform: uppercase; letter-spacing: 3px;
-  }
-  #winner-announce .wa-close:hover {
-    border-color: rgba(var(--accent-rgb), 0.6);
-    color: var(--accent);
-    background: var(--accent-dim);
-    box-shadow: var(--glow-accent);
-  }
-
+  /* ── Оголошення переможця: див. блок «Золота картка» в кінці файлу ── */
   /* Частинки */
   /* Було z-index 9997 — нижче за #winner-announce з його скримом
      і backdrop-filter. Конфеті горіли крізь затемнення на ~15%
@@ -2064,3 +1502,410 @@
     letter-spacing: 0.55cqw; text-indent: 0.55cqw;
     line-height: 1;
   }
+
+/* ── Револьвер 3D (revolver3d.js): канва + плашки ніків; 2D-елементи сховані ── */
+#revolver-overlay.rev3d {
+  background:
+    radial-gradient(60% 55% at 50% 55%, rgba(var(--accent-rgb), 0.10), transparent 70%),
+    radial-gradient(80% 60% at 80% 10%, rgba(var(--violet-rgb), 0.16), transparent 70%),
+    rgba(6, 6, 10, 0.94);
+}
+#revolver-overlay.rev3d #revolver-area { width: min(94vw, 1180px); height: min(64vh, 640px); }
+#revolver-overlay.rev3d #revolver-frame,
+#revolver-overlay.rev3d #revolver-cylinder,
+#revolver-overlay.rev3d #revolver-barrel-indicator,
+#revolver-overlay.rev3d #revolver-bullet { display: none; }
+#revolver-overlay:not(.rev3d) .rev3d-canvas,
+#revolver-overlay:not(.rev3d) .rev3d-labels { display: none; }
+.rev3d-canvas { position: absolute; inset: 0; display: block; }
+.rev3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.rev3d-label {
+  position: absolute; left: 0; top: 0; max-width: 170px; padding: 5px 11px; border-radius: 10px;
+  font-family: var(--font-ui); font-weight: 800; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(10, 10, 16, 0.82); border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  backdrop-filter: blur(6px); opacity: 0; transition: opacity .3s, background .3s, color .3s, border-color .3s;
+}
+.rev3d-label.in { opacity: 1; }
+.rev3d-label.dead { color: rgba(255,255,255,.45); text-decoration: line-through 2px var(--danger); background: rgba(40, 8, 14, .78); border-color: rgba(var(--danger-rgb), .45); }
+.rev3d-label.winner {
+  color: #2a1a00; background: var(--winner-fill); border-color: transparent; font-size: 16px;
+  box-shadow: 0 0 0 2px rgba(var(--winner-rgb), .5), 0 0 30px rgba(var(--winner-rgb), .55); animation: revWin 1.2s ease-in-out infinite;
+}
+@keyframes revWin { 50% { box-shadow: 0 0 0 4px rgba(var(--winner-rgb), .25), 0 0 46px rgba(var(--winner-rgb), .75); } }
+
+/* ── Cash Hunt 3D «ярмарковий тир» (cashhunt3d.js) ── */
+#ch3d { display: none; }
+#cashhunt-overlay.ch3d #ch3d {
+  display: block; position: relative; flex: 0 0 auto;
+  width: min(96vw, calc(76vh * 16 / 9)); aspect-ratio: 16 / 9;
+  border-radius: 18px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #2a1a2e 0%, #120c16 60%, #07060a 100%);
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.06);
+}
+#cashhunt-overlay.ch3d #ch3d canvas { display: block; }
+#cashhunt-overlay.ch3d #cashhunt-area,
+#cashhunt-overlay.ch3d #cannon { display: none !important; }
+
+/* ── Рулетка «Дефолт» — canvas-барабан (roulette2.js) ── */
+#rl2-stage { display: none; }
+#roulette-overlay.rl2 #roulette-track-area { display: none; }
+#roulette-overlay.rl2 #rl2-stage {
+  display: block; position: relative;
+  width: min(94vw, 1240px); height: clamp(260px, 38vh, 330px);
+  border-radius: 26px; overflow: hidden;
+  background:
+    radial-gradient(60% 90% at 50% 50%, rgba(var(--accent-rgb), .07), transparent 70%),
+    linear-gradient(180deg, rgba(22,22,36,.85), rgba(7,7,12,.95));
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 30px 90px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+}
+#roulette-overlay.rl2 #rl2-stage canvas { display: block; }
+#roulette-overlay.rl2 #roulette-overlay-hint { font-family: var(--font-display); letter-spacing: 1px; }
+#roulette-overlay.rl2 #roulette-overlay-hint b {
+  color: var(--winner); text-transform: none;
+  text-shadow: 0 0 24px rgba(var(--winner-rgb), .55);
+}
+
+/* ══ Оголошення переможця — «Золота картка» (winner-card.js) ══
+   Аватарка Kick у золотому кільці-таймері (кільце спадає разом із часом на відповідь,
+   останні 10 с — червоне), за нею обертаються промені; нік — на золотій картці.
+   Id елементів ті самі, що й раніше: app.js (showAnnounce/updateAnnounceMsg) працює без змін. */
+#winner-announce {
+  position: fixed; inset: 0; z-index: var(--z-announce);
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(55% 50% at 50% 38%, rgba(var(--winner-rgb), .14), transparent 70%),
+    radial-gradient(90% 70% at 50% 100%, rgba(var(--accent-rgb), .06), transparent 70%),
+    rgba(6, 6, 10, .94);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  opacity: 0; pointer-events: none; transition: opacity .35s var(--ease-out);
+  overflow: hidden;
+}
+#winner-announce.visible { opacity: 1; pointer-events: auto; }
+/* поки схована — нічого не клікається (глобальне правило для button/a інакше лишає «привидів») */
+#winner-announce:not(.visible),
+#winner-announce:not(.visible) * { pointer-events: none !important; }
+#wa-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+
+#winner-announce .wa-stage {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 16px; max-width: 100%;
+}
+
+/* ── аватарка + кільце + промені ── */
+#winner-announce .wa-hero { position: relative; width: clamp(170px, 24vh, 230px); aspect-ratio: 1; margin-bottom: -42px; z-index: 2; }
+#winner-announce .wa-rays {
+  position: absolute; inset: -95%; border-radius: 50%; z-index: -1;
+  background: repeating-conic-gradient(from 0deg, rgba(var(--winner-rgb), .26) 0deg 7deg, transparent 7deg 22deg);
+  -webkit-mask: radial-gradient(circle, #000 18%, transparent 68%); mask: radial-gradient(circle, #000 18%, transparent 68%);
+  animation: waSpin 26s linear infinite;
+}
+@keyframes waSpin { to { transform: rotate(360deg); } }
+#winner-announce .wa-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+#winner-announce .wa-ring circle { fill: none; stroke-width: 7; }
+#winner-announce .wa-ring-bg { stroke: rgba(255,255,255,.08); }
+#winner-announce .wa-ring-fg {
+  stroke: var(--winner); stroke-linecap: round;
+  stroke-dasharray: 578; stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 8px rgba(var(--winner-rgb), .8));
+  transition: stroke .3s;
+}
+#winner-announce.no-timer .wa-ring-fg { stroke-dashoffset: 0 !important; }
+#winner-announce.expiring .wa-ring-fg { stroke: var(--danger); filter: drop-shadow(0 0 10px rgba(var(--danger-rgb), .9)); }
+#winner-announce.answered .wa-ring-fg { stroke: var(--accent); stroke-dashoffset: 0 !important; filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .9)); }
+#winner-announce.timeout .wa-ring-fg { stroke: var(--danger); }
+
+#winner-announce .wa-avatar {
+  position: absolute; inset: 9%; border-radius: 50%; overflow: hidden;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, hsl(var(--h, 140) 75% 55%), hsl(calc(var(--h, 140) + 40) 70% 38%));
+  box-shadow: 0 0 0 4px rgba(10,10,16,.9), 0 18px 50px rgba(0,0,0,.6), 0 0 60px rgba(var(--winner-rgb), .35);
+}
+#winner-announce .wa-avatar span { font: 800 clamp(56px, 9vh, 84px)/1 var(--font-display); color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.35); }
+#winner-announce .wa-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+#winner-announce .wa-avatar img.ok { opacity: 1; }
+
+/* секунди — бейдж на нижньому краю кільця */
+#winner-announce .wa-timer {
+  position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+  min-width: 74px; padding: 5px 14px; border-radius: 999px;
+  font: 800 22px/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: center;
+  color: #2b1a00; background: var(--winner-fill);
+  box-shadow: 0 6px 20px rgba(0,0,0,.5), 0 0 0 3px rgba(10,10,16,.9);
+}
+#winner-announce .wa-timer:empty { display: none; }
+#winner-announce .wa-timer.expiring { color: #fff; background: linear-gradient(135deg, #ff7a8c, var(--danger)); animation: timerBlink .5s infinite alternate; }
+
+/* ── золота картка з ніком ── */
+#winner-announce .wa-card {
+  position: relative; overflow: hidden;
+  width: min(640px, 92vw); padding: 58px 34px 26px; border-radius: 26px; text-align: center;
+  background: var(--winner-fill);
+  box-shadow: 0 30px 90px rgba(0,0,0,.55), 0 0 80px rgba(var(--winner-rgb), .28), inset 0 2px 0 rgba(255,255,255,.55), inset 0 -3px 0 rgba(120,60,0,.25);
+}
+#winner-announce .wa-card::before {           /* відблиск, що пробігає по картці */
+  content: ""; position: absolute; top: -50%; bottom: -50%; width: 38%; left: -60%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); transform: skewX(-18deg);
+}
+#winner-announce.visible .wa-card::before { animation: waShine 3.2s ease-in-out .9s infinite; }
+@keyframes waShine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+#winner-announce .wa-label {
+  font: 800 13px/1 var(--font-ui); letter-spacing: 8px; text-indent: 8px; text-transform: uppercase;
+  color: rgba(60,30,0,.72);
+}
+#winner-announce .wa-name {
+  margin-top: 10px; font: 800 clamp(34px, 6.2vw, 76px)/1.05 var(--font-display);
+  color: #2b1a00; letter-spacing: .5px; word-break: break-word;
+  text-shadow: 0 2px 0 rgba(255,255,255,.45);
+}
+
+#winner-announce .wa-sub {
+  font: 800 13px/1 var(--font-ui); letter-spacing: 5px; text-indent: 5px; text-transform: uppercase; color: var(--text-muted);
+}
+#winner-announce.timeout .wa-sub { color: var(--danger); }
+#winner-announce .wa-msg {
+  max-width: min(760px, 90vw); padding: 18px 26px; border-radius: 20px; text-align: center;
+  font: 700 clamp(22px, 3vw, 40px)/1.25 var(--font-ui); color: var(--text);
+  background: rgba(22,22,36,.8); border: 1.5px solid rgba(var(--accent-rgb), .45);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 50px rgba(var(--accent-rgb), .12);
+  position: relative; word-break: break-word;
+}
+#winner-announce .wa-msg::before {
+  content: "💬"; position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  font-size: 18px; line-height: 1; background: #10101a; border-radius: 999px; padding: 3px 8px; border: 1px solid rgba(var(--accent-rgb), .45);
+}
+#winner-announce .wa-source { font: 600 11px/1 var(--font-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--text-faint); text-decoration: none; }
+#winner-announce .wa-source:empty { display: none; }
+#winner-announce .wa-source.is-link {
+  color: var(--accent); border: 1px solid rgba(var(--accent-rgb), .35); border-radius: 999px; padding: 7px 14px; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+#winner-announce .wa-source.is-link:hover { background: rgba(var(--accent-rgb), .12); border-color: var(--accent); }
+#winner-announce .wa-close {
+  margin-top: 4px; padding: 11px 34px; border-radius: 12px; cursor: pointer;
+  font: 800 13px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border-strong); color: var(--text-muted);
+  transition: border-color .15s, color .15s, background .15s;
+}
+#winner-announce .wa-close:hover { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); background: rgba(var(--winner-rgb), .08); }
+
+/* поява: аватарка вистрибує, картка виїжджає, решта — по черзі */
+#winner-announce .wa-hero, #winner-announce .wa-card, #winner-announce .wa-sub, #winner-announce .wa-source, #winner-announce .wa-close { opacity: 0; }
+#winner-announce.visible .wa-hero   { animation: waPop .7s var(--ease-spring) .05s forwards; }
+#winner-announce.visible .wa-card   { animation: waRise .6s var(--ease-out) .22s forwards; }
+#winner-announce.visible .wa-sub    { animation: waFade .4s var(--ease-out) .6s forwards; }
+#winner-announce.visible .wa-source { animation: waFade .4s var(--ease-out) .7s forwards; }
+#winner-announce.visible .wa-close  { animation: waFade .4s var(--ease-out) .8s forwards; }
+#winner-announce .wa-msg { animation: waRise .45s var(--ease-spring) both; }
+@keyframes waPop  { from { opacity: 0; transform: scale(.4) rotate(-12deg); } to { opacity: 1; transform: none; } }
+@keyframes waRise { from { opacity: 0; transform: translateY(26px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes waFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (max-height: 640px) {
+  #winner-announce .wa-hero { width: 140px; margin-bottom: -34px; }
+  #winner-announce .wa-card { padding: 46px 24px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #winner-announce .wa-rays, #winner-announce.visible .wa-card::before { animation: none; }
+}
+
+/* ══ 3D-режими на весь екран (Cash Hunt 3D, Револьвер 3D) ══
+   Канва займає весь оверлей, підказка — зверху, кнопки — знизу поверх сцени.
+   Без рамки «вікна» посередині: фон сцени і фон оверлея — одне ціле. */
+#cashhunt-overlay.ch3d {
+  padding: 0;
+  background:
+    radial-gradient(60% 55% at 50% 42%, rgba(255, 170, 80, .16), transparent 70%),
+    radial-gradient(90% 70% at 50% 0%, rgba(var(--violet-rgb), .20), transparent 70%),
+    radial-gradient(120% 90% at 50% 110%, rgba(214, 52, 58, .14), transparent 60%),
+    #0a0710;
+}
+#cashhunt-overlay.ch3d #ch3d {
+  position: absolute; inset: 0; z-index: 0;
+  width: auto; height: auto; aspect-ratio: auto;
+  border-radius: 0; background: none; box-shadow: none;
+}
+/* кнопки — знизу по центру, поверх сцени */
+#cashhunt-overlay.ch3d .ch-controls-slot {
+  position: absolute; left: 0; right: 0; bottom: 3.5vh; z-index: 2; pointer-events: none;
+}
+#cashhunt-overlay.ch3d #cashhunt-controls { pointer-events: auto; flex-direction: row; justify-content: center; gap: 12px; }
+#cashhunt-overlay.ch3d #cashhunt-controls .btn-orange,
+#cashhunt-overlay.ch3d #cashhunt-controls .btn-dark {
+  padding: 14px 28px; border-radius: 14px; font: 800 14px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase;
+  background: rgba(16,16,26,.85); color: var(--text); border: 1px solid rgba(var(--winner-rgb), .45); box-shadow: 0 12px 34px rgba(0,0,0,.5);
+}
+/* «Выстрел» — червона кнопка-мішень у стилі тиру */
+.ch-fire {
+  display: inline-flex; align-items: center; gap: 14px; cursor: pointer;
+  padding: 16px 40px 16px 24px; border-radius: 18px;
+  font: 800 20px/1 var(--font-display); letter-spacing: 3px; text-transform: uppercase; color: #fff;
+  background: linear-gradient(135deg, #ff6a5c 0%, #e8343e 45%, #b81d2c 100%);
+  border: 1px solid rgba(255,255,255,.45);
+  box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 6px rgba(232,52,62,.15), 0 0 44px rgba(232,52,62,.45), inset 0 2px 0 rgba(255,255,255,.4);
+  text-shadow: 0 2px 0 rgba(90,0,10,.45);
+  animation: chFirePulse 1.4s ease-in-out infinite;
+  transition: transform .15s var(--ease-out);
+}
+.ch-fire svg { width: 34px; height: 34px; flex-shrink: 0; transition: transform .5s var(--ease-out); }
+.ch-fire:hover { transform: translateY(-2px); }
+.ch-fire:hover svg { transform: rotate(90deg) scale(1.08); }
+.ch-fire:active { transform: translateY(1px) scale(.98); }
+@keyframes chFirePulse {
+  0%, 100% { box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 6px rgba(232,52,62,.15), 0 0 44px rgba(232,52,62,.45), inset 0 2px 0 rgba(255,255,255,.4); }
+  50%      { box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 12px rgba(232,52,62,.06), 0 0 70px rgba(232,52,62,.65), inset 0 2px 0 rgba(255,255,255,.4); }
+}
+
+#revolver-overlay.rev3d { padding: 0; }
+#revolver-overlay.rev3d #revolver-area {
+  position: absolute; inset: 0; z-index: 0; width: auto; height: auto;
+}
+#revolver-overlay.rev3d #revolver-overlay-hint {
+  position: absolute; top: 4.5vh; left: 0; right: 0; z-index: 2; pointer-events: none;
+}
+#revolver-overlay.rev3d .rev-controls-slot {
+  position: absolute; left: 0; right: 0; bottom: 4vh; z-index: 2; pointer-events: none;
+}
+#revolver-overlay.rev3d #revolver-overlay-controls { pointer-events: auto; }
+
+/* ══ «Золота картка» для інших режимів (wincard-modes.js): переможець батл-рояля
+   і центральна колонка Бонусбурі. Ті самі форми, що й у заставці переможця. ══ */
+.wc-hero { position: relative; width: clamp(150px, 22vh, 210px); aspect-ratio: 1; margin: 0 auto -38px; z-index: 2; flex-shrink: 0; }
+.wc-rays {
+  position: absolute; inset: -95%; border-radius: 50%; z-index: -1; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgba(var(--winner-rgb), .24) 0deg 7deg, transparent 7deg 22deg);
+  -webkit-mask: radial-gradient(circle, #000 18%, transparent 68%); mask: radial-gradient(circle, #000 18%, transparent 68%);
+  animation: waSpin 26s linear infinite;
+}
+.wc-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.wc-ring circle { fill: none; stroke-width: 7; }
+.wc-ring-bg { stroke: rgba(255,255,255,.08); }
+.wc-ring-fg { stroke: var(--winner); stroke-linecap: round; stroke-dasharray: 578; stroke-dashoffset: 0; filter: drop-shadow(0 0 8px rgba(var(--winner-rgb), .8)); transition: stroke .3s; }
+.wc-ring-solid { position: absolute; inset: 0; border-radius: 50%; border: 6px solid var(--winner); box-shadow: 0 0 22px rgba(var(--winner-rgb), .7), inset 0 0 14px rgba(var(--winner-rgb), .4); }
+.wc-avatar {
+  position: absolute; inset: 9%; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: linear-gradient(135deg, hsl(var(--h, 140) 75% 55%), hsl(calc(var(--h, 140) + 40) 70% 38%));
+  box-shadow: 0 0 0 4px rgba(10,10,16,.9), 0 18px 50px rgba(0,0,0,.6), 0 0 60px rgba(var(--winner-rgb), .35);
+}
+.wc-avatar span { font: 800 clamp(48px, 8vh, 78px)/1 var(--font-display); color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.wc-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+.wc-avatar img.ok { opacity: 1; }
+.wc-crown { position: absolute; left: 50%; top: -30%; transform: translateX(-50%); font-size: clamp(46px, 7vh, 70px); line-height: 1; filter: drop-shadow(0 6px 18px rgba(var(--winner-rgb), .6)); animation: wcCrown 1.2s ease-in-out infinite alternate; }
+@keyframes wcCrown { to { transform: translateX(-50%) translateY(-8px) rotate(4deg); } }
+.wc-card {
+  position: relative; overflow: hidden; width: min(640px, 92%); padding: 54px 30px 24px; border-radius: 26px; text-align: center;
+  background: var(--winner-fill);
+  box-shadow: 0 30px 90px rgba(0,0,0,.55), 0 0 80px rgba(var(--winner-rgb), .28), inset 0 2px 0 rgba(255,255,255,.55), inset 0 -3px 0 rgba(120,60,0,.25);
+}
+.wc-card::before {
+  content: ""; position: absolute; top: -50%; bottom: -50%; width: 38%; left: -60%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); transform: skewX(-18deg);
+  animation: waShine 3.2s ease-in-out .9s infinite;
+}
+.wc-label { position: relative; font: 800 13px/1.2 var(--font-ui); letter-spacing: 6px; text-indent: 6px; text-transform: uppercase; color: rgba(60,30,0,.72); }
+.wc-name { position: relative; margin-top: 10px; font: 800 clamp(30px, 5.6vw, 72px)/1.05 var(--font-display); color: #2b1a00; letter-spacing: .5px; word-break: break-word; text-shadow: 0 2px 0 rgba(255,255,255,.45); }
+.wc-stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.wc-chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+  font: 800 15px/1 var(--font-ui); color: var(--text); background: rgba(22,22,36,.82); border: 1px solid rgba(var(--winner-rgb), .4);
+  box-shadow: 0 10px 30px rgba(0,0,0,.4);
+}
+.wc-chip b { font: 800 20px/1 var(--font-mono); color: var(--winner); }
+.wc-close {
+  padding: 12px 36px; border-radius: 12px; cursor: pointer; min-width: 200px;
+  font: 800 13px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase;
+  background: rgba(255,255,255,.06); border: 1px solid var(--border-strong); color: var(--text);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.wc-close:hover { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); background: rgba(var(--winner-rgb), .1); }
+.wc-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+
+/* ── батл-рояль: екран переможця поверх сцени перемоги (сцену трохи видно) ── */
+#royale-shootout .so-winner {
+  gap: 16px; padding: 20px;
+  background: radial-gradient(55% 55% at 50% 42%, rgba(var(--winner-rgb), .16), transparent 70%), rgba(6,6,10,.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#royale-shootout .so-winner .wc-hero,
+#royale-shootout .so-winner .wc-card,
+#royale-shootout .so-winner .wc-stats,
+#royale-shootout .so-winner .wc-close { opacity: 0; }
+#royale-shootout .so-winner.show .wc-hero  { animation: waPop .7s var(--ease-spring) .1s forwards; }
+#royale-shootout .so-winner.show .wc-card  { animation: waRise .6s var(--ease-out) .3s forwards; }
+#royale-shootout .so-winner.show .wc-stats { animation: waFade .45s var(--ease-out) .7s forwards; }
+#royale-shootout .so-winner.show .wc-close { animation: waFade .45s var(--ease-out) .85s forwards; }
+#royale-shootout .so-winner .wc-name {   /* перекриваємо старі стилі .so-winner-name з shootout.css */
+  margin-top: 10px; padding: 0; border-radius: 0; background: none; box-shadow: none; max-width: none;
+  font: 800 clamp(30px, 5.6vw, 72px)/1.05 var(--font-display); color: #2b1a00; white-space: normal; overflow: visible; animation: none;
+}
+#royale-shootout .so-winner .wc-stats { margin-top: 0; font: inherit; letter-spacing: 0; color: var(--text); }
+#royale-shootout .so-winner .wc-close { margin-top: 2px; position: relative; z-index: 4; }
+
+/* ── Бонусбуря: центральна колонка ── */
+#chatgame-left {
+  align-items: center; gap: 12px; padding: 30px 24px 24px;
+  background: radial-gradient(70% 40% at 50% 14%, rgba(var(--winner-rgb), .14), transparent 70%), rgba(0,0,0,.35);
+}
+#chatgame-left .cg-hero { margin-top: 6px; }
+#chatgame-left #chatgame-timer-block { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); }
+#chatgame-left #chatgame-timer {
+  min-width: 74px; padding: 6px 14px; border-radius: 999px; text-align: center; letter-spacing: 0;
+  font: 800 22px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  color: #2b1a00; background: var(--winner-fill); text-shadow: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5), 0 0 0 3px rgba(10,10,16,.9);
+}
+#chatgame-left #chatgame-timer.expiring { color: #fff; background: linear-gradient(135deg, #ff7a8c, var(--danger)); }
+#chatgame-left.cg-answered #chatgame-timer { color: var(--on-accent) !important; background: var(--accent-fill); }
+#chatgame-left.cg-timeout #chatgame-timer { color: #fff; background: linear-gradient(135deg, #ff7a8c, var(--danger)); }
+#chatgame-left.cg-idle #chatgame-timer { color: var(--text-muted); background: var(--surface-3); }
+#chatgame-left.cg-expiring .wc-ring-fg, #chatgame-left.cg-timeout .wc-ring-fg { stroke: var(--danger); filter: drop-shadow(0 0 10px rgba(var(--danger-rgb), .9)); }
+#chatgame-left.cg-answered .wc-ring-fg { stroke: var(--accent); stroke-dashoffset: 0 !important; filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .9)); }
+#chatgame-left .cg-card { width: 100%; max-width: 620px; }
+#chatgame-left #chatgame-winner-name { text-shadow: 0 2px 0 rgba(255,255,255,.45); color: #2b1a00; }
+#chatgame-left #chatgame-sub { margin-top: 0; text-align: center; }
+#chatgame-left #chatgame-msgs-label { align-self: stretch; text-align: center; border-top: 1px solid var(--border); padding-top: 12px; }
+#chatgame-left #chatgame-msgs { align-self: stretch; gap: 8px; }
+#chatgame-left #chatgame-replied-badge { align-self: center; }
+#chatgame-left .chatgame-msg-row {
+  align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px 16px 16px 4px;
+  font: 700 17px/1.35 var(--font-ui); background: rgba(22,22,36,.85); border: 1px solid rgba(var(--accent-rgb), .25);
+  animation: waRise .35s var(--ease-spring) both;
+}
+#chatgame-left .chatgame-msg-save { padding: 8px 14px; border-radius: 10px; }
+#chatgame-left.cg-pop .cg-hero { animation: waPop .6s var(--ease-spring) both; }
+#chatgame-left.cg-pop .cg-card { animation: waRise .5s var(--ease-out) .12s both; }
+#chatgame-left #chatgame-winner-name { font: 800 clamp(28px, 3.4vw, 60px)/1.05 var(--font-display); letter-spacing: .5px; }
+#chatgame-left #chatgame-sub { display: none !important; }   /* стан видно по кільцю й бейджу таймера */
+#chatgame-left .cg-card { padding-top: 50px; }
+
+/* прибрано за проханням: «Время на ответ» у заставці переможця і написи над 3D-револьвером */
+#winner-announce .wa-sub { display: none !important; }
+#revolver-overlay.rev3d #revolver-overlay-hint { display: none !important; }
+
+/* ── Револьвер 3D: кнопка «Крутить барабан» і кнопки після гри ── */
+.rev-go {
+  position: relative; display: inline-flex; align-items: center; gap: 14px;
+  padding: 16px 34px 16px 22px; border-radius: 18px; cursor: pointer;
+  font: 800 18px/1 var(--font-display); letter-spacing: 2px; text-transform: uppercase;
+  color: #2b1a00; background: var(--winner-fill);
+  border: 1px solid rgba(255,255,255,.55);
+  box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 6px rgba(var(--winner-rgb), .12), 0 0 46px rgba(var(--winner-rgb), .35), inset 0 2px 0 rgba(255,255,255,.6);
+  animation: revGoPulse 1.6s ease-in-out infinite;
+  transition: transform .15s var(--ease-out), box-shadow .15s;
+}
+.rev-go svg { width: 34px; height: 34px; flex-shrink: 0; transition: transform .6s var(--ease-out); }
+.rev-go:hover { transform: translateY(-2px); }
+.rev-go:hover svg { transform: rotate(180deg); }
+.rev-go:active { transform: translateY(1px) scale(.98); }
+@keyframes revGoPulse {
+  0%, 100% { box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 6px rgba(var(--winner-rgb), .12), 0 0 46px rgba(var(--winner-rgb), .35), inset 0 2px 0 rgba(255,255,255,.6); }
+  50%      { box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 12px rgba(var(--winner-rgb), .05), 0 0 70px rgba(var(--winner-rgb), .55), inset 0 2px 0 rgba(255,255,255,.6); }
+}
+#revolver-overlay.rev3d #revolver-overlay-controls { gap: 12px; }
+#revolver-overlay.rev3d #revolver-overlay-controls .btn-dark,
+#revolver-overlay.rev3d #revolver-overlay-controls .btn-primary {
+  padding: 14px 28px; border-radius: 14px; font: 800 14px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase;
+  background: rgba(16,16,26,.82); color: var(--text); border: 1px solid rgba(var(--winner-rgb), .45);
+  box-shadow: 0 12px 34px rgba(0,0,0,.5); backdrop-filter: blur(8px);
+}
+#revolver-overlay.rev3d #revolver-overlay-controls .btn-primary { background: var(--winner-fill); color: #2b1a00; border-color: rgba(255,255,255,.5); }

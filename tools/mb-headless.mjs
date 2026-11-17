@@ -14,6 +14,8 @@ const R = (await import(pathToFileURL(path.join(PUB, 'vendor', 'rapier3d-compat.
 await R.init();
 globalThis.RAPIER = R;
 globalThis.window = globalThis;
+// карти з Blender (sky.js) читають свої дані через MB_READ: '/assets/…' → файл у public
+globalThis.MB_READ = (url) => fs.readFileSync(path.join(PUB, url.slice('/assets/'.length)), 'utf8');
 globalThis.document = { getElementById: () => null, createElement: () => ({ getContext: () => ({}) }) };
 globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => 0;

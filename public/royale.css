@@ -375,3 +375,100 @@
 #rl-red-btn { padding: 12px 26px; }
 #rl-fight-btn.rl-on { padding: 12px 34px; }
 .rl-controls .btn-dark { padding: 12px 20px; font-size: var(--fs-sm); }
+
+/* ══ Редизайн лобі під загальний стиль сайту (темне скло + золото, як «Золота картка») ══ */
+#royale-overlay {
+  background:
+    radial-gradient(55% 60% at 50% 48%, rgba(var(--winner-rgb), .10), transparent 70%),
+    radial-gradient(80% 60% at 85% 0%, rgba(var(--violet-rgb), .14), transparent 70%),
+    rgba(6, 6, 10, .95);
+}
+/* заголовок */
+#royale-overlay .rl-title {
+  font: 800 26px/1 var(--font-display); letter-spacing: 3px; text-indent: 3px; color: #fff; text-shadow: none;
+}
+#royale-overlay .rl-title::first-letter { margin-right: 4px; }
+/* чипи */
+#royale-overlay .rl-chip {
+  border-radius: 999px; padding: 8px 16px; font: 700 12px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-muted); background: rgba(18,18,28,.78); border: 1px solid rgba(var(--winner-rgb), .28);
+  backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+#royale-overlay .rl-chip b { color: #fff; font-weight: 800; }
+#royale-overlay .rl-chip.rl-alive { background: var(--winner-fill); color: rgba(60,30,0,.75); border-color: rgba(255,255,255,.5); box-shadow: 0 8px 26px rgba(var(--winner-rgb), .35); }
+#royale-overlay .rl-chip.rl-alive b { color: #2b1a00; font: 800 18px/1 var(--font-mono); }
+#royale-overlay .rl-chip.rl-lock-open b { color: var(--accent); }
+#royale-overlay .rl-chip.rl-lock-closed b { color: var(--danger); }
+#royale-overlay .rl-chip.rl-final { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); }
+
+/* мапа — у скляній картці з золотою сіткою */
+#royale-overlay .rl-stage {
+  border-radius: 26px; padding: 0;
+  background: linear-gradient(180deg, rgba(22,22,34,.7), rgba(10,10,16,.85));
+  border: 1px solid rgba(var(--winner-rgb), .22);
+  box-shadow: 0 30px 90px rgba(0,0,0,.55), 0 0 60px rgba(var(--winner-rgb), .08), inset 0 1px 0 rgba(255,255,255,.05);
+}
+#royale-overlay .rl-map .rl-grid-line { stroke: rgba(255, 214, 120, .26); stroke-width: 1.4; }
+#royale-overlay .rl-map .rl-frame { stroke: rgba(255, 214, 120, .55); stroke-width: 2.5; }
+#royale-overlay .rl-map .rl-corner { stroke: var(--winner); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 8px rgba(var(--winner-rgb), .6)); }
+#royale-overlay .rl-map .rl-axis { fill: var(--winner); font-family: var(--font-display); font-weight: 800; }
+#royale-overlay .rl-map .rl-cellcoord { fill: rgba(255, 240, 200, .5); font-family: var(--font-mono); font-weight: 600; }
+#royale-overlay .rl-map .rl-bg-dim { fill: rgba(6, 6, 12, .28); }
+#royale-overlay .rl-map .rl-hover { fill: rgba(var(--winner-rgb), .14); stroke: var(--winner); }
+/* маркери гравців — золоті з темним номером */
+#royale-overlay .rl-map .rl-m-dot { fill: #ffc93d; stroke: #2b1a00; stroke-width: 2.5; }
+#royale-overlay .rl-map .rl-m-n { fill: #2b1a00; }
+#royale-overlay .rl-map .rl-cluster .rl-m-dot { fill: #14121c; stroke: var(--winner); }
+#royale-overlay .rl-map .rl-cluster .rl-m-n { fill: var(--winner); }
+#royale-overlay .rl-map .rl-m-nick.rl-more { fill: #ffe9a6; }
+#royale-overlay .rl-map .rl-zone-edge { stroke: #fff; }
+#royale-overlay .rl-map .rl-win-ring { fill: rgba(var(--winner-rgb), .2); stroke: var(--winner); }
+#royale-overlay .rl-map .rl-win-nick { fill: #ffe9a6; font-family: var(--font-display); }
+#royale-overlay .rl-map .rl-crown { filter: drop-shadow(0 0 10px rgba(var(--winner-rgb), .8)); }
+#royale-overlay .rl-tip { background: rgba(14,14,22,.92); border: 1px solid rgba(var(--winner-rgb), .35); border-radius: 14px; backdrop-filter: blur(8px); }
+#royale-overlay .rl-tip .rl-tip-h { color: var(--winner); }
+#royale-overlay .rl-tip .rl-tip-n i { background: var(--winner); color: #2b1a00; }
+
+/* бокові списки */
+#royale-overlay .rl-side {
+  width: 260px; border-radius: 20px;
+  background: rgba(14,14,22,.82); border: 1px solid rgba(var(--winner-rgb), .2);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+#royale-overlay .rl-side-head { padding: 12px 14px; font: 800 12px/1 var(--font-ui); letter-spacing: 2px; color: #fff; border-bottom-color: rgba(255,255,255,.06); }
+#royale-overlay .rl-side-head .rl-dot { background: var(--winner); box-shadow: 0 0 8px var(--winner); }
+#royale-overlay .rl-side.rl-dead-side .rl-side-head .rl-dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+#royale-overlay .rl-side-head .rl-cnt { background: var(--winner-fill); color: #2b1a00; font-weight: 800; }
+#royale-overlay .rl-row { padding: 4px 10px 4px 4px; background: rgba(255,255,255,.04); border-radius: 999px; }
+#royale-overlay .rl-row .rl-num { background: var(--winner); color: #2b1a00; font-weight: 800; }
+#royale-overlay .rl-row .rl-pos { color: var(--winner); }
+#royale-overlay .rl-row.rl-hl, #royale-overlay .rl-row.rl-win { background: rgba(var(--winner-rgb), .14); border-color: rgba(var(--winner-rgb), .55); box-shadow: 0 0 18px rgba(var(--winner-rgb), .25); }
+#royale-overlay .rl-row.rl-win .rl-num { background: var(--winner-fill); }
+#royale-overlay .rl-empty { color: var(--text-faint); font-family: var(--font-ui); }
+
+/* банер переможця на мапі — як «Золота картка» */
+#royale-overlay .rl-banner {
+  padding: 18px 34px 20px; border-radius: 22px;
+  background: var(--winner-fill); border: 1px solid rgba(255,255,255,.55);
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 70px rgba(var(--winner-rgb), .35), inset 0 2px 0 rgba(255,255,255,.55);
+}
+#royale-overlay .rl-banner .rl-banner-c { filter: drop-shadow(0 4px 12px rgba(120,60,0,.4)); }
+#royale-overlay .rl-banner .rl-banner-k { color: rgba(60,30,0,.72); font: 800 12px/1.2 var(--font-ui); letter-spacing: 4px; }
+#royale-overlay .rl-banner .rl-banner-n { color: #2b1a00; font: 800 clamp(22px, 3vw, 42px)/1.1 var(--font-display); text-shadow: 0 2px 0 rgba(255,255,255,.45); }
+
+/* нижня панель кнопок */
+#royale-overlay .rl-controls {
+  padding: 10px 12px; border-radius: 22px;
+  background: rgba(14,14,22,.82); border: 1px solid rgba(var(--winner-rgb), .2); box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+#royale-overlay .rl-controls button {
+  border-radius: 14px; padding: 13px 24px; font: 800 13px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase;
+  background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border-strong); box-shadow: none;
+}
+#royale-overlay .rl-controls button:hover:not(:disabled) { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); background: rgba(var(--winner-rgb), .08); }
+#royale-overlay #rl-zone-btn { background: var(--winner-fill); color: #2b1a00; border-color: rgba(255,255,255,.5); padding: 13px 34px; box-shadow: 0 8px 26px rgba(var(--winner-rgb), .35); }
+#royale-overlay #rl-zone-btn:hover:not(:disabled) { color: #2b1a00; background: var(--winner-fill); box-shadow: 0 10px 34px rgba(var(--winner-rgb), .5); }
+#royale-overlay #rl-red-btn { background: linear-gradient(135deg, #ff6a5c, #e8343e 50%, #b81d2c); color: #fff; border-color: rgba(255,255,255,.4); }
+#royale-overlay #rl-red-btn:hover:not(:disabled) { color: #fff; box-shadow: 0 10px 30px rgba(232,52,62,.45); }
+#royale-overlay #rl-fight-btn.rl-on { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; padding: 13px 34px; }
+#royale-overlay .rl-controls button:disabled { opacity: .4; }

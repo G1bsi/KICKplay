@@ -212,3 +212,208 @@
 
 /* глобальні кнопки сайту — капсом; картки карт мають лишатись звичайним текстом */
 #mb-picker .mb-card, #mb-picker .mb-card * { text-transform: none; letter-spacing: 0; }
+
+/* ══════ Редизайн під загальний стиль сайту: темне скло + золото (як «Золота картка») ══════ */
+
+/* ── HUD: пігулка «режим · кульки · час» і відлік після першого фінішу ── */
+#marbles-overlay .mb-pill {
+  height: 44px; padding: 0 18px; gap: 16px; border-radius: 999px;
+  background: rgba(14, 14, 22, .78); border: 1px solid rgba(var(--winner-rgb), .3);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 34px rgba(0,0,0,.35);
+  font: 800 15px/1 var(--font-ui);
+}
+#marbles-overlay .mb-pill-name { font-family: var(--font-display); letter-spacing: 1px; color: #fff; }
+#marbles-overlay .mb-pill-item { font-family: var(--font-mono); color: #ffe9a6; gap: 8px; }
+#marbles-overlay .mb-pill-item + .mb-pill-item::before { content: ''; width: 1px; height: 20px; background: rgba(255,255,255,.14); margin-right: 8px; }
+#marbles-overlay .mb-ico-ball { border-color: #ffc93d; background: radial-gradient(circle at 35% 30%, #fff3c4 0, #ffc93d 45%, #b77a12 100%); }
+#marbles-overlay .mb-ico-clock { border-color: #ffc93d; }
+#marbles-overlay .mb-ico-clock::after { background: #ffc93d; box-shadow: 2px 4px 0 0 #ffc93d; }
+#marbles-overlay .mb-pill.mb-cd {
+  color: #fff; font: 800 18px/1 var(--font-mono); padding: 0 18px;
+  background: linear-gradient(135deg, #ff6a5c, #e8343e 55%, #b81d2c); border-color: rgba(255,255,255,.4);
+  box-shadow: 0 10px 30px rgba(232,52,62,.45); animation: mbCdPulse 1s ease-in-out infinite;
+}
+@keyframes mbCdPulse { 50% { box-shadow: 0 10px 44px rgba(232,52,62,.75); } }
+
+/* ── Лідерборд: скляні плашки, медальні кружки для топ-3 ── */
+#marbles-overlay .mb-row {
+  height: 32px; padding: 0 14px 0 4px; border-radius: 999px;
+  background: rgba(14, 14, 22, .74); border: 1px solid rgba(255,255,255,.1);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+#marbles-overlay .mb-place {
+  width: 24px; height: 24px; background: rgba(255,255,255,.1); border: none;
+  font: 800 12px/1 var(--font-mono); color: #fff;
+}
+#marbles-overlay .mb-nick { font: 700 15px/1 var(--font-ui); text-shadow: none; }
+#marbles-overlay .mb-row.mb-p1 { border-color: rgba(var(--winner-rgb), .6); background: linear-gradient(90deg, rgba(var(--winner-rgb), .22), rgba(14,14,22,.78) 70%); }
+#marbles-overlay .mb-row.mb-p1 .mb-place { background: var(--winner-fill); color: #2b1a00; box-shadow: 0 0 12px rgba(var(--winner-rgb), .7); }
+#marbles-overlay .mb-row.mb-p2 .mb-place { background: linear-gradient(135deg, #f4f6fa, #aab2c0); color: #23262d; }
+#marbles-overlay .mb-row.mb-p3 .mb-place { background: linear-gradient(135deg, #f0b27a, #a8642c); color: #2a1406; }
+#marbles-overlay .mb-row.mb-fin .mb-place { background: var(--accent-fill); color: var(--on-accent); box-shadow: 0 0 10px rgba(var(--accent-rgb), .6); }
+#marbles-overlay .mb-row.mb-dead .mb-place { background: rgba(232,52,62,.35); }
+
+/* ── Відлік 5-4-3-2-1-GO: золоте кільце, що «спливає» за секунду, число пружинить ── */
+#marbles-overlay #mb-count {
+  -webkit-text-stroke: 0; text-shadow: none; font-size: inherit;
+  background: radial-gradient(40% 40% at 50% 50%, rgba(0,0,0,.28), transparent 70%);
+}
+.mb-cd-wrap { position: relative; width: clamp(170px, 28vh, 260px); aspect-ratio: 1; display: grid; place-items: center; animation: mbCdPop .5s var(--ease-spring) both; }
+.mb-cd-wrap::before {
+  content: ''; position: absolute; inset: 8%; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, rgba(30,28,44,.82), rgba(10,10,16,.88));
+  border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
+  box-shadow: 0 24px 70px rgba(0,0,0,.5), 0 0 60px rgba(var(--winner-rgb), .25);
+}
+.mb-cd-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.mb-cd-ring circle {
+  fill: none; stroke: #ffc93d; stroke-width: 9; stroke-linecap: round; stroke-dasharray: 566; stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 10px rgba(var(--winner-rgb), .8));
+  animation: mbCdRing 1s linear forwards;
+}
+.mb-cd-num {
+  position: relative; font: 800 clamp(80px, 14vh, 130px)/1 var(--font-display); color: #fff;
+  text-shadow: 0 6px 30px rgba(0,0,0,.5), 0 0 40px rgba(var(--winner-rgb), .35);
+}
+.mb-cd-go .mb-cd-ring circle { stroke: var(--accent); filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), .9)); animation: none; }
+.mb-cd-go .mb-cd-num {
+  background: var(--winner-fill); -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none; filter: drop-shadow(0 6px 24px rgba(var(--winner-rgb), .6));
+}
+.mb-cd-go { animation: mbCdGo .7s var(--ease-out) both; }
+@keyframes mbCdPop  { from { transform: scale(.55); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } to { transform: scale(1); } }
+@keyframes mbCdRing { to { stroke-dashoffset: 566; } }
+@keyframes mbCdGo   { 0% { transform: scale(.6); opacity: 0; } 35% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+
+/* ── Подіум: скляні картки, переможець — золота ── */
+#marbles-overlay #mb-podium { background: radial-gradient(55% 55% at 50% 50%, rgba(var(--winner-rgb), .14), transparent 70%), rgba(6,6,10,.7); }
+#marbles-overlay .mb-pod-card {
+  border-radius: 24px; padding: 28px 18px 22px;
+  background: rgba(16,16,26,.86); border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 30px 80px rgba(0,0,0,.5);
+}
+#marbles-overlay .mb-pod-card.mb-pod-1 {
+  background: var(--winner-fill); border-color: rgba(255,255,255,.55);
+  box-shadow: 0 30px 90px rgba(0,0,0,.55), 0 0 80px rgba(var(--winner-rgb), .4), inset 0 2px 0 rgba(255,255,255,.55);
+}
+#marbles-overlay .mb-pod-card.mb-pod-2 { border-color: rgba(220,226,236,.45); }
+#marbles-overlay .mb-pod-card.mb-pod-3 { border-color: rgba(214,140,80,.5); }
+#marbles-overlay .mb-pod-av {
+  position: relative; width: 84px; height: 84px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: linear-gradient(135deg, hsl(var(--h, 140) 75% 55%), hsl(calc(var(--h, 140) + 40) 70% 38%));
+  box-shadow: 0 0 0 4px rgba(255,255,255,.18), 0 12px 30px rgba(0,0,0,.4);
+}
+#marbles-overlay .mb-pod-1 .mb-pod-av { width: 108px; height: 108px; box-shadow: 0 0 0 5px #fff6d6, 0 14px 34px rgba(120,60,0,.35); }
+#marbles-overlay .mb-pod-av span { font: 800 38px/1 var(--font-display); color: #fff; }
+#marbles-overlay .mb-pod-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+#marbles-overlay .mb-pod-av img.ok { opacity: 1; }
+#marbles-overlay .mb-pod-nick { font: 800 20px/1.1 var(--font-display); color: #fff; }
+#marbles-overlay .mb-pod-1 .mb-pod-nick { font-size: 26px; color: #2b1a00; }
+#marbles-overlay .mb-pod-place { font: 800 11px/1 var(--font-ui); letter-spacing: 4px; color: var(--text-muted); }
+#marbles-overlay .mb-pod-1 .mb-pod-place { color: rgba(60,30,0,.7); }
+
+/* ── Кнопки після фінішу й камербар ── */
+#marbles-overlay #mb-controls { padding: 10px; border-radius: 22px; background: rgba(14,14,22,.82); border: 1px solid rgba(var(--winner-rgb), .2); box-shadow: 0 20px 60px rgba(0,0,0,.45); backdrop-filter: blur(10px); }
+#marbles-overlay #mb-controls button {
+  min-width: 0; padding: 13px 24px; border-radius: 14px; font: 800 13px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase;
+  background: rgba(255,255,255,.05); color: var(--text); border: 1px solid var(--border-strong); box-shadow: none;
+}
+#marbles-overlay #mb-controls button:hover { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); }
+#marbles-overlay #mb-controls .btn-primary { background: var(--winner-fill); color: #2b1a00; border-color: rgba(255,255,255,.5); }
+#marbles-overlay .mb-cambtn { height: 38px; padding: 0 16px; border-radius: 999px; background: rgba(14,14,22,.8); border-color: rgba(var(--winner-rgb), .3); color: #fff; font: 800 13px/1 var(--font-ui); backdrop-filter: blur(8px); }
+#marbles-overlay .mb-cambtn:hover { border-color: var(--winner); color: var(--winner); background: rgba(14,14,22,.9); }
+#marbles-overlay .mb-cambtn.mb-on { background: var(--winner-fill); color: #2b1a00; border-color: rgba(255,255,255,.5); }
+#marbles-overlay .mb-flyhint { background: rgba(14,14,22,.82); border-color: rgba(var(--winner-rgb), .3); color: #fff; }
+
+/* ── Вибір карти: великі картки з прев'ю ── */
+#marbles-overlay #mb-picker {
+  gap: 22px;
+  background: radial-gradient(60% 55% at 50% 45%, rgba(var(--winner-rgb), .10), transparent 70%), radial-gradient(80% 60% at 85% 0%, rgba(var(--violet-rgb), .16), transparent 70%), rgba(6,6,10,.92);
+}
+#marbles-overlay .mb-picker-title { font: 800 34px/1 var(--font-display); letter-spacing: 2px; color: #fff; text-shadow: none; }
+#marbles-overlay .mb-picker-sub { margin-top: -12px; font: 600 14px/1 var(--font-ui); color: var(--text-muted); }
+#marbles-overlay #mb-picker-cards { gap: 18px; max-width: min(94vw, 1240px); }
+#marbles-overlay .mb-card {
+  width: 280px; min-height: 0; padding: 0; gap: 0; overflow: hidden; align-items: stretch; text-align: left;
+  border-radius: 22px; background: rgba(16,16,26,.9); border: 1px solid rgba(255,255,255,.1);
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+}
+#marbles-overlay .mb-card:hover { transform: translateY(-6px); border-color: rgba(var(--winner-rgb), .75); box-shadow: 0 30px 70px rgba(0,0,0,.55), 0 0 40px rgba(var(--winner-rgb), .25); }
+#marbles-overlay .mb-card-last { border-color: rgba(var(--winner-rgb), .5); }
+#marbles-overlay .mb-card-img {
+  position: relative; height: 158px; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 40%, rgba(var(--winner-rgb), .25), rgba(20,20,32,1) 70%) center / cover no-repeat;
+}
+#marbles-overlay .mb-card-img::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(16,16,26,.95)); }
+#marbles-overlay .mb-card-ico { position: relative; z-index: 1; font-size: 54px; filter: drop-shadow(0 6px 16px rgba(0,0,0,.45)); }
+#marbles-overlay .mb-card.mb-has-img .mb-card-ico {
+  position: absolute; left: 14px; top: 12px; font-size: 22px; width: 42px; height: 42px; display: grid; place-items: center;
+  border-radius: 50%; background: rgba(14,14,22,.75); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px);
+}
+#marbles-overlay .mb-card-body { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px 18px; }
+#marbles-overlay .mb-card-name { font: 800 19px/1.15 var(--font-display); color: #fff; }
+#marbles-overlay .mb-card-time { font: 700 13px/1 var(--font-mono); color: var(--winner); }
+#marbles-overlay .mb-card-desc { font: 500 13px/1.4 var(--font-ui); color: var(--text-muted); }
+#marbles-overlay .mb-card-rnd { border-style: dashed; border-color: rgba(var(--winner-rgb), .35); }
+#marbles-overlay #mb-picker > .btn-dark {
+  padding: 12px 34px; border-radius: 14px; font: 800 13px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase;
+  background: rgba(255,255,255,.05); border: 1px solid var(--border-strong); color: var(--text-muted);
+}
+
+/* ── «Рука Зевса» стрімера (marbles-maps/zeus.js): блискавка в руці, приціл, заряди, підписи ударів ── */
+.zp-root { position: absolute; inset: 0; pointer-events: none; z-index: 5; display: none; }
+.zp-root.zp-on { display: block; }
+#mb-canvas.zp-nocursor { cursor: none; }
+.zp-cross {
+  position: absolute; width: 58px; height: 58px; transform: translate(-50%, -50%);
+  color: #ffd447; filter: drop-shadow(0 0 6px rgba(255, 201, 61, .9)) drop-shadow(0 0 2px rgba(0,0,0,.8));
+  transition: color .15s;
+}
+.zp-cross svg { width: 100%; height: 100%; animation: zpSpin 6s linear infinite; }
+@keyframes zpSpin { to { transform: rotate(360deg); } }
+.zp-cool .zp-cross { color: rgba(255,255,255,.45); filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+/* блискавка «в руці» — нахилена, світиться й ледь тремтить; на ударі смикається вперед */
+.zp-hand {
+  position: absolute; right: 15vw; bottom: -1vh; width: clamp(90px, 14vh, 150px);
+  transform: rotate(-18deg); transform-origin: 70% 100%;
+  filter: drop-shadow(0 0 18px rgba(255, 210, 80, .85)) drop-shadow(0 0 46px rgba(255, 170, 40, .55));
+  animation: zpIdle 2.2s ease-in-out infinite;
+}
+.zp-hand svg { width: 100%; display: block; }
+.zp-bolt { animation: zpFlicker .14s steps(2) infinite; }
+@keyframes zpFlicker { 50% { opacity: .9; } }
+@keyframes zpIdle { 0%, 100% { transform: rotate(-18deg) translateY(0); } 50% { transform: rotate(-15deg) translateY(-6px); } }
+.zp-hand.zp-kick { animation: zpKick .45s cubic-bezier(.2,.9,.3,1); }
+@keyframes zpKick { 0% { transform: rotate(-18deg); } 25% { transform: rotate(-34deg) translate(-26px, -34px) scale(1.12); } 100% { transform: rotate(-18deg); } }
+.zp-cool .zp-hand { filter: drop-shadow(0 0 8px rgba(255, 210, 80, .4)); opacity: .7; }
+.zp-charges {
+  position: absolute; left: -64px; bottom: 7vh; padding: 6px 12px; border-radius: 999px;
+  font: 800 16px/1 var(--font-mono); color: #2b1a00; background: var(--winner-fill);
+  box-shadow: 0 6px 18px rgba(0,0,0,.4), 0 0 18px rgba(255, 201, 61, .5);
+}
+.zp-flash { position: absolute; inset: 0; background: radial-gradient(circle at 70% 85%, rgba(255,250,220,.55), rgba(255,240,180,.15) 50%, transparent 75%); opacity: 0; }
+.zp-flash.zp-fl { animation: zpFl .35s ease-out; }
+@keyframes zpFl { 0% { opacity: 1; } 100% { opacity: 0; } }
+.zp-feed { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.zp-msg {
+  padding: 8px 18px; border-radius: 999px; font: 800 15px/1 var(--font-ui); color: #fff;
+  background: rgba(14,14,22,.85); border: 1px solid rgba(255, 201, 61, .55); box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  animation: zpMsg 3.2s ease forwards;
+}
+@keyframes zpMsg { 0% { opacity: 0; transform: translateY(-10px) scale(.9); } 8% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ── Кіл-фід шариків: зліва під HUD, нові зверху, зникають за 6 с ── */
+#mb-killfeed { position: absolute; top: 66px; left: 12px; z-index: 4; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: min(420px, 40vw); }
+.mb-kf-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 10px; border-radius: 999px;
+  background: rgba(14,14,22,.8); border: 1px solid rgba(255,255,255,.1); border-left: 4px solid var(--c, #ffc93d);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 22px rgba(0,0,0,.35);
+  font: 700 14px/1 var(--font-ui); color: #fff; white-space: nowrap;
+  animation: mbKfIn .35s var(--ease-spring) both; transition: opacity .4s, transform .4s;
+}
+.mb-kf-row.mb-kf-out { opacity: 0; transform: translateX(-16px); }
+.mb-kf-ico { font-size: 16px; }
+.mb-kf-nick { font-weight: 800; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.mb-kf-why { color: var(--text-muted); font-weight: 600; font-size: 13px; }
+@keyframes mbKfIn { from { opacity: 0; transform: translateX(-20px) scale(.95); } to { opacity: 1; transform: none; } }

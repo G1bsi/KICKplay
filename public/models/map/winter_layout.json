@@ -1,0 +1,263 @@
+{
+"w": 1600,
+"h": 1000,
+"items": [
+{
+"id": "shrine",
+"kind": "round",
+"x": 800,
+"y": 500,
+"r": 46
+},
+{
+"id": "cwallE",
+"kind": "rect",
+"x": 928,
+"y": 500,
+"hw": 10,
+"hh": 40
+},
+{
+"id": "cwallE_m",
+"kind": "rect",
+"x": 672,
+"y": 500,
+"hw": 10,
+"hh": 40
+},
+{
+"id": "cwallS",
+"kind": "rect",
+"x": 800,
+"y": 618,
+"hw": 40,
+"hh": 10
+},
+{
+"id": "cwallS_m",
+"kind": "rect",
+"x": 800,
+"y": 382,
+"hw": 40,
+"hh": 10
+},
+{
+"id": "houseA1",
+"kind": "rect",
+"x": 560,
+"y": 388,
+"hw": 58,
+"hh": 11
+},
+{
+"id": "houseA1_m",
+"kind": "rect",
+"x": 1040,
+"y": 612,
+"hw": 58,
+"hh": 11
+},
+{
+"id": "houseA2",
+"kind": "rect",
+"x": 508,
+"y": 430,
+"hw": 11,
+"hh": 42
+},
+{
+"id": "houseA2_m",
+"kind": "rect",
+"x": 1092,
+"y": 570,
+"hw": 11,
+"hh": 42
+},
+{
+"id": "rocksA",
+"kind": "round",
+"x": 680,
+"y": 690,
+"r": 34
+},
+{
+"id": "rocksA_m",
+"kind": "round",
+"x": 920,
+"y": 310,
+"r": 34
+},
+{
+"id": "logsA",
+"kind": "rect",
+"x": 1032,
+"y": 350,
+"hw": 42,
+"hh": 9
+},
+{
+"id": "logsA_m",
+"kind": "rect",
+"x": 568,
+"y": 650,
+"hw": 42,
+"hh": 9
+},
+{
+"id": "bushA",
+"kind": "bush",
+"x": 650,
+"y": 530
+},
+{
+"id": "bushA_m",
+"kind": "bush",
+"x": 950,
+"y": 470
+},
+{
+"id": "bushB",
+"kind": "bush",
+"x": 870,
+"y": 304
+},
+{
+"id": "bushB_m",
+"kind": "bush",
+"x": 730,
+"y": 696
+},
+{
+"id": "crateA",
+"kind": "crate",
+"x": 564,
+"y": 432
+},
+{
+"id": "crateA_m",
+"kind": "crate",
+"x": 1036,
+"y": 568
+},
+{
+"id": "crateB",
+"kind": "crate",
+"x": 594,
+"y": 460
+},
+{
+"id": "crateB_m",
+"kind": "crate",
+"x": 1006,
+"y": 540
+},
+{
+"id": "towerA",
+"kind": "rect",
+"x": 1460,
+"y": 900,
+"hw": 26,
+"hh": 26
+},
+{
+"id": "towerA_m",
+"kind": "rect",
+"x": 140,
+"y": 100,
+"hw": 26,
+"hh": 26
+},
+{
+"id": "towerB",
+"kind": "rect",
+"x": 140,
+"y": 900,
+"hw": 26,
+"hh": 26
+},
+{
+"id": "towerB_m",
+"kind": "rect",
+"x": 1460,
+"y": 100,
+"hw": 26,
+"hh": 26
+},
+{
+"id": "boulA",
+"kind": "round",
+"x": 1220,
+"y": 930,
+"r": 40
+},
+{
+"id": "boulA_m",
+"kind": "round",
+"x": 380,
+"y": 70,
+"r": 40
+},
+{
+"id": "boulB",
+"kind": "round",
+"x": 370,
+"y": 925,
+"r": 36
+},
+{
+"id": "boulB_m",
+"kind": "round",
+"x": 1230,
+"y": 75,
+"r": 36
+},
+{
+"id": "treeA",
+"kind": "tree",
+"x": 1360,
+"y": 955
+},
+{
+"id": "treeA_m",
+"kind": "tree",
+"x": 240,
+"y": 45
+},
+{
+"id": "treeB",
+"kind": "tree",
+"x": 240,
+"y": 950
+},
+{
+"id": "treeB_m",
+"kind": "tree",
+"x": 1360,
+"y": 50
+},
+{
+"id": "bushC",
+"kind": "bush",
+"x": 1530,
+"y": 800
+},
+{
+"id": "bushC_m",
+"kind": "bush",
+"x": 70,
+"y": 200
+},
+{
+"id": "bushD",
+"kind": "bush",
+"x": 65,
+"y": 805
+},
+{
+"id": "bushD_m",
+"kind": "bush",
+"x": 1535,
+"y": 195
+}
+]
+}

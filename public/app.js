@@ -112,6 +112,15 @@ let checkTimerInterval = null;
 let currentGame = null;     
 let selected = new Set();   
 let phase = 'idle';         
+// Захист від випадкового закриття вкладки (Ctrl+W, Ctrl+Q, Alt+F4…) посеред гри: браузер
+// не дає сторінці скасувати ці комбінації, але покаже «Покинуть сайт?» — гра не пропаде
+window.addEventListener('beforeunload', e => {
+  const mb = document.getElementById('marbles-overlay');
+  const busy = phase !== 'idle' || (mb && mb.classList.contains('visible'));
+  if (!busy) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 let winnersHistory = [];    
 
 // ── Ініціалізація кастомного чату (SSE) ─────────────
@@ -433,8 +442,12 @@ const GAME_MODES = [
   /* «Гонка» і «Марблс» тимчасово приховані з перемикача (код ігор лишився цілим —
      щоб повернути, розкоментуй рядок тут і скрипти в index.html) */
   // { id: 'race',     icon: '🏎️', label: 'Гонка' },
-  // { id: 'marbles',  icon: '🔮', label: 'Марблс' },
+  // { id: 'marbles',  icon: '🔮', label: 'Шарики' },
 ];
+// Марблс у розробці: видно лише на локальному сервері (localhost) — на Render прихований.
+// Скрипти ядра й карт index.html довантажує там само лише локально.
+const IS_LOCAL_DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+if (IS_LOCAL_DEV) GAME_MODES.push({ id: 'marbles', icon: '🔮', label: 'Шарики' });
 
 // Перемикання режиму стрілками (з циклічним переходом)
 function cycleGameMode(dir) {

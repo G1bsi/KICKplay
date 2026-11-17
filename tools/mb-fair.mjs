@@ -1,5 +1,5 @@
 // Чесність старту Марблс: чи не вирішує місце на лотку результат.
-//   node tools/mb-fair.mjs [mapId=endurance] [кульок=60] [гонок=10]
+//   node tools/mb-fair.mjs [mapId=sky] [кульок=60] [гонок=10]
 // Порядок на лотку дає random.org, тож шанси учасників і так рівні; але якщо
 // перші ряди стабільно їдуть попереду, гонка передбачувана. Очікування —
 // приблизно порівну по чвертях (у кожній чверті ~гонок·10/4 потраплянь у топ-10).
@@ -14,12 +14,14 @@ const R = (await import(pathToFileURL(path.join(PUB, 'vendor', 'rapier3d-compat.
 await R.init();
 globalThis.RAPIER = R;
 globalThis.window = globalThis;
+// карти з Blender (sky.js) читають свої дані через MB_READ: '/assets/…' → файл у public
+globalThis.MB_READ = (url) => fs.readFileSync(path.join(PUB, url.slice('/assets/'.length)), 'utf8');
 globalThis.document = { getElementById: () => null, createElement: () => ({ getContext: () => ({}) }) };
 vm.runInThisContext(fs.readFileSync(path.join(PUB, 'marbles.js'), 'utf8'), { filename: 'marbles.js' });
 for (const f of fs.readdirSync(path.join(PUB, 'marbles-maps')).filter(n => n.endsWith('.js')).sort()) {
   vm.runInThisContext(fs.readFileSync(path.join(PUB, 'marbles-maps', f), 'utf8'), { filename: f });
 }
-const map = process.argv[2] || 'endurance', N = +process.argv[3] || 60, runs = +process.argv[4] || 10;
+const map = process.argv[2] || 'sky', N = +process.argv[3] || 60, runs = +process.argv[4] || 10;
 const q = i => Math.min(3, Math.floor(i / (N / 4)));
 const top = [0, 0, 0, 0], wins = [0, 0, 0, 0];
 for (let r = 0; r < runs; r++) {

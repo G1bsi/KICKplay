@@ -435,12 +435,19 @@ const MB_JOIN_DROP = 0.15, MB_JOIN_EXT = 0.3; // стик: наступний с
 //  РЕЄСТР КАРТ. Кожна карта — файл у public/marbles-maps/*.js, що кладе в
 //  window.MB_MAPS[id] обʼєкт { id, name, icon, approxSec, desc, theme, physics?,
 //  eliminate?, build(B), intro?(track,pos,look), camera?(st,leader,pos,look),
-//  decor?(track,ctx) }. build(B) описує трасу через будівельник B (нижче) і
+//  decor?(track,ctx), step?(st,dt) — логіка на крок фізики, frame?(st,ctx) — покадровий показ }. build(B) описує трасу через будівельник B (нижче) і
 //  ОБОВʼЯЗКОВО задає B.finish; старт — або B.tray (кінематичний лоток), або
 //  B.startSlots (світові позиції) + опційно сегменти з gate:true (ворота,
 //  що зникають на старті). Ядро нічого не знає про конкретну карту.
 // ═════════════════════════════════════════════════════════════
-function mbMapIds() { const M = (typeof MB_MAPS !== 'undefined' && MB_MAPS) || (typeof window !== 'undefined' && window.MB_MAPS) || {}; return Object.keys(M); }
+// карта з map.unavailable (дані з Blender не завантажились) у вибір не потрапляє
+function mbMapIds() { const M = (typeof MB_MAPS !== 'undefined' && MB_MAPS) || (typeof window !== 'undefined' && window.MB_MAPS) || {}; return Object.keys(M).filter(k => !M[k].unavailable); }
+/* карти з Blender тримають трасу у файлі — map.preload() вантажить його ДО вибору карти
+   (рушій будує трасу синхронно). Помилка — карта просто зникає з вибору */
+function mbPreloadMaps() {
+  const M = (typeof window !== 'undefined' && window.MB_MAPS) || {};
+  return Promise.all(Object.keys(M).map(k => M[k].preload ? M[k].preload().then(() => { M[k].unavailable = false; }).catch(e => { M[k].unavailable = true; console.warn('[marbles] карта ' + k + ' недоступна', e); }) : null));
+}
 function mbMapDef(id) {
   const M = (typeof MB_MAPS !== 'undefined' && MB_MAPS) || (typeof window !== 'undefined' && window.MB_MAPS) || {};
   const ids = Object.keys(M);
@@ -885,7 +892,9 @@ function mbSimStep(st, dt) {
   // обертові елементи: кут += ω·dt (крутяться і до старту — як млинки в грі)
   for (let i = 0; i < st.spinners.length; i++) {
     const sp = st.spinners[i], g = sp.g;
-    sp.ang += (g.omega || 0) * dt;
+    // маятник: swing {amp, omega, phase} — кут коливається amp·sin(ωt+φ) (молоти), інакше — обертання
+    if (g.swing) { sp.ts = (sp.ts || 0) + dt; sp.ang = g.swing.amp * Math.sin((g.swing.omega || 1) * sp.ts + (g.swing.phase || 0)); }
+    else sp.ang += (g.omega || 0) * dt;
     const ax = g.axis || [0, 1, 0], h = sp.ang / 2, sn = Math.sin(h);
     sp.body.setNextKinematicRotation({ x: ax[0] * sn, y: ax[1] * sn, z: ax[2] * sn, w: Math.cos(h) });
     // підйом: lift {amp, omega, phase, up} — зміщення 0..amp уздовж up за косинусом (поршні-стінки)
@@ -947,6 +956,8 @@ function mbSimStep(st, dt) {
     }
   }
   if (anyFinish) st.active = st.active.filter(b => !b.finished);
+  // логіка карти на кожен крок (блискавки Зевса тощо); детермінована від st.raceT/st.frame
+  if (st.raceOn && track.map.step) track.map.step(st, dt);
 
   // фінішер за MB_FIN_HIDE с зникає з чаші, як у грі: інакше 150+ кульок
   // переповнюють чашу, і нові виштовхують старих через борт у небо
@@ -1159,10 +1170,37 @@ function mbEnsureDom() {
   return true;
 }
 
+// ── Кіл-фід: хто вибув і від чого (блискавка Зевса, рука стрімера, будка, випав з траси) ──
+function mbKillfeed(st) {
+  if (!mbDom) return;
+  let kf = mbDom.kf;
+  if (!kf || !kf.isConnected) { kf = mbDom.kf = document.createElement('div'); kf.id = 'mb-killfeed'; document.getElementById('marbles-overlay').appendChild(kf); }
+  if (kf._st !== st) { kf._st = st; kf._n = st.eliminated.length; kf.innerHTML = ''; }
+  while (kf._n < st.eliminated.length) {
+    const nick = st.eliminated[kf._n++];
+    const b = st.balls.find(x => x.nick === nick) || {};
+    const [ico, why] = b.zeusBy === 'streamer' ? ['⚡', 'испепелён стримером'] : b.zeusT != null ? ['⚡', 'испепелён Зевсом']
+                     : b.crushT != null ? ['🏠', 'раздавлен будкой'] : b.cutT != null ? ['🌈', 'разрезан радугой'] : ['🕳', 'вылетел с трассы'];
+    const row = document.createElement('div'); row.className = 'mb-kf-row';
+    row.innerHTML = '<span class="mb-kf-ico"></span><span class="mb-kf-nick"></span><span class="mb-kf-why"></span>';
+    row.children[0].textContent = ico; row.children[1].textContent = nick; row.children[2].textContent = why;
+    row.style.setProperty('--c', b.color || '#ffc93d');   // колір кульки — смужка зліва
+    kf.prepend(row);
+    while (kf.children.length > 6) kf.lastChild.remove();
+    setTimeout(() => { row.classList.add('mb-kf-out'); setTimeout(() => row.remove(), 400); }, 6000);
+  }
+}
 function mbSetCount(txt) {
   if (!mbDom) return;
-  mbDom.count.textContent = txt;
-  mbDom.count.style.display = txt ? 'flex' : 'none';
+  const el = mbDom.count;
+  if (!txt) { el.style.display = 'none'; el.dataset.v = ''; return; }
+  el.style.display = 'flex';
+  if (el.dataset.v === txt) return;            // те саме число — не перезапускаємо анімацію щокадру
+  el.dataset.v = txt;
+  const go = txt === 'GO!';
+  // кільце, що «спливає» за секунду, і число в центрі; GO — золотий спалах
+  el.innerHTML = '<div class="mb-cd-wrap' + (go ? ' mb-cd-go' : '') + '"><svg class="mb-cd-ring" viewBox="0 0 200 200"><circle cx="100" cy="100" r="90"/></svg><span class="mb-cd-num"></span></div>';
+  el.querySelector('.mb-cd-num').textContent = go ? 'GO' : txt;
 }
 function mbShowControls() { if (mbDom) mbDom.controls.style.display = 'flex'; }
 
@@ -1311,6 +1349,38 @@ function mbBallTexture() {
   g.fillStyle = gr2; g.fillRect(0, 0, 256, 128);
   const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding;
   return t;
+}
+// ── Трипланарна текстура: для сіток без UV (моделі з Blender — криві й тіла обертання).
+// Текстура проєктується за СВІТОВИМИ координатами з трьох осей і змішується за нормаллю:
+// без швів і розгортки. o: {scale — повторів на метр, mix — сила 0..1, tint — колір-множник}
+// Колір матеріалу множиться на текстуру: білий мармур × фото мармуру = мармур,
+// жовта доріжка × сіра фактура = жовта з фактурою.
+const mbTexCache = {};
+function mbLoadTex(url, srgb) {
+  if (mbTexCache[url]) return mbTexCache[url];
+  const t = new THREE.TextureLoader().load(url);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  if (srgb !== false) t.encoding = THREE.sRGBEncoding;
+  return (mbTexCache[url] = t);
+}
+function mbTriplanar(mat, tex, o) {
+  o = o || {};
+  const u = { tpMap: { value: tex }, tpScale: { value: o.scale || 0.25 }, tpMix: { value: o.mix != null ? o.mix : 1 } };
+  mat.userData.tp = u;
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTpPos; varying vec3 vTpNrm;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvTpPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vTpNrm = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D tpMap; uniform float tpScale; uniform float tpMix; varying vec3 vTpPos; varying vec3 vTpNrm;')
+      .replace('#include <map_fragment>', '#include <map_fragment>\n{ vec3 w = pow(abs(normalize(vTpNrm)), vec3(4.0)); w /= (w.x + w.y + w.z + 1e-5); vec3 p = vTpPos * tpScale;\n'
+        + '  vec3 t = texture2D(tpMap, p.zy).rgb * w.x + texture2D(tpMap, p.xz).rgb * w.y + texture2D(tpMap, p.xy).rgb * w.z;\n'
+        + '  diffuseColor.rgb *= mix(vec3(1.0), t, tpMix); }');
+  };
+  mat.customProgramCacheKey = () => 'tp' + (o.key || '');
+  mat.needsUpdate = true;
+  return mat;
 }
 // колір кульки i: золотий кут по тону + три рівні насиченості/яскравості, щоб
 // сусіди в пелетоні не зливались; лінійний простір (instanceColor у r128 — лінійний)
@@ -1692,7 +1762,7 @@ function mbTrackGfxBuild(track) {
   scene.add(tg.decor);
   if (track.map.decor) {
     try {
-      track.map.decor(track, { THREE, scene: tg.decor, trayGroup: tg.trayGroup, spinners: spinById, renderer: G.renderer, mats, env: G.env, mergeParts: mbMergeParts, boxPart: mbBoxPart, spherePart: mbSpherePart, texM: MB_TEX_M, textures: { logo: mbLogoTexture, finish: mbFinishTexture, start: mbStartTexture, marble: mbMarbleTexture, cloud: mbCloudTexture } });
+      track.map.decor(track, { THREE, scene: tg.decor, trayGroup: tg.trayGroup, spinners: spinById, renderer: G.renderer, mats, env: G.env, mergeParts: mbMergeParts, boxPart: mbBoxPart, triplanar: mbTriplanar, loadTex: mbLoadTex, spherePart: mbSpherePart, texM: MB_TEX_M, textures: { logo: mbLogoTexture, finish: mbFinishTexture, start: mbStartTexture, marble: mbMarbleTexture, cloud: mbCloudTexture } });
     } catch (e) { console.error('[marbles] декор карти ' + track.id + ' впав', e); }
   }
   if (track.zones && track.zones.length) mbZonesGfxBuild(track, tg);
@@ -2148,7 +2218,14 @@ function mbFlyStop() {
 function mbFlyLock() {
   const cv = mbDom && mbDom.cvs;
   if (!cv || document.pointerLockElement === cv) return;
-  try { const r = cv.requestPointerLock(); if (r && typeof r.catch === 'function') r.catch(() => {}); } catch (e) { /* фолбек — drag-look */ }
+  // unadjustedMovement — «сирий» рух миші без прискорення ОС: у Chrome на Windows саме
+  // з прискоренням трапляються фантомні стрибки movementX у сотні пікселів (камера
+  // різко розверталась на ~180°). Не підтримується — пробуємо звичайний lock
+  const plain = () => { try { const r2 = cv.requestPointerLock(); if (r2 && typeof r2.catch === 'function') r2.catch(() => {}); } catch (e) { /* фолбек — drag-look */ } };
+  try {
+    const r = cv.requestPointerLock({ unadjustedMovement: true });
+    if (r && typeof r.catch === 'function') r.catch(plain);
+  } catch (e) { plain(); }
 }
 let mbFlyHintTimer = 0;
 function mbFlyHint(show) {
@@ -2164,6 +2241,13 @@ function mbFlyDir(out) {
 function mbFlyLook(mx, my) {
   const f = mbG.fly;
   mbFlyHint(false);
+  // відомий баг pointer lock у браузерах: поодинока подія з movementX/Y у сотні пікселів
+  // (кадр «телепорту» курсора) — такий викид не реальний рух руки, відкидаємо;
+  // решту обмежуємо, щоб навіть пропущений викид не крутив камеру на півоберта
+  const big = Math.max(Math.abs(mx), Math.abs(my));
+  if (big > 160 && big > (f.lastBig || 0) * 4 + 40) { f.lastBig = Math.min(f.lastBig || 0, 60); return; }
+  f.lastBig = big;
+  mx = mbClamp(mx, -120, 120); my = mbClamp(my, -120, 120);
   f.yaw += mx * 0.0022;
   f.pitch = mbClamp(f.pitch - my * 0.0022, -MB_FLY_PITCH_MAX, MB_FLY_PITCH_MAX);
 }
@@ -2174,8 +2258,10 @@ function mbFlyKey(code, down) {
     case 'KeyA': f.kA = down; break;
     case 'KeyS': f.kS = down; break;
     case 'KeyD': f.kD = down; break;
-    case 'Space': f.kUp = down; break;
-    case 'KeyC': case 'ControlLeft': case 'ControlRight': f.kDn = down; break;
+    // Ctrl тут НЕ використовуємо: Ctrl+W (уперед + вниз) закривав вкладку браузера,
+    // а скасувати цю комбінацію сторінка не може
+    case 'Space': case 'KeyE': f.kUp = down; break;
+    case 'KeyC': case 'KeyQ': f.kDn = down; break;
     case 'ShiftLeft': case 'ShiftRight': f.kBoost = down; break;
     default: took = false;
   }
@@ -2238,9 +2324,12 @@ function mbBindInput() {
     mbG.fly.drag = true; mbG.fly.lastX = e.clientX; mbG.fly.lastY = e.clientY;
   });
   window.addEventListener('mouseup', () => { if (mbG) mbG.fly.drag = false; });
+  // lock зник (Esc, alt-tab) — перетягування починаємо з нуля, інакше перший рух після
+  // повернення рахувався б від давньої точки й давав різкий ривок
+  document.addEventListener('pointerlockchange', () => { if (mbG) { mbG.fly.drag = false; mbG.fly.lastBig = 0; } });
   window.addEventListener('mousemove', e => {
     if (!vis() || !mbG.fly.on) return;
-    if (document.pointerLockElement === cv) mbFlyLook(e.movementX || 0, e.movementY || 0);
+    if (document.pointerLockElement === cv) { mbFlyLook(e.movementX || 0, e.movementY || 0); mbG.fly.lastX = e.clientX; mbG.fly.lastY = e.clientY; }
     else if (mbG.fly.drag) { mbFlyLook(e.clientX - mbG.fly.lastX, e.clientY - mbG.fly.lastY); mbG.fly.lastX = e.clientX; mbG.fly.lastY = e.clientY; }
   });
   cv.addEventListener('wheel', e => {
@@ -2291,6 +2380,7 @@ function mbBoardUpdate(st, ranking) {
     }
     row.style.transform = 'translateY(' + i * MB_ROW_H + 'px)';
     row.querySelector('.mb-place').textContent = r.dead ? '💀' : (r.fin ? '✓' : String(i + 1));
+    row.classList.toggle('mb-p1', i === 0 && !r.dead); row.classList.toggle('mb-p2', i === 1 && !r.dead); row.classList.toggle('mb-p3', i === 2 && !r.dead);
     row.classList.toggle('mb-fin', !!r.fin);
     row.classList.toggle('mb-dead', !!r.dead);
     row.classList.remove('mb-exit');
@@ -2318,13 +2408,20 @@ function mbShowPodium(st) {
     const i = order[k];
     html += '<div class="mb-pod-card mb-pod-' + (i + 1) + '">' +
       '<div class="mb-pod-medal">' + medals[i] + '</div>' +
-      '<div class="mb-pod-ball"></div>' +
+      '<div class="mb-pod-av"><span></span><img alt=""></div>' +
       '<div class="mb-pod-nick"></div>' +
       '<div class="mb-pod-place">' + labels[i] + '</div></div>';
   }
   mbDom.podium.innerHTML = html;
   const nickEls = mbDom.podium.querySelectorAll('.mb-pod-nick');
   for (let k = 0; k < order.length; k++) nickEls[k].textContent = String(top[order[k]]);
+  // аватарки Kick на подіумі (або кольорова літера, якщо фото нема)
+  const avEls = mbDom.podium.querySelectorAll('.mb-pod-av');
+  for (let k = 0; k < order.length; k++) {
+    const nick = String(top[order[k]]), av = avEls[k];
+    if (window.WC) WC.avatar(av, nick);
+    else av.querySelector('span').textContent = (nick.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
+  }
   mbDom.podium.classList.add('visible');
   if (mbPodTimer) clearTimeout(mbPodTimer);
   mbPodTimer = setTimeout(() => {
@@ -2364,6 +2461,7 @@ async function startMarblesGame() {
   }
   if (typeof THREE === 'undefined') { alert('Марблс: three.js не завантажився'); closeMarblesOverlay(); return; }
   if (!mbDom.root.classList.contains('visible')) return; // закрили, поки чекали
+  await mbPreloadMaps();
   const mapId = await mbPickMap();
   if (!mapId || !mbDom.root.classList.contains('visible')) return;
   // стартовий порядок — перестановка random.org з доказом (кнопка перевірки
@@ -2390,17 +2488,19 @@ function mbPickMap() {
       const m = mbMapDef(id);
       const el = document.createElement('button');
       el.type = 'button'; el.className = 'mb-card' + (id === last ? ' mb-card-last' : '');
-      el.innerHTML = '<div class="mb-card-ico"></div><div class="mb-card-name"></div><div class="mb-card-time"></div><div class="mb-card-desc"></div>';
+      el.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico"></div></div><div class="mb-card-body"><div class="mb-card-name"></div><div class="mb-card-time"></div></div>';
+      // прев'ю карти (рендер з Blender); немає файлу — лишається градієнт з іконкою
+      const img = new Image(); img.onload = () => { el.querySelector('.mb-card-img').style.backgroundImage = 'url(' + img.src + ')'; el.classList.add('mb-has-img'); };
+      img.src = '/assets/models/marbles/' + id + '_thumb.jpg';
       el.querySelector('.mb-card-ico').textContent = m.icon || '🔮';
       el.querySelector('.mb-card-name').textContent = m.name || id;
       el.querySelector('.mb-card-time').textContent = '⏱ ≈ ' + mbFmtApprox(m.approxSec || 120) + (m.allSec ? ' · все ≈ ' + mbFmtApprox(m.allSec) : '');
-      el.querySelector('.mb-card-desc').textContent = m.desc || '';
       el.onclick = () => mbChooseMap(id);
       cards.appendChild(el);
     }
     const rnd = document.createElement('button');
     rnd.type = 'button'; rnd.className = 'mb-card mb-card-rnd';
-    rnd.innerHTML = '<div class="mb-card-ico">🎲</div><div class="mb-card-name">Случайная</div><div class="mb-card-time">карту выберет жребий</div>';
+    rnd.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico">🎲</div></div><div class="mb-card-body"><div class="mb-card-name">Случайная</div><div class="mb-card-time">карту выберет жребий</div></div>';
     rnd.onclick = () => mbChooseMap(ids[Math.floor(Math.random() * ids.length)]);
     cards.appendChild(rnd);
     mbDom.picker.style.display = 'flex';
@@ -2416,6 +2516,7 @@ function mbChooseMap(id) {
 async function mbChangeMap() {
   if (!mbEnsureDom() || !mbBaseList.length) return;
   mbDom.controls.style.display = 'none';
+  await mbPreloadMaps();
   const mapId = await mbPickMap();
   if (!mapId || !mbDom.root.classList.contains('visible')) return;
   mbSetCount('…');
@@ -2431,7 +2532,7 @@ function mbStartRace(order, mapId) {
   mbGfxInit();
   mbGfxResize();
   mbTrackGfxBuild(track);
-  if (mbDom.pillName) mbDom.pillName.textContent = '🔮 ' + (track.map.name || 'Марблс');
+  if (mbDom.pillName) mbDom.pillName.textContent = '🔮 ' + (track.map.name || 'Шарики');
   mbSt = mbCreateSim(order, { map: mbCurMapId });
   mbSt.phase = 'intro';
   mbSt.introT = 0;
@@ -2585,6 +2686,8 @@ function mbRender(dtReal) {
   }
 
   if (G.tg && G.tg.zones) mbZonesGfxUpdate(st);
+  // покадрові ефекти карти (анімація декору, спалахи) — лише показ, на фізику не впливає
+  if (track.map.frame && G.tg) track.map.frame(st, { THREE, scene: G.tg.decor, camera: G.camera, dt: dtReal, leader });
 
   // кульки + плашки
   const balls = st.balls, inst = mbRace.balls, lab = mbRace.labels, gold = mbRace.goldAttr;
@@ -2637,6 +2740,7 @@ function mbRender(dtReal) {
   // HUD
   if (mbDom.timer) mbDom.timer.textContent = mbFmtTime(st.raceOn ? st.raceT : 0);
   if (mbDom.alive) mbDom.alive.textContent = st.active.length + '/' + st.balls.length;
+  mbKillfeed(st);
   if (mbDom.cd) {
     const show = st.countdown != null && !st.done;
     mbDom.cd.style.display = show ? 'inline-flex' : 'none';

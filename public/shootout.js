@@ -117,6 +117,7 @@ function vnoise(x, z) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 function heightAt(x, y) {
+  if (BIO.map) { const r = MAPDATA[BIO.key]; if (r && r.hm) return mapHeightAt(r.hm, x, y); }
   /* 3 октави: великі пагорби → середні хвилі → дрібна шорсткість */
   let n = vnoise(x * 0.0026, y * 0.0026) * 0.58
         + vnoise(x * 0.0062 + 71.3, y * 0.0062 + 23.7) * 0.30
@@ -157,7 +158,11 @@ const W = 1600, H = 1000;      // світові координати
 const PR = 16;                 // радіус гравця
 const VISION = 640;            // дальність зору
 const GUN = { rof: 105, mag: 30, reload: 1600, speed: 900, range: 560 };
-const COLORS = ['#ff453a', '#4a9bff', '#ffd93d', '#a0ff4a', '#c77dff', '#ff8a4a', '#00ffcc', '#ff4aa8'];
+/* 24 кольори бійців (фінал до 24): перші 8 — як раніше, далі — проміжні тони й відтінки,
+   щоб сусіди в списку не зливались */
+const COLORS = ['#ff453a', '#4a9bff', '#ffd93d', '#a0ff4a', '#c77dff', '#ff8a4a', '#00ffcc', '#ff4aa8',
+  '#ffffff', '#2fd16f', '#ff6fd8', '#5ee7ff', '#ffb03a', '#8a7dff', '#d6ff3a', '#ff7a7a',
+  '#3a7bff', '#b7f5d8', '#e0a96d', '#ff3fa0', '#7dffb0', '#c4c4c4', '#ffe48a', '#9a5cff'];
 
 /* ── Стан бою ── */
 let root = null, cv = null, ctx = null, vw = 0, vh = 0, dpr = 1;
@@ -235,6 +240,10 @@ function makeOb(type, x, y, vert) {
   else if (type === 'barrel') { o.shape = 'circle'; o.r = 15; o.blocksLOS = false; }
   else if (type === 'bush') { o.shape = 'circle'; o.r = 30; o.solid = false; o.blocksLOS = false; }
   else if (type === 'tree') { o.shape = 'circle'; o.r = 13; o.crown = 50 + fint(16); }
+  /* укриття карти з Blender (стіни руїн, вежі, валуни, святилище): розмір задає
+     розстановка карти, 3D — частина моделі карти, тож окремої моделі не будуємо */
+  else if (type === 'mapRect') { o.hw = 30; o.hh = 30; }
+  else if (type === 'mapRound') { o.shape = 'circle'; o.r = 30; }
   if (o.shape === 'rect' && vert) { const t = o.hw; o.hw = o.hh; o.hh = t; }
   return o;
 }
@@ -405,6 +414,20 @@ function findPath(x0, y0, x1, y1) {
 }
 
 /* ── Генерація світу: чесно-симетрична розкладка ── */
+/* розстановка з карти Blender (valley_layout.json): точкова симетрія закладена
+   в самій карті, кільце спавнів у ній вільне — тож спавни й особисті укриття
+   лишаються як у процедурному бою, а замість випадкових пар — укриття карти */
+function layoutObstacles(items) {
+  for (let i = 0; i < items.length; i++) {
+    const e = items[i];
+    let o;
+    if (e.kind === 'rect') { o = makeOb('mapRect', e.x, e.y, false); o.hw = e.hw; o.hh = e.hh; }
+    else if (e.kind === 'round') { o = makeOb('mapRound', e.x, e.y, false); o.r = e.r; }
+    else if (e.kind === 'crate' || e.kind === 'bush' || e.kind === 'tree') o = makeOb(e.kind, e.x, e.y, false);
+    else continue;
+    obstacles.push(o);
+  }
+}
 function genWorld(n) {
   obstacles.length = 0; medkits.length = 0; obSeq = 0;
   /* Спавни рівномірно по еліпсу навколо центру: всі рівновіддалені
@@ -422,8 +445,12 @@ function genWorld(n) {
     const dx = W / 2 - s.x, dy = H / 2 - s.y, d = hyp(dx, dy) || 1;
     const cx = s.x + dx / d * 95, cy = s.y + dy / d * 95;
     const vert = Math.abs(dx) > Math.abs(dy);  // стіна поперек напрямку до центру
-    obstacles.push(makeOb(i % 2 ? 'sandbag' : 'wall', cx, cy, vert));
+    // на карті з Blender — однакові мішки всім (чесно, і червоні контейнери не вибиваються зі стилю)
+    // великий фінал (15+) — компактні ящики: мішки 100 юнітів на щільному колі стикались би
+    obstacles.push(makeOb(n > 14 ? 'crate' : (BIO.map ? 'sandbag' : (i % 2 ? 'sandbag' : 'wall')), cx, cy, vert));
   }
+  const lay = BIO.map && MAPDATA[BIO.key] && MAPDATA[BIO.key].layout;
+  if (lay) { layoutObstacles(lay); rebuildNav(); return; }
   /* Центральний «компаунд»: пара ящиків — точка інтересу (вантажівку
      прибрано на прохання власника — центр став прострілюваним) */
   pushObPair('crate', W / 2 + 118, H / 2 - 78, false);
@@ -1404,6 +1431,7 @@ function updatePlayer(p, dt, aliveN) {
     /* ввід протух (лаг/пішов) → бот плавно перехоплює з нового рішення */
     p.human = false; p.decideAt = 0;
   }
+  if (stepThrow(p, dt)) return;
   /* канал лікування: стоїмо 2с; збили — аптечка лишається */
   if (p.healUntil) {
     if (now - p.lastHurtAt < 300) { p.healUntil = 0; p.state = 'ROAM'; p.decideAt = 0; }
@@ -1616,13 +1644,38 @@ function updateBullets(dt) {
 }
 
 /* ── Гранати / молотови / смоки ── */
+/* Кидок — не миттєвий: боєць зупиняється, розвертається корпусом до точки кидка,
+   замахується і відпускає гранату з руки ВПЕРЕД (раніше граната вилітала одразу,
+   поки корпус ще дивився в бік бігу — виглядало як кидок спиною). */
+const THROW = { wind: 330, minRel: 260, maxRel: 900, end: 260 };
 function throwNade(p, tx, ty, kind) {
+  if (p.throwSt) return;                     // уже кидає
   kind = kind || 'frag';
   if (kind === 'frag') p.grenades--;
   else p.specialUsed = true;                 // молотов/смок — один на бійця за бій
   p.nadeAt = perfNow + 9000;
-  const d = hyp(tx - p.x, ty - p.y);
-  grenades.push({ sx: p.x, sy: p.y, tx: tx, ty: ty, t: 0, dur: clamp(d / 300, 0.7, 1.15), owner: p, kind: kind });
+  p.throwSt = { t0: perfNow, ang: Math.atan2(ty - p.y, tx - p.x), tx: tx, ty: ty, kind: kind, rel: 0, end: 0 };
+}
+/* крок кидка: true — боєць зайнятий кидком (AI/стрільба цього кадру пропускаються) */
+function stepThrow(p, dt) {
+  const st = p.throwSt; if (!st) return false;
+  const now = perfNow;
+  st.ang = Math.atan2(st.ty - p.y, st.tx - p.x);
+  aimSpring(p, st.ang, dt, 18, 0.9);         // швидкий, але людський розворот до точки кидка
+  p.vx *= Math.pow(0.02, dt); p.vy *= Math.pow(0.02, dt);   // гальмує на місці
+  if (!st.rel) {
+    const el = now - st.t0, ok = Math.abs(angDiff(p.aim, st.ang)) < 0.35;
+    if ((el >= THROW.wind && ok && el >= THROW.minRel) || el >= THROW.maxRel) {
+      st.rel = now; st.end = now + THROW.end;
+      p.aim = st.ang; p.aimVel = 0;            // на відпусканні корпус точно дивиться в бік кидка
+      // з руки, перед корпусом; смок «собі під ноги» (ціль ближче за руку) — просто кладе поруч
+      const near = hyp(st.tx - p.x, st.ty - p.y) < PR + 30, off = near ? 0 : PR + 8;
+      const hx = p.x + Math.cos(p.aim) * off, hy = p.y + Math.sin(p.aim) * off;
+      const d = hyp(st.tx - hx, st.ty - hy);
+      grenades.push({ sx: hx, sy: hy, tx: st.tx, ty: st.ty, t: 0, dur: clamp(d / 300, 0.7, 1.15), owner: p, kind: st.kind });
+    }
+  } else if (now >= st.end) { p.throwSt = null; p.decideAt = 0; return false; }
+  return true;
 }
 function updateGrenades(dt) {
   for (let i = grenades.length - 1; i >= 0; i--) {
@@ -1947,6 +2000,11 @@ function drawObstacle(o) {
       ctx.fillStyle = 'rgba(255,180,60,' + (0.25 * o.hits) + ')';
       ctx.beginPath(); ctx.arc(o.x, o.y, 4 + o.hits * 2, 0, TAU); ctx.fill();
     }
+  } else if (o.type === 'mapRound') {
+    shadow(o.x, o.y, o.r, o.r * 0.8);
+    ctx.fillStyle = '#8c8f96';
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 2; ctx.stroke();
   } else if (o.type === 'tree') {
     /* тут лише стовбур; крона — окремим верхнім шаром */
     shadow(o.x, o.y, o.r, o.r * 0.8);
@@ -2662,7 +2720,52 @@ const BIOMES = {
     decorSrc: { lean1: 'tree', lean2: 'tree2' },
   },
 };
+/* «Долина» — карта, повністю зроблена в Blender (blender/map_valley.blend):
+   рельєф, вода, краєвид — готова модель valley.glb, висоти землі — valley_h.json
+   (heightAt читає їх, тож солдати й укриття стоять точно на рельєфі). Палітра
+   неба/туману/світла — від лісу; моделі дерев/кущів на арені — теж лісові */
+/* «Каньйон» і «Перевал» — карти з Blender (blender/map_desert.blend, map_winter.blend) за тим самим
+   конвеєром, що й «Долина»; процедурні пустеля/зима лишаються запасними (BIO.proc), поки модель їде */
+for (const k of ['desert', 'winter']) {
+  const proc = BIOMES[k];
+  BIOMES[k] = Object.assign({}, proc, { proc, map: { glb: '/assets/models/map/' + k + '.glb', hmap: '/assets/models/map/' + k + '_h.json', layout: '/assets/models/map/' + k + '_layout.json' } });
+}
+BIOMES.valley = Object.assign({}, BIOMES.forest, {
+  key: 'valley',
+  map: { glb: '/assets/models/map/valley.glb', hmap: '/assets/models/map/valley_h.json', layout: '/assets/models/map/valley_layout.json' },
+  fog: '#cfe0ee', fogGame: 0.00016, fogOver: 0.00005,
+  sky: ['#5ea3e0', '#9fcbef', '#d8e8f3'],
+  hemi: ['#dcecff', '#5f7d48'],
+});
 let BIO = BIOMES.forest;   // активний біом бою; ставиться в apiStart ДО setup3D
+/* дані карти з Blender: вантажимо у фоні одразу після старту сторінки — до фіналу
+   (хвилини лобі) вони давно готові; не встигли — бій іде на процедурному лісі */
+const MAPDATA = {};
+function loadMapData(bio) {
+  const m = bio && bio.map;
+  if (!m || MAPDATA[bio.key]) return;
+  const rec = MAPDATA[bio.key] = { hm: null, scene: null, layout: null };
+  if (m.layout) fetch(m.layout).then(function (r) { return r.json(); }).then(function (j) { rec.layout = j.items || []; })
+    .catch(function (e) { try { console.warn('[RSO] розстановка карти не завантажилась', e); } catch (_) {} });
+  fetch(m.hmap).then(function (r) { return r.json(); }).then(function (j) {
+    const bin = atob(j.data), a = new Int16Array(j.nx * j.ny);
+    for (let i = 0; i < a.length; i++) { const lo = bin.charCodeAt(i * 2), hi = bin.charCodeAt(i * 2 + 1); let v = lo | (hi << 8); if (v > 32767) v -= 65536; a[i] = v; }
+    rec.hm = { x0: j.x0, y0: j.y0, step: j.step, nx: j.nx, ny: j.ny, unit: j.unit || 25, h: a };
+  }).catch(function (e) { try { console.warn('[RSO] висоти карти не завантажились', e); } catch (_) {} });
+  loadModel(m.glb).then(function (g) { rec.scene = g.scene; })
+    .catch(function (e) { try { console.warn('[RSO] модель карти не завантажилась', e); } catch (_) {} });
+}
+function mapReady(bio) { const r = bio && bio.map && MAPDATA[bio.key]; return !!(r && r.hm && r.scene && (!bio.map.layout || r.layout)); }
+/* висота землі з карти висот Blender (білінійно); ігрові юніти → метри Blender:
+   X = (x − W/2)/25, Y = (H/2 − y)/25 (вісь Y Blender дивиться «вгору» мапи) */
+function mapHeightAt(hm, x, y) {
+  const X = (x - W / 2) / hm.unit, Y = (H / 2 - y) / hm.unit;
+  let fi = (X - hm.x0) / hm.step, fj = (Y - hm.y0) / hm.step;
+  fi = Math.max(0, Math.min(hm.nx - 1.001, fi)); fj = Math.max(0, Math.min(hm.ny - 1.001, fj));
+  const i = fi | 0, j = fj | 0, tx = fi - i, ty = fj - j, n = hm.nx, a = hm.h;
+  const h00 = a[j * n + i], h10 = a[j * n + i + 1], h01 = a[(j + 1) * n + i], h11 = a[(j + 1) * n + i + 1];
+  return ((h00 + (h10 - h00) * tx) * (1 - ty) + (h01 + (h11 - h01) * tx) * ty) / 100 * hm.unit;
+}
 
 /* ── Ґрунтова стежка: звивиста синусоїдна крива від краю до краю через
    центр арени. Детермінована від сіда рельєфу (_terr) — той самий бій,
@@ -2928,8 +3031,25 @@ function loadModel(path) {
   });
 }
 /* нормалізація один раз на модель: габарити/півот, далі інстанси лише масштабуються */
+/* спорядження солдата (soldier2.glb, зроблено в Blender): вузли HAT_* на кістці
+   голови і BACK_* на кістці тулуба. У габарити моделі йде лише оригінальний шолом —
+   інакше антена рації чи поля панами «зменшили» б усіх солдатів */
+function isKitNode(o) {
+  const KIT = /^(HAT_|BACK_)/;
+  for (let n = o; n; n = n.parent) {
+    // кореневий вузол спорядження (його батько — кістка, не інший HAT_/BACK_)
+    if (KIT.test(n.name) && !(n.parent && KIT.test(n.parent.name))) return n.name !== 'HAT_helmet';
+  }
+  return false;
+}
 function glbPrep(g) {
-  const box = new THREE.Box3().setFromObject(g.scene);
+  const box = new THREE.Box3(), tmp = new THREE.Box3();
+  g.scene.updateMatrixWorld(true);
+  g.scene.traverse(function (o) {
+    if (!o.isMesh || isKitNode(o)) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    box.union(tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
   const size = new THREE.Vector3(); box.getSize(size);
   const center = new THREE.Vector3(); box.getCenter(center);
   return { scene: g.scene, clips: g.animations || [], size: size, min: box.min.clone(), center: center };
@@ -2953,6 +3073,7 @@ function loadSlot3D(name, path, biome) {
     try { console.warn('[RSO] Модель ' + path + ' не завантажилась, лишаємо примітив:', e); } catch (_) {}
   });
 }
+if (typeof window !== 'undefined') { setTimeout(function () { loadMapData(BIOMES.valley); }, 1500); setTimeout(function () { loadMapData(BIOMES.desert); }, 4000); setTimeout(function () { loadMapData(BIOMES.winter); }, 6500); }
 function loadModels3D() {
   /* ядро (зброя/укриття/аптечка/бійці) — раз на життя сторінки */
   if (!GLB.started) {
@@ -2960,7 +3081,7 @@ function loadModels3D() {
     /* усе ядро — Toon Shooter Game Kit: боєць (револьвер уже в кисті),
        аптечка Health, вибухова бочка, укриття */
     const defs = [
-      ['soldier',   '/assets/models/toon/soldier.glb'],
+      ['soldier',   '/assets/models/toon/soldier2.glb'],   // + спорядження з Blender (головні убори, рюкзаки)
       ['medkit',    '/assets/models/toon/health.glb'],
       ['barrel',    '/assets/models/toon/barrel.glb'],
       ['barrier',   '/assets/models/toon/barrier.glb'],
@@ -3260,6 +3381,7 @@ function decorSrcOf(name) {
 function planDecor3D() {
   const plan = { baked: {} };
   for (let i = 0; i < DECOR_NAMES.length; i++) plan[DECOR_NAMES[i]] = [];
+  if (BIO.map) return plan;   // карта з Blender несе власний краєвид
   let idx = 0;
   const put = function (list, szMin, szSpan, margin, tries) {
     for (let t = 0; t < tries; t++) {
@@ -3587,9 +3709,28 @@ function soldierClip(rec, name) {
   return THREE.AnimationClip.findByName(rec.clips, name) ||
          THREE.AnimationClip.findByName(rec.clips, CLIP_PREFIX + name);
 }
+/* екіпіровка гравця: головний убір + річ на спині, детерміновано від ніка —
+   той самий глядач у кожній грі виглядає однаково і його легше впізнати */
+const KIT_HATS = ['HAT_helmet', 'HAT_cap', 'HAT_beanie', 'HAT_boonie', 'HAT_beret', 'HAT_headset'];
+const KIT_BACKS = ['', 'BACK_pack', 'BACK_radio', 'BACK_roll'];
+function kitOf(p) {
+  let h = 2166136261;
+  const s = String(p.nick || p.idx);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  return { hat: KIT_HATS[h % KIT_HATS.length], back: KIT_BACKS[(h >>> 8) % KIT_BACKS.length] };
+}
 function makeSoldier3D(p) {
   const rec = GLB.ready.soldier;
   const inst = THREE.SkeletonUtils.clone(rec.scene);   // скелет клонується коректно
+  const kit = kitOf(p);
+  // вмикаємо лише кореневі вузли спорядження: убір з кількома матеріалами GLTFLoader
+  // розбиває на групу HAT_x з мешами HAT_x002, HAT_x002_1 — їх не чіпаємо
+  inst.traverse(function (o) {
+    if (o.parent && /^(HAT_|BACK_)/.test(o.parent.name)) return;
+    if (o.name.indexOf('HAT_') === 0) o.visible = o.name === kit.hat;
+    else if (o.name.indexOf('BACK_') === 0) o.visible = o.name === kit.back;
+  });
   const s = SOLDIER_H / Math.max(rec.size.y, 0.001);
   inst.scale.setScalar(s);
   inst.position.y = -rec.min.y * s;
@@ -3791,6 +3932,7 @@ function build3D() {
      там рахується у vertex-шейдері) */
   /* 230x170: дрібніші фасетки — плями витоптаної землі і стежка плавніші
      (запит власника); бюджет сцени тримаємо ≤ ~340к трикутників */
+  if (BIO.map) buildMap3D(S); else {
   const groundGeo = reg3(new THREE.PlaneGeometry(W + TERRA_EXT * 2, H + TERRA_EXT * 2, 230, 170).toNonIndexed());
   groundGeo.rotateX(-Math.PI / 2);
   const gpos = groundGeo.attributes.position;
@@ -3806,6 +3948,7 @@ function build3D() {
   const far = new THREE.Mesh(G.farGround, M.farGround);
   far.position.y = -1.6;
   S.add(far); onceUpdateMatrix(far);
+  }
   /* «домальований» світ: периметр біому (стіна лісу / мезаси) живе у
      запеченому декорі — див. блок периметра в planDecor3D */
   /* шар декалей: той самий offscreen-канвас `ground`, куди 2D-код малює
@@ -3839,6 +3982,68 @@ function build3D() {
   overviewPos3D(T3.cpos); T3.clook.set(0, 0, 0);   // старт камери = overview, без стрибка
 }
 
+/* карта з Blender: клон сцени (метри → ігрові юніти ×25; glTF уже Y-вгору, тож
+   Blender (X, Y, Z) лягає в (x − W/2, висота, y − H/2)). Рельєф — гранований:
+   toNonIndexed + нормалі на трикутник, кольори вершин з Blender; вода — окремо */
+function buildMap3D(S) {
+  const rec = MAPDATA[BIO.key];
+  const root3 = rec.scene.clone(true);
+  root3.scale.setScalar(rec.hm.unit);
+  S.add(root3);
+  root3.updateMatrixWorld(true);
+  /* матеріали glTF → Lambert того ж кольору; геометрія → гранована (нормаль на
+     трикутник), кешуємо по геометрії — інстанси дерев ділять одну */
+  const geoCache = new Map(), matCache = new Map();
+  const flatGeo = function (g) {
+    let f = geoCache.get(g.uuid);
+    if (!f) { f = g.index ? g.toNonIndexed() : g.clone(); f.computeVertexNormals(); reg3(f); geoCache.set(g.uuid, f); }
+    return f;
+  };
+  const lambert = function (m, vcol) {
+    const k = (m ? m.uuid : 'none') + (vcol ? 'v' : '');
+    let l = matCache.get(k);
+    if (!l) {
+      l = reg3(new THREE.MeshLambertMaterial({ color: vcol ? '#ffffff' : (m && m.color ? m.color.clone() : '#888888'), vertexColors: !!vcol }));
+      matCache.set(k, l);
+    }
+    return l;
+  };
+  const meshes = [];
+  root3.traverse(function (o) { if (o.isMesh) meshes.push(o); });
+  /* однакові дерева/трава/квіти (≥ 6 копій однієї геометрії) → InstancedMesh:
+     сотні дерев — кілька draw call замість сотень */
+  const byGeo = new Map();
+  for (const o of meshes) { const l = byGeo.get(o.geometry.uuid) || []; l.push(o); byGeo.set(o.geometry.uuid, l); }
+  for (const [uuid, list] of byGeo) {
+    const o0 = list[0];
+    if (/^Ice/i.test(o0.name)) {   // замерзле озеро «Перевалу»: блідий глянцевий лід
+      for (const o of list) { o.material = reg3(new THREE.MeshPhongMaterial({ color: '#cfeaf6', shininess: 110, specular: '#ffffff' })); o.receiveShadow = true; }
+      continue;
+    }
+    if (/^Water/i.test(o0.name) || /^Plane/i.test(o0.name) && o0.parent && /^Water/i.test(o0.parent.name)) {
+      for (const o of list) {
+        o.material = reg3(new THREE.MeshPhongMaterial({ color: '#3d97d6', shininess: 70, specular: '#9fd4ff', transparent: true, opacity: 0.88 }));
+        o.receiveShadow = true;
+      }
+      continue;
+    }
+    const vcol = !!o0.geometry.attributes.color;
+    const geo = flatGeo(o0.geometry), mat = lambert(o0.material, vcol);
+    if (list.length >= 6) {
+      const inst = new THREE.InstancedMesh(geo, mat, list.length);
+      for (let i = 0; i < list.length; i++) { inst.setMatrixAt(i, list[i].matrixWorld); list[i].parent.remove(list[i]); }
+      inst.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true; inst.receiveShadow = true;
+      S.add(inst); onceUpdateMatrix(inst);
+      continue;
+    }
+    for (const o of list) {
+      o.geometry = geo; o.material = mat;
+      o.receiveShadow = true;
+      o.castShadow = !(o.name && /^Terrain/i.test(o.name)) && !vcol;
+    }
+  }
+}
 function buildObstacles3D() {
   const G = T3A.geo, M = T3A.mat, S = T3.scene;
   for (let i = 0; i < obstacles.length; i++) {
@@ -4354,6 +4559,38 @@ function syncPops3D() {
   }
   if (T3.pops) for (let i = used; i < T3.pops.length; i++) T3.pops[i].spr.visible = false;
 }
+/* Процедурний кидок (у моделі немає кліпу Throw): поверх поточної анімації
+   ліва рука йде назад-угору (замах), на відпусканні — різко вперед, корпус трохи
+   доворочується. Обертаємо навколо бічної осі бійця у світових координатах і
+   переводимо в локальні координати кістки — так не залежить від осей ріга. */
+const _thQ = new THREE.Quaternion(), _thP = new THREE.Quaternion(), _thA = new THREE.Vector3();
+function boneTurn(b, axisW, ang) {
+  b.parent.getWorldQuaternion(_thP);
+  _thQ.setFromAxisAngle(axisW, ang);
+  // Bl' = P⁻¹ · Q · P · Bl
+  const inv = _thP.clone().invert();
+  b.quaternion.premultiply(inv.multiply(_thQ).multiply(_thP));
+}
+function throwPose3D(r, p) {
+  const st = p.throwSt; if (!st) return;
+  if (r.armL === undefined) { r.armL = r.inner.getObjectByName('UpperArmL') || null; r.foreL = r.inner.getObjectByName('LowerArmL') || null; r.torso = r.inner.getObjectByName('Torso') || null; }
+  if (!r.armL) return;
+  const now = perfNow, eo = x => 1 - Math.pow(1 - x, 3);
+  let th, tw;                                   // th — мах руки, tw — поворот корпусу
+  if (!st.rel) { const k = eo(clamp((now - st.t0) / THROW.wind, 0, 1)); th = -2.3 * k; tw = 0.45 * k; }
+  else {
+    const k = clamp((now - st.rel) / THROW.end, 0, 1);
+    const s = eo(clamp(k * 2.6, 0, 1));         // різкий кидок
+    const back = clamp((k - 0.45) / 0.55, 0, 1); // повернення в стійку
+    th = (-2.3 + 3.5 * s) * (1 - back); tw = (0.45 - 0.9 * s) * (1 - back);
+  }
+  r.grp.updateMatrixWorld(true);
+  const a = p.aim;
+  _thA.set(-Math.sin(a), 0, Math.cos(a));      // бічна вісь: (+θ) — рука вперед/вгору
+  boneTurn(r.armL, _thA, th);
+  if (r.foreL) boneTurn(r.foreL, _thA, th * 0.35);
+  if (r.torso) { _thA.set(0, 1, 0); boneTurn(r.torso, _thA, tw); }
+}
 function syncPlayers3D(dt) {
   const camera = T3.camera, tv = T3.tmpV;
   const tanV = Math.tan(camera.fov * Math.PI / 360);
@@ -4392,6 +4629,7 @@ function syncPlayers3D(dt) {
         if (cur && (r.animKey === 'run' || r.animKey === 'runShoot')) cur.timeScale = clamp(spd / 140, 0.7, 1.6);
         /* хват револьвера фіксований відносно кисті — жодних пер-кліпових пресетів */
         r.mixer.update(dt);
+        if (p.throwSt) throwPose3D(r, p);
         r.inner.rotation.z = 0;
         r.inner.position.y = 0;
       } else if (r.legL) {
@@ -4994,7 +5232,8 @@ function apiStart(finalists, opts) {
   if (!root || !cv) return;
   /* біом арени — ДО setup3D: ensureAssets3D/loadModels3D читають BIO.
      Лобі передає за слотом мапи (map1/2/3); без опції — ліс */
-  BIO = BIOMES[opts.biome] || BIOMES.forest;
+  BIO = BIOMES[opts.biome] || (mapReady(BIOMES.valley) ? BIOMES.valley : BIOMES.forest);
+  if (BIO.map && !mapReady(BIO)) BIO = BIO.proc || BIOMES.forest;   // дані карти ще в дорозі — процедурна версія біому
   /* Вибір шару малювання: 3D (Three.js) якщо THREE підключений і WebGL живий,
      інакше — старий 2D-canvas. Логіка бою в обох випадках одна. */
   USE_3D = (typeof THREE !== 'undefined') && webglAvailable() && setup3D();
@@ -5020,9 +5259,8 @@ function apiStart(finalists, opts) {
   const flyBtn = document.getElementById('so-fly-btn');
   if (flyBtn) flyBtn.style.display = USE_3D ? '' : 'none';
   kfDirty = true; hudAt = 0; camLblTxt = ''; aliveTxt = ''; zoneTxt = ''; cdTxt = '';
-  /* контракт — 2..8, але якщо лобі раптом передасть більше — нікого не викидаємо
-     (кольори почнуть повторюватись, це менше зло за зниклого фіналіста) */
-  const list = (finalists || []).slice(0, 16);
+  /* контракт — 2..24 (у кожного свій колір); більше — обрізаємо, щоб бій лишався читабельним */
+  const list = (finalists || []).slice(0, 24);
   genWorld(Math.max(2, list.length));
   initPlayers(list);
   /* офскрін-декалі */
@@ -5277,7 +5515,7 @@ function apiAssets() {
   const out = [];
   for (const n of SPR_NAMES) out.push('/assets/pubg/' + n + '.webp');
   for (const n of ['crate-side', 'barrel-side', 'sandbag-side', 'barrier-side', 'camo']) out.push('/assets/pubg3d/' + n + '.webp');
-  for (const f of ['soldier', 'health', 'barrel', 'barrier', 'sack', 'crate', 'containerlong', 'nadefrag', 'nadefire']) out.push('/assets/models/toon/' + f + '.glb');
+  for (const f of ['soldier2', 'health', 'barrel', 'barrier', 'sack', 'crate', 'containerlong', 'nadefrag', 'nadefire']) out.push('/assets/models/toon/' + f + '.glb');
   for (const k in TOON_PROPS) out.push('/assets/models/' + TOON_PROPS[k]);
   for (const b in BIOMES) for (const k in BIOMES[b].models) out.push('/assets/models/' + BIOMES[b].models[k]);
   return out.filter(function (u, i) { return out.indexOf(u) === i; });
@@ -5290,6 +5528,7 @@ window.RSO = {
   focusNext: apiFocusNext,
   toggleOverview: apiToggleOverview,
   toggleFly: apiToggleFly,
+  dbg: () => ({ players: players, grenades: grenades }),   // для відладки з консолі
 };
 
 })();

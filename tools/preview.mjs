@@ -82,6 +82,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // аватарка Kick (як у bot.js, без черги — для перевірки верстки): 302 на картинку або 404
+  if (url.startsWith('/api/avatar/')) {
+    const name = decodeURIComponent(url.slice('/api/avatar/'.length).split('?')[0]);
+    fetch('https://kick.com/api/v1/users/' + encodeURIComponent(name), { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } })
+      .then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(j => {
+        const u = j && (j.profilepic || j.profile_pic);
+        if (typeof u === 'string' && u.startsWith('https://')) res.writeHead(302, { Location: u, 'Cache-Control': 'private, max-age=86400' });
+        else res.writeHead(404, { 'Cache-Control': 'no-store' });
+        res.end();
+      });
+    return;
+  }
+
   if (url.startsWith('/api/')) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
 

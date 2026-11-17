@@ -18,7 +18,7 @@ const RL_SAVE_KEY = 'royaleState';     // той самий ключ, що й р
 const RL_MIN_RADIUS = 0.5;             // зона ніколи не зникає: центр-клітинка завжди всередині
 const RL_SHRINK_K = 0.62, RL_SHRINK_B = 0.3; // r' = r·0.62 − 0.3 (зі старих правил)
 const RL_ANCHOR_R = 1.2;               // маленька зона «чіпляється» за клітинку живого гравця
-const RL_FINAL_MAX = 8;                // стільки живих (і менше) — стрімер може запустити фінал вручну
+const RL_FINAL_MAX = 24;               // 3D-бій тримає до 24 бійців
 const RL_LABEL_MAX = 30;               // до стількох живих — підписуємо ніки прямо на мапі
 /* Мапи лобі: щогри випадкова з map1/map2/map3. Розширення не фіксоване:
    слот пробує png → jpg → jpeg → webp → gif, тож стрімер кладе файл у
@@ -58,7 +58,8 @@ function rlPickMap() {
    map1 → ліс, map2 → пустеля, map3 → зима. Невпізнаний шлях — ліс. */
 function rlBiomeOf(src) {
   const m = typeof src === 'string' ? src.match(/\/(map[123])\.[a-z0-9]+$/i) : null;
-  return m ? { map1: 'forest', map2: 'desert', map3: 'winter' }[m[1].toLowerCase()] : 'forest';
+  // map1 → «Долина» з Blender (не завантажилась — shootout сам падає на процедурний ліс)
+  return m ? { map1: 'valley', map2: 'desert', map3: 'winter' }[m[1].toLowerCase()] : 'valley';
 }
 function rlNextMapCandidate() {
   if (rlMapQi + 1 >= rlMapQueue.length) return false;
@@ -600,9 +601,10 @@ function rlRenderHud() {
 }
 function rlFinalAvailable() {
   if (rlPhase !== 'playing' || rlRedBusy) return 0;
+  // фінал — лише коли зона дійшла до останньої клітинки (або всі опинились за зоною):
+  // тоді rlPendingFight готує сама зона. Ручного «живих ≤ 24 — можна в бій» більше немає
   if (rlPendingFight) return rlPendingFight.filter(f => rlPlayers[f.nick] && rlPlayers[f.nick].alive).length;
-  const n = rlAlive().length;
-  return (n >= 2 && n <= RL_FINAL_MAX) ? n : 0;
+  return 0;
 }
 function rlSyncControls() {
   const playing = rlPhase === 'playing' && !rlRedBusy;
@@ -809,10 +811,7 @@ function royLaunchFight() {
   if (rlPendingFight) {
     // список міг застаріти (червона зона після підготовки) — лишаємо тільки живих
     finalists = rlPendingFight.map(f => { const p = rlPlayers[f.nick]; return p && p.alive ? { nick: p.nick, col: p.col, row: p.row, startHP: f.startHP || 100 } : null; }).filter(Boolean);
-  } else {
-    finalists = rlAlive().map(p => ({ nick: p.nick, col: p.col, row: p.row, startHP: 100 }));
-    if (finalists.length > RL_FINAL_MAX) return;
-  }
+  } else return;   // фінал запускає лише остання клітинка зони
   if (finalists.length < 2) { rlPendingFight = null; rlSyncControls(); rlCheckWinner(); return; }
   if (!window.RSO || typeof window.RSO.start !== 'function') {
     rlStatus('⚠️ Модуль перестрелки (shootout.js) не загружен — финал недоступен');
