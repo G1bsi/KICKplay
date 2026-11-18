@@ -92,6 +92,11 @@
     $('wa-timer').style.display = '';                  // updateAnnounceMsg минулого разу його ховав
     $('wa-ring').style.strokeDashoffset = '0';
     setAvatar(name);
+    // виграш (Плинко передає суму через window.WA_PRIZE) — золотий бейдж під ніком
+    let pz = document.querySelector('#winner-announce .wa-prize');
+    if (!pz) { pz = document.createElement('div'); pz.className = 'wa-prize'; const card = document.querySelector('#winner-announce .wa-card'); if (card) card.appendChild(pz); }
+    if (pz) { pz.textContent = window.WA_PRIZE ? '💰 ' + window.WA_PRIZE : ''; pz.style.display = window.WA_PRIZE ? '' : 'none'; }
+    window.WA_PRIZE = null;
     const r = orig.show.apply(this, arguments);
     // перезапуск анімацій появи, якщо заставка вже була відкрита
     ov.classList.remove('visible'); void ov.offsetWidth; ov.classList.add('visible');

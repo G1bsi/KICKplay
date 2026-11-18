@@ -1909,3 +1909,119 @@
   box-shadow: 0 12px 34px rgba(0,0,0,.5); backdrop-filter: blur(8px);
 }
 #revolver-overlay.rev3d #revolver-overlay-controls .btn-primary { background: var(--winner-fill); color: #2b1a00; border-color: rgba(255,255,255,.5); }
+
+/* ══ 🎱 Плинко (plinko.js) — повноекранний 3D-автомат, панель діапазону, підписи лунок ══ */
+#plinko-overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay); display: none; overflow: hidden;
+  background: radial-gradient(55% 60% at 50% 45%, rgba(180,108,255,.16), transparent 70%), radial-gradient(70% 50% at 50% 100%, rgba(var(--winner-rgb), .10), transparent 70%), #07060c;
+  font-family: var(--font-ui); color: var(--text);
+}
+#plinko-overlay.visible { display: block; }
+#pl-stage { position: absolute; inset: 0; }
+#pl-stage canvas { display: block; }
+#pl-labels { position: absolute; inset: 0; pointer-events: none; }
+.pl-lbl {
+  position: absolute; left: 0; top: 0; padding: 5px 9px; border-radius: 8px; text-align: center; white-space: nowrap;
+  font: 800 clamp(12px, 1.9vh, 18px)/1 var(--font-mono); color: #2b1a00; background: var(--winner-fill);
+  box-shadow: 0 6px 16px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.5);
+  transition: transform .38s cubic-bezier(.3,1.3,.5,1);
+}
+.pl-lbl-win { background: var(--accent-fill); color: var(--on-accent); box-shadow: 0 0 26px rgba(var(--accent-rgb), .9), 0 6px 16px rgba(0,0,0,.45); animation: plWin .5s ease-in-out infinite alternate; }
+@keyframes plWin { to { filter: brightness(1.25); } }
+/* хто кидає */
+.pl-top { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none; }
+.pl-who {
+  display: flex; align-items: center; gap: 14px; padding: 10px 24px 10px 10px; border-radius: 999px;
+  background: rgba(14,14,22,.84); border: 1px solid rgba(var(--winner-rgb), .4); box-shadow: 0 16px 40px rgba(0,0,0,.45); backdrop-filter: blur(8px);
+}
+.pl-av { position: relative; width: 52px; height: 52px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, hsl(var(--h, 140) 75% 55%), hsl(calc(var(--h, 140) + 40) 70% 38%)); box-shadow: 0 0 0 3px #ffc93d; }
+.pl-av span { font: 800 22px/1 var(--font-display); color: #fff; }
+.pl-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.pl-av img.ok { opacity: 1; }
+.pl-who-k { font: 800 11px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted); }
+.pl-who-n { margin-top: 6px; font: 800 24px/1 var(--font-display); color: #ffe9a6; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-rolling .pl-av { opacity: .4; }
+.pl-rolling .pl-who-n { color: #fff; }
+/* панель «мин / макс / перемешать» */
+.pl-panel {
+  position: absolute; left: 2.5vw; top: 50%; transform: translateY(-50%); z-index: 2; width: 220px;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 20px;
+  background: rgba(14,14,22,.84); border: 1px solid rgba(var(--winner-rgb), .3); box-shadow: 0 20px 60px rgba(0,0,0,.45); backdrop-filter: blur(8px);
+}
+.pl-panel-t { font: 800 12px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase; color: var(--winner); }
+.pl-panel label { display: flex; flex-direction: column; gap: 6px; font: 700 12px/1 var(--font-ui); color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; }
+.pl-panel input {
+  padding: 11px 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: rgba(255,255,255,.05);
+  color: #fff; font: 800 18px/1 var(--font-mono); outline: none;
+}
+.pl-panel input:focus { border-color: var(--winner); box-shadow: 0 0 0 3px rgba(var(--winner-rgb), .2); }
+.pl-panel.pl-locked { opacity: .45; pointer-events: none; }
+/* кнопки */
+.pl-ctrl { position: absolute; left: 0; right: 0; bottom: 3.5vh; z-index: 2; display: none; justify-content: center; gap: 12px; }
+.pl-btn { cursor: pointer; border-radius: 16px; font: 800 15px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase; transition: transform .15s; }
+.pl-btn:hover { transform: translateY(-2px); }
+.pl-btn-drop {
+  padding: 17px 38px; color: #2b1a00; background: var(--winner-fill); border: 1px solid rgba(255,255,255,.5);
+  box-shadow: 0 14px 40px rgba(0,0,0,.5), 0 0 44px rgba(var(--winner-rgb), .4); font-family: var(--font-display);
+}
+.pl-btn-ghost { padding: 13px 22px; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--border-strong); }
+.pl-btn-ghost:hover { border-color: rgba(var(--winner-rgb), .7); color: var(--winner); }
+/* підсумок над полем */
+.pl-result {
+  position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%) scale(.6); opacity: 0; z-index: 3; pointer-events: none;
+  padding: 22px 46px; border-radius: 26px; text-align: center; background: var(--winner-fill);
+  box-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 90px rgba(var(--winner-rgb), .5), inset 0 2px 0 rgba(255,255,255,.55);
+  transition: transform .5s var(--ease-spring), opacity .3s;
+}
+.pl-result.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.pl-res-k { font: 800 14px/1.2 var(--font-ui); letter-spacing: 3px; text-transform: uppercase; color: rgba(60,30,0,.75); }
+.pl-res-v { margin-top: 8px; font: 800 clamp(48px, 9vh, 92px)/1 var(--font-display); color: #2b1a00; text-shadow: 0 3px 0 rgba(255,255,255,.45); }
+/* виграш у заставці переможця */
+#winner-announce .wa-prize {
+  position: relative; display: inline-block; margin-top: 12px; padding: 8px 20px; border-radius: 999px;
+  font: 800 clamp(20px, 3vw, 30px)/1 var(--font-display); color: #fff; background: rgba(43,26,0,.85);
+}
+
+/* ── Плинко v2: нова панель призів і шрифт сум (без моноширинного «нуля з крапкою») ── */
+#plinko-overlay .pl-lbl {
+  font: 800 clamp(11px, 1.75vh, 17px)/1 var(--font-display); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .5px;
+  padding: 5px 8px; border-radius: 8px;
+}
+#plinko-overlay .pl-panel {
+  width: 250px; gap: 14px; padding: 18px 18px 16px; border-radius: 24px;
+  background: linear-gradient(180deg, rgba(28,22,44,.9), rgba(12,10,20,.92));
+  border: 1px solid rgba(var(--winner-rgb), .35);
+}
+.pl-panel-h { display: flex; align-items: center; gap: 12px; }
+.pl-panel-ico { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; background: var(--winner-fill); box-shadow: 0 6px 18px rgba(var(--winner-rgb), .35); }
+#plinko-overlay .pl-panel-t { font: 800 18px/1 var(--font-display); letter-spacing: 1px; text-transform: none; color: #fff; }
+.pl-panel-s { margin-top: 5px; font: 600 12px/1 var(--font-ui); color: var(--text-muted); }
+.pl-range { display: flex; align-items: flex-end; gap: 8px; }
+.pl-dash { padding-bottom: 14px; color: var(--text-faint); font-weight: 800; }
+#plinko-overlay .pl-field { flex: 1; display: flex; flex-direction: column; gap: 6px; font: 800 11px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase; color: var(--winner); }
+#plinko-overlay .pl-field input {
+  width: 100%; min-width: 0; padding: 12px 10px; border-radius: 14px; text-align: center;
+  font: 800 18px/1 var(--font-display); font-variant-numeric: lining-nums tabular-nums; color: #fff;
+  background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.12);
+}
+#plinko-overlay .pl-field input:focus { border-color: var(--winner); box-shadow: 0 0 0 3px rgba(var(--winner-rgb), .2); outline: none; }
+.pl-shuffle {
+  display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 14px; cursor: pointer;
+  font: 800 13px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase; color: var(--winner);
+  background: rgba(var(--winner-rgb), .08); border: 1px solid rgba(var(--winner-rgb), .45); transition: background .15s, transform .15s;
+}
+.pl-shuffle svg { width: 20px; height: 20px; }
+.pl-shuffle:hover { background: rgba(var(--winner-rgb), .16); transform: translateY(-1px); }
+#plinko-overlay .pl-res-v { font-variant-numeric: lining-nums; }
+
+/* ── Плинко: ікси, DOUBLE, ставка ── */
+#plinko-overlay .pl-lbl-dbl { background: linear-gradient(135deg, #c79bff, #8b5cf6 55%, #5b2fd6); color: #fff; letter-spacing: 1px; box-shadow: 0 0 18px rgba(var(--violet-rgb), .7), 0 6px 16px rgba(0,0,0,.45); }
+#plinko-overlay .pl-lbl.pl-pop { animation: plPop .55s cubic-bezier(.3,1.6,.5,1); }
+@keyframes plPop { 0% { filter: brightness(2.2); } 40% { filter: brightness(1.6); } 100% { filter: none; } }
+#plinko-overlay .pl-bet input { font-size: 26px; padding: 14px 12px; }
+#plinko-overlay .pl-maxwin { color: var(--winner); font-weight: 700; }
+#plinko-overlay .pl-res-x { margin-top: 8px; font: 800 15px/1 var(--font-ui); color: rgba(60,30,0,.75); letter-spacing: 1px; }
+#plinko-overlay .pl-res-dbl { background: linear-gradient(135deg, #c79bff, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+#plinko-overlay .pl-lbl.pl-hide { background: rgba(255,255,255,.08); color: rgba(255,255,255,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+#plinko-overlay .pl-lbl.pl-pop-big { animation: plPopBig .9s cubic-bezier(.3,1.6,.5,1); }
+@keyframes plPopBig { 0% { filter: brightness(3); box-shadow: 0 0 40px #ffe48a, 0 0 80px rgba(var(--winner-rgb), .9); } 100% { filter: none; } }

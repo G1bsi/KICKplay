@@ -506,6 +506,7 @@ function setGameMode(mode) {
   if (typeof closeRoyaleOverlay === 'function') closeRoyaleOverlay();
   // Марблс теж живе в окремому файлі (marbles.js) — та сама пересторога
   if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
+  if (typeof closePlinkoOverlay === 'function') closePlinkoOverlay(true);
   phase = 'idle';
 
   gameMode = mode;
@@ -565,6 +566,7 @@ async function startGame() {
   if (gameMode === 'chatgame') return startChatgame();
   if (gameMode === 'royale') return startRoyale();
   if (gameMode === 'marbles') return startMarblesGame();
+  if (gameMode === 'plinko' && typeof startPlinko === 'function') return startPlinko();
 
   const n = 1;   // Cash Hunt: завжди один переможець
   const res = await fetch('/api/raffle/start', {
