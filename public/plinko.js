@@ -24,16 +24,26 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const fmt = v => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   // лунки: 15 множників по рівнях (щоразу випадкові в межах рівня) + 1 DOUBLE
+  // рівні множників у діапазоні [мін..макс] (геометрично): t — частка шляху від мін до макс
   const TIERS = [
-    { vals: [100], n: 1, edge: 4 },          // максимум — лише в одній з 4 крайніх лунок (туди шарик падає найрідше)
-    { vals: [25, 50], n: 2, edge: 6 },       // великі — у 6 крайніх
-    { vals: [7, 10, 15, 20], n: 4 },
-    { vals: [2, 3, 4, 5], n: 8 },
+    { t: [1, 1], n: 1, edge: 4 },            // максимум — рівно «до», лише в одній з 4 крайніх лунок (туди шарик падає найрідше)
+    { t: [0.62, 0.85], n: 2, edge: 6 },      // великі — у 6 крайніх
+    { t: [0.3, 0.55], n: 4 },
+    { t: [0, 0.25], n: 8 },
   ];
+  // гарне округлення ікса: лише цілі (без x2.5), великі — «круглі»
+  function niceX(v) {
+    if (v < 100) return Math.max(2, Math.round(v));
+    const p = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.round(v / p / 5) * p * 5;
+  }
   const N_DBL = 1;                         // одна лунка DOUBLE
   function makeBoard() {
-    const items = [];
-    for (const t of TIERS) for (let k = 0; k < t.n; k++) items.push({ m: t.vals[Math.floor(rnd() * t.vals.length)], edge: t.edge || 0 });
+    const [lo, hi] = readX(), items = [];
+    for (const t of TIERS) for (let k = 0; k < t.n; k++) {
+      const f = t.t[0] + (t.t[1] - t.t[0]) * rnd();
+      const m = f >= 1 ? hi : Math.min(hi, Math.max(lo, niceX(lo * Math.pow(hi / lo, f))));
+      items.push({ m, edge: t.edge || 0 });
+    }
     for (let k = 0; k < N_DBL; k++) items.push({ dbl: true, edge: 0 });
     return items;
   }
@@ -51,9 +61,21 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   }
   const labelOf = it => it.dbl ? 'DOUBLE' : 'x' + it.m;
   function shuffled(a) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+  function readX() {
+    const num = id => parseFloat(String(($(id) || {}).value || '').replace(',', '.').replace(/[^\d.]/g, ''));
+    let lo = num('pl-xmin'), hi = num('pl-xmax');
+    if (!(lo >= 2)) lo = 2; if (!(hi > 0)) hi = 100;
+    lo = Math.round(lo); hi = Math.round(hi);
+    if (hi < lo) [lo, hi] = [hi, lo];
+    if (hi < lo + 2) hi = lo + 2;
+    if ($('pl-xmin')) $('pl-xmin').value = lo; if ($('pl-xmax')) $('pl-xmax').value = hi;   // показуємо округлене
+    try { localStorage.setItem(LS_KEY + '_x', JSON.stringify([lo, hi])); } catch (e) { /* приватний режим */ }
+    return [lo, hi];
+  }
   function readBet() {
     let v = parseFloat(String(($('pl-bet') || {}).value || '').replace(/[^\d.]/g, ''));
     if (!(v > 0)) v = 100;
+    v = Math.max(1, Math.round(v));
     try { localStorage.setItem(LS_KEY, JSON.stringify(v)); } catch (e) { /* приватний режим */ }
     return v;
   }
@@ -75,6 +97,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     if ($('plinko-overlay')) return;
     const ov = document.createElement('div'); ov.id = 'plinko-overlay';
     let saved = 100; try { const v = JSON.parse(localStorage.getItem(LS_KEY)); if (v > 0) saved = v; } catch (e) {}
+    let savedX = [2, 50]; try { const v = JSON.parse(localStorage.getItem(LS_KEY + '_x')); if (v && v[0] > 0 && v[1] > 0) savedX = v; } catch (e) {}
     ov.innerHTML =
       '<div id="pl-stage"></div>' +
       '<div id="pl-labels"></div>' +
@@ -82,6 +105,11 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
       '<div class="pl-panel" id="pl-panel">' +
         '<div class="pl-panel-h"><span class="pl-panel-ico">💰</span><div><div class="pl-panel-t">Ставка</div><div class="pl-panel-s">выигрыш = ставка × икс</div></div></div>' +
         '<label class="pl-field pl-bet"><input id="pl-bet" type="text" inputmode="numeric" value="' + saved + '"></label>' +
+        '<div class="pl-range">' +
+          '<label class="pl-field"><span>икс от</span><input id="pl-xmin" type="text" inputmode="numeric" value="' + savedX[0] + '"></label>' +
+          '<span class="pl-dash">—</span>' +
+          '<label class="pl-field"><span>до</span><input id="pl-xmax" type="text" inputmode="numeric" value="' + savedX[1] + '"></label>' +
+        '</div>' +
         '<div class="pl-panel-s pl-maxwin" id="pl-maxwin"></div>' +
         '<button class="pl-shuffle" id="pl-shuffle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.6l2.4 4.8C14.3 16 15.5 17 17.5 17H21M17.5 7H21M3 17h3.5c1.2 0 2.1-.4 2.9-1.1M18 4l3 3-3 3M18 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Новые иксы</button>' +
       '</div>' +
@@ -96,6 +124,8 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     };
     $('pl-bet').addEventListener('input', () => updateMaxWin());
     $('pl-bet').addEventListener('change', () => { readBet(); updateMaxWin(); });
+    // новий діапазон іксів — нова розкладка з відкриттям по черзі (поки шарик не кинули)
+    for (const id of ['pl-xmin', 'pl-xmax']) $(id).addEventListener('change', () => { readX(); $('pl-shuffle').onclick(); });
   }
   function updateMaxWin() {
     const el = $('pl-maxwin'); if (!el || !S || !S.values) return;

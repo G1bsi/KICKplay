@@ -1180,7 +1180,7 @@ function mbKillfeed(st) {
     const nick = st.eliminated[kf._n++];
     const b = st.balls.find(x => x.nick === nick) || {};
     const [ico, why] = b.zeusBy === 'streamer' ? ['⚡', 'испепелён стримером'] : b.zeusT != null ? ['⚡', 'испепелён Зевсом']
-                     : b.crushT != null ? ['🏠', 'раздавлен будкой'] : b.cutT != null ? ['🌈', 'разрезан радугой'] : ['🕳', 'вылетел с трассы'];
+                     : b.crushT != null ? ['🏠', 'раздавлен будкой'] : b.cutT != null ? ['🌈', 'разрезан радугой'] : b.leapT != null ? ['💥', 'не долетел'] : ['🕳', 'вылетел с трассы'];
     const row = document.createElement('div'); row.className = 'mb-kf-row';
     row.innerHTML = '<span class="mb-kf-ico"></span><span class="mb-kf-nick"></span><span class="mb-kf-why"></span>';
     row.children[0].textContent = ico; row.children[1].textContent = nick; row.children[2].textContent = why;
