@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 (function () {
 const PHYS_URL = '/assets/models/marbles/zeus_phys.json';
-const GLB_URL = '/assets/models/marbles/zeus.glb?v=20261117';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
+const GLB_URL = '/assets/models/marbles/zeus.glb?v=20261119';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
 let DATA = null, GLB_SCENE = null, GLB_PROM = null;
 
 function b2u8(b64) {
@@ -91,7 +91,7 @@ const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
 // lead — ціль обирається серед передніх lead-частки кульок на колонаді («гнів Зевса» на лідерів)
 const ZB = { warn: 1.0, r: 1.8, gapMin: 1.5, gapRnd: 0.9, killShare: 0.25, lead: 0.35 };
 // «рука Зевса» стрімера: блискавка в руці + приціл, ЛКМ — удар по кульці під прицілом
-const ZP = { charges: 10, cd: 1.2, pickR: 1.7 };
+const ZP = { cd: 0.3, pickR: 1.7 };   // рука Зевса стрімера: удари без ліміту, пауза 0.3 с між ними
 
 const MAP = {
   id: 'zeus',
@@ -233,19 +233,7 @@ const MAP = {
       if (Z.log.length < 80) Z.log.push([Math.round(s.tHit * 10) / 10, s.killed]);
     }
     if (Z.strikes.length > 12) Z.strikes = Z.strikes.filter(s => st.raceT - s.tHit < 4);
-    if (st.raceT < Z.next || Z.kills >= Z.max) return;
-    const cand = [];
-    for (const b of st.active) if (b.x > A.x0 && b.x < A.x1 && Math.abs(b.z) < A.half + 0.5 && Math.abs(b.y - yAt(b.x)) < 4) cand.push(b);
-    if (!cand.length) { Z.next = st.raceT + 0.25; return; }
-    // «гнів Зевса»: ціль — серед передніх (колонада йде вздовж +x)
-    cand.sort((p, q) => q.x - p.x);
-    const r = rng(Z.n * 7919 + st.balls.length * 31 + 7);
-    const n = Math.max(1, Math.ceil(cand.length * ZB.lead));
-    const b = cand[Math.floor(r() * n)];
-    const px = clamp(b.x + b.vx * ZB.warn, A.x0, A.x1), pz = clamp(b.z + b.vz * ZB.warn, -A.half + 0.9, A.half - 0.9);
-    Z.strikes.push({ p: [px, yAt(px), pz], t0: st.raceT, tHit: st.raceT + ZB.warn, r: ZB.r, done: false, n: Z.n });
-    Z.n++;
-    Z.next = st.raceT + ZB.gapMin + r() * ZB.gapRnd;
+    // сам Зевс більше не б'є — блискавки кидає лише стрімер «за Зевса» (клавіша 1 → рука, ЛКМ — удар)
   },
 
   intro(track, pos, look) {
@@ -311,6 +299,7 @@ const MAP = {
         const fxm = /Cloud|Flame|Glow|Bolt/i.test(n);
         o.castShadow = !fxm; o.receiveShadow = !fxm;
       });
+      if (window.mbDepthLayers) mbDepthLayers(root);   // без мерехтіння на стиках і там, де декор у площині траси
       holder.add(root);
       const tip = V.nodes.ZEUS_tip; if (tip) tip.visible = false;
       const arm = V.nodes.ZEUS_arm; if (arm) V.armQ = arm.quaternion.clone();
@@ -487,31 +476,81 @@ const MAP = {
 
 // ── «Рука Зевса» стрімера ──────────────────────────────────────
 // DOM-шар над канвою: блискавка в правому нижньому куті, приціл, лічильник зарядів, підпис удару.
+// піксельний арт: рядки-карти → SVG з квадратів (crispEdges). Рука в рукаві хітона + блискавка в кулаці
+const ZP_PAL = { D: '#6b3d00', W: '#fffbe6', Y: '#ffd447', O: '#ff9f1c', S: '#e9b48a', s: '#c98d62', k: '#a8714c', L: '#f6dcc2', C: '#f4f1ea', c: '#d9d3c6', G: '#e7b12c', g: '#b9831a' };
+const ZP_BOLT = [
+  '..DDDDD.......',
+  '..DYYWWD......',
+  '...DYYWWD.....',
+  '....DYYWWD....',
+  '.....DYYWWD...',
+  '..DDDDYYYWWD..',
+  '..DOOYYYWWWWD.',
+  '...DOOYWWDDDD.',
+  '....DOYWWD....',
+  '.....DOYWWD...',
+  '......DOYWD...',
+  '.......DOYWD..',
+  '........DOWD..',
+  '.........DOYD.',
+  '..........DOD.',
+  '...........DD.',
+];
+const ZP_ARM = [
+  'kssssssk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk',
+  'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk', 'sLSSSSsk',
+  'GGGGGGGg', 'gGGGGGgg', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc', 'cCCCCCcc',
+];
+function zpPix(map, px, ox, oy, cls) {
+  let r = '';
+  map.forEach((row, y) => { for (let x = 0; x < row.length; x++) { const c = ZP_PAL[row[x]]; if (c) r += '<rect x="' + (ox + x * px) + '" y="' + (oy + y * px) + '" width="' + (px + 0.3) + '" height="' + (px + 0.3) + '" fill="' + c + '"/>'; } });
+  return '<g class="' + cls + '">' + r + '</g>';
+}
+function zpHandSvg() {
+  // рука вертикально, кулак угорі; блискавка — над кулаком, тримається за нижній кінець
+  const P = 7, armX = 70, armY = 96;
+  return '<svg viewBox="0 0 190 270" shape-rendering="crispEdges">' +
+    '<defs><filter id="zpGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+    zpPix(ZP_BOLT, P, 6, 0, 'zp-boltpx') +
+    zpPix(ZP_ARM, P, armX, armY, 'zp-armpx') +
+    '</svg>';
+}
 function zpDom(V) {
   if (V.zp && V.zp.root && V.zp.root.isConnected) return V.zp;
   const ov = document.getElementById('marbles-overlay'), cv = document.getElementById('mb-canvas');
   if (!ov || !cv) return null;
   const root = document.createElement('div'); root.className = 'zp-root';
   root.innerHTML =
-    '<div class="zp-cross"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="13" fill="none" stroke="currentColor" stroke-width="3"/>' +
-    '<path d="M32 4v14M32 46v14M4 32h14M46 32h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="32" r="2.6" fill="currentColor"/></svg></div>' +
-    '<div class="zp-hand"><svg viewBox="0 0 120 220"><defs><linearGradient id="zpG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffbe6"/><stop offset=".45" stop-color="#ffd447"/><stop offset="1" stop-color="#ff9f1c"/></linearGradient></defs>' +
-    '<path class="zp-bolt" d="M70 4 L26 112 L58 112 L38 216 L98 84 L64 84 L86 4 Z" fill="url(#zpG)" stroke="#fff6cf" stroke-width="3" stroke-linejoin="round"/></svg>' +
-    '<div class="zp-charges"></div></div><div class="zp-flash"></div><div class="zp-feed"></div>';
+    '<div class="zp-cross"></div>' +
+    '<div class="zp-hand"><div class="zp-bob"><div class="zp-swing">' + zpHandSvg() + '</div></div></div>' +
+    '<div class="zp-flash"></div><div class="zp-feed"></div>' +
+    '<div class="zp-bar"><div class="zp-slot"><span class="zp-key">1</span>' +
+      '<svg viewBox="0 0 98 112" shape-rendering="crispEdges">' + zpPix(ZP_BOLT, 7, 0, 0, '') + '</svg></div>' +
+      '<div class="zp-tip"></div></div>';
   ov.appendChild(root);
-  const zp = V.zp = { root, cross: root.querySelector('.zp-cross'), hand: root.querySelector('.zp-hand'), charges: root.querySelector('.zp-charges'),
-    flash: root.querySelector('.zp-flash'), feed: root.querySelector('.zp-feed'), left: ZP.charges, cdUntil: 0, mx: -1, my: -1, raceId: null, lastFeedN: -1 };
+  const zp = V.zp = { root, cross: root.querySelector('.zp-cross'), hand: root.querySelector('.zp-hand'), swing: root.querySelector('.zp-swing'),
+    flash: root.querySelector('.zp-flash'), feed: root.querySelector('.zp-feed'), tip: root.querySelector('.zp-tip'), cdUntil: 0, mx: -1, my: -1, raceId: null, lastFeedN: -1 };
   const active = () => V.zpOn && performance.now() - (V.zpSeen || 0) < 300;
   // сторож: кадри карти Зевса не йдуть (інша карта / закрили) — ховаємо руку й повертаємо курсор
   setInterval(() => { if (!active()) { root.classList.remove('zp-on'); cv.classList.remove('zp-nocursor'); } }, 250);
   cv.addEventListener('mousemove', e => { zp.mx = e.clientX; zp.my = e.clientY; });
   cv.addEventListener('mouseleave', () => { zp.mx = -1; });
   cv.addEventListener('mousedown', e => {
-    if (e.button !== 0 || !active()) return;
+    if (e.button !== 0 || !active() || !V.zpArmed) return;
     const locked = document.pointerLockElement === cv;
     const G = window.mbGfx && window.mbGfx(), fly = !!(G && G.fly && G.fly.on);
     if (fly && !locked) return;                 // перший клік у польоті — захоплення миші, не постріл
     zpShoot(V, locked ? null : e);
+  });
+  // клавіша 1 — дістати / сховати руку Зевса (як слот 1 у хотбарі)
+  document.addEventListener('keydown', e => {
+    if (e.repeat || !(e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1') || !active()) return;
+    // поле вводу на сторінці під оверлеєм (слово реєстрації тощо) не має «з'їдати» клавішу — знімаємо з нього фокус
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) { if (ov.contains(ae)) return; ae.blur(); }
+    e.preventDefault();
+    V.zpArmed = !V.zpArmed;
+    if (V.zpArmed) { zp.swing.classList.remove('zp-kick'); zp.hand.classList.remove('zp-equip'); void zp.hand.offsetWidth; zp.hand.classList.add('zp-equip'); }
   });
   return zp;
 }
@@ -520,31 +559,35 @@ function zpFrame(V, st, ctx) {
   const on = !!(st.raceOn && !st.done);
   V.zpOn = on; V.zpSeen = performance.now();
   const zp = zpDom(V); if (!zp) return;
-  if (zp.raceId !== st) { zp.raceId = st; zp.left = ZP.charges; zp.cdUntil = 0; zp.lastFeedN = -1; zp.feed.innerHTML = ''; }
+  if (zp.raceId !== st) { zp.raceId = st; zp.cdUntil = 0; zp.lastFeedN = -1; zp.feed.innerHTML = ''; V.zpArmed = false; }
+  const armed = on && !!V.zpArmed;
   const cv = document.getElementById('mb-canvas'), locked = document.pointerLockElement === cv;
   zp.root.classList.toggle('zp-on', on);
-  zp.root.classList.toggle('zp-cool', performance.now() < zp.cdUntil || zp.left <= 0);
-  cv.classList.toggle('zp-nocursor', on && !locked && zp.mx >= 0);
+  zp.root.classList.toggle('zp-armed', armed);
+  zp.root.classList.toggle('zp-cool', performance.now() < zp.cdUntil);
+  cv.classList.toggle('zp-nocursor', armed && !locked && zp.mx >= 0);
+  const tip = armed ? 'ЛКМ — молния · 1 — убрать' : 'Рука Зевса';
+  if (zp.tip.textContent !== tip) zp.tip.textContent = tip;
   // приціл: у польоті (миша захоплена) — по центру, інакше — за курсором
-  if (locked) { zp.cross.style.left = '50%'; zp.cross.style.top = '50%'; zp.cross.style.display = on ? '' : 'none'; }
-  else if (zp.mx >= 0) { const r = cv.getBoundingClientRect(); zp.cross.style.left = (zp.mx - r.left) + 'px'; zp.cross.style.top = (zp.my - r.top) + 'px'; zp.cross.style.display = on ? '' : 'none'; }
+  if (!armed) zp.cross.style.display = 'none';
+  else if (locked) { zp.cross.style.left = '50%'; zp.cross.style.top = '50%'; zp.cross.style.display = ''; }
+  else if (zp.mx >= 0) { const r = cv.getBoundingClientRect(); zp.cross.style.left = (zp.mx - r.left) + 'px'; zp.cross.style.top = (zp.my - r.top) + 'px'; zp.cross.style.display = ''; }
   else zp.cross.style.display = 'none';
-  const txt = '⚡ ' + zp.left; if (zp.charges.textContent !== txt) zp.charges.textContent = txt;
-  // підпис удару — один раз на ручну блискавку
+  // підпис промаху — один раз на ручну блискавку (влучання показує спільний кіл-фід)
   const Z = st.zeus;
   if (Z) for (const s of Z.strikes) {
     if (!s.manual || s.n <= zp.lastFeedN) continue;
     zp.lastFeedN = s.n;
-    if (s.nick) continue;                         // влучання показує спільний кіл-фід
+    if (s.nick) continue;
     const el = document.createElement('div'); el.className = 'zp-msg';
-    el.textContent = s.nick ? '⚡ Стример испепелил: ' + s.nick : '⚡ Мимо!';
-    zp.feed.appendChild(el); setTimeout(() => el.remove(), 3200);
+    el.textContent = '⚡ Мимо!';
+    zp.feed.appendChild(el); setTimeout(() => el.remove(), 2200);
   }
 }
 function zpShoot(V, e) {
   const zp = V.zp, st = V.st, cam = V.cam, THREE = V.THREE; if (!zp || !st || !cam) return;
   const now = performance.now();
-  if (now < zp.cdUntil || zp.left <= 0) return;
+  if (now < zp.cdUntil) return;
   const cv = document.getElementById('mb-canvas'), r = cv.getBoundingClientRect();
   const nx = e ? ((e.clientX - r.left) / r.width) * 2 - 1 : 0, ny = e ? -((e.clientY - r.top) / r.height) * 2 + 1 : 0;
   const ray = new THREE.Raycaster(); ray.setFromCamera({ x: nx, y: ny }, cam);
@@ -564,8 +607,9 @@ function zpShoot(V, e) {
   const from = cam.position.clone().addScaledVector(d, 2.2).addScaledVector(right, 1.1).addScaledVector(up, -0.9);
   const miss = o.clone().addScaledVector(d, 40);
   (st.zeusManual || (st.zeusManual = [])).push({ nick: best ? best.nick : null, from: [from.x, from.y, from.z], miss: [miss.x, miss.y, miss.z] });
-  zp.left--; zp.cdUntil = now + ZP.cd * 1000;
-  zp.hand.classList.remove('zp-kick'); void zp.hand.offsetWidth; zp.hand.classList.add('zp-kick');
+  zp.cdUntil = now + ZP.cd * 1000;
+  // замах рукою, як удар у Minecraft
+  zp.swing.classList.remove('zp-kick'); void zp.swing.offsetWidth; zp.swing.classList.add('zp-kick');
   zp.flash.classList.remove('zp-fl'); void zp.flash.offsetWidth; zp.flash.classList.add('zp-fl');
 }
 

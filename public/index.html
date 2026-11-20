@@ -470,7 +470,6 @@
   <!-- Живий лідерборд топ-10: плашки створює/переставляє marbles.js -->
   <div id="mb-board"></div>
   <div id="mb-count"></div>
-  <!-- Подіум топ-3: наповнюється в JS після фінішу трійки -->
   <div id="mb-podium"></div>
   <div id="mb-cambar">
     <button class="mb-cambtn" id="mb-fly-btn" onclick="mbToggleFly()" title="Свободный полёт">🚁 Полёт</button>
@@ -484,8 +483,11 @@
   </div>
   <!-- Вибір карти перед стартом: картки будує marbles.js з реєстру MB_MAPS -->
   <div id="mb-picker">
-    <div class="mb-picker-title">🗺 Выбор карты</div>
-    <div class="mb-picker-sub">⏱ — примерное время до первого финиша</div>
+    <div class="mb-pk-head">
+      <div class="mb-pk-eyebrow">🔮 Шарики</div>
+      <div class="mb-picker-title">Выбери трассу</div>
+      <div class="mb-picker-sub">клавиши 1…<span id="mb-pk-n">5</span> — быстрый выбор</div>
+    </div>
     <div id="mb-picker-cards"></div>
     <button class="btn-dark" onclick="closeMarblesOverlay()">Закрыть</button>
   </div>
@@ -532,6 +534,6 @@
 <script src="/assets/marbles-maps/sky.js"></script>
 <script src="/assets/marbles-maps/zeus.js"></script>
 <script src="/assets/marbles-maps/dog.js"></script>
-<script src="/assets/marbles-maps/canyon.js"></script>
+<script src="/assets/marbles-maps/tumble.js"></script>
 </body>
 </html>

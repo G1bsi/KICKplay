@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 (function () {
 const PHYS_URL = '/assets/models/marbles/dog_phys.json';
-const GLB_URL = '/assets/models/marbles/dog.glb?v=20261117';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
+const GLB_URL = '/assets/models/marbles/dog.glb?v=20261119';   // ?v= — змінюй після переекспорту моделі (сервер кешує .glb на 7 днів)
 let DATA = null, GLB_SCENE = null, GLB_PROM = null;
 
 function b2u8(b64) {
@@ -286,6 +286,7 @@ const MAP = {
         const fx = /Cloud|Glow/i.test(n);
         o.castShadow = !fx; o.receiveShadow = true;
       });
+      if (window.mbDepthLayers) mbDepthLayers(root);   // без мерехтіння на стиках і там, де декор у площині траси
       holder.add(root);
       for (const d of ['DOOR_L', 'DOOR_R']) if (V.nodes[d]) V.nodes[d].userData.q0 = V.nodes[d].quaternion.clone();
       // будки для падіння: клони шаблону (по одній на слот пулу)

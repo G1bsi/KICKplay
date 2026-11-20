@@ -37,14 +37,17 @@ const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const len = a => Math.hypot(a[0], a[1], a[2]);
 function rainbowStep(st) {
   if (!st.raceOn) return;
-  const R = st.rb || (st.rb = { ph: 'idle', next: RB.first, t0: 0, off: 0, n: 0, kills: 0, max: Math.max(1, Math.floor(st.balls.length * RB.killShare)) });
+  // свій сід на гонку: моменти ударів щоразу інші (раніше веселка чекала перших 3 кульок — і лідери гинули завжди)
+  if (!st.rb) { const seed = (Math.random() * 1e9) >>> 0, r0 = rng(seed); st.rb = { ph: 'idle', seed, next: RB.first + r0() * RB.gapRnd, t0: 0, off: 0, n: 0, kills: 0, max: Math.max(1, Math.floor(st.balls.length * RB.killShare)) }; }
+  const R = st.rb;
   const t = st.raceT;
   if (R.ph === 'idle') {
     R.off = 0;
-    // прокидається лише коли під нею (або на підході) є кульки — інакше удар у порожнечу
+    // б'є за випадковим розкладом, незалежно від того, хто під нею: влучить у лідера чи в порожнечу — удача.
+    // Коли повз неї пройшло все поле (ніхто ще не дійшов до леза) — замовкає
     if (t >= R.next && R.kills < R.max) {
-      let near = 0; for (const b of st.active) if (b.x > RB.x - 26 && b.x < RB.x + 4 && b.y < -20) near++;
-      if (near >= 3) { R.ph = 'warn'; R.t0 = t; } else R.next = t + 0.5;
+      let behind = 0; for (const b of st.active) if (b.x < RB.x + 4) behind++;
+      if (behind) { R.ph = 'warn'; R.t0 = t; } else R.next = t + 1;
     }
     return;
   }
@@ -78,12 +81,12 @@ function rainbowStep(st) {
   if (R.ph === 'up') {
     const k = Math.min(1, el / RB.up);
     R.off = RB.drop * (1 - k * k * (3 - 2 * k));
-    if (k >= 1) { R.ph = 'idle'; const r = rng(R.n * 977 + st.balls.length * 13 + 5); R.next = t + RB.gapMin + r() * RB.gapRnd; }
+    if (k >= 1) { R.ph = 'idle'; const r = rng(R.seed + R.n * 977); R.next = t + RB.gapMin + r() * RB.gapRnd; }
   }
 }
 
 // веселка-гільйотина над «хвилею»: площина x = 80, дуга з верхом на y = -8, смуга ~9.6 м завтовшки
-const RB = { x: 80, topY: -8, band: 9.6, drop: 27, warn: 0.9, down: 0.3, hold: 0.6, up: 1.4, first: 9, gapMin: 7, gapRnd: 6, killShare: 0.2, half: 2.2 };   // drop 27 — смуга зупиняється поперек траси (y≈-38)
+const RB = { x: 80, topY: -8, band: 9.6, drop: 27, warn: 0.9, down: 0.3, hold: 0.6, up: 1.4, first: 6, gapMin: 3.5, gapRnd: 5, killShare: 0.2, half: 2.2 };   // перший удар — у вікні 6…11 с, далі кожні 3.5…8.5 с   // drop 27 — смуга зупиняється поперек траси (y≈-38)
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function polyLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += len(sub(p[i], p[i - 1])); return L; }
 function data() {
@@ -290,7 +293,8 @@ const MAP = {
     const S = X.sIdx, d = track.disc;
     // удар веселки — показуємо збоку: лезо і траса під ним
     const R = st.rb;
-    if (R && (R.ph === 'warn' || R.ph === 'down' || R.ph === 'hold' || (R.ph === 'up' && st.raceT - R.t0 < 0.6))) {
+    // удар веселки — збоку, але лише коли біля леза є кульки (б'є тепер навмання, і в порожнечу теж)
+    if (R && (R.ph === 'warn' || R.ph === 'down' || R.ph === 'hold' || (R.ph === 'up' && st.raceT - R.t0 < 0.6)) && st.active.some(b => b.x > RB.x - 22 && b.x < RB.x + 6 && b.y < -20)) {
       pos.set(RB.x - 34, -24, 30); look.set(RB.x + 2, -36, -4); return true;
     }
     if (s < S.hub.s0 - 2) { pos.set(d.c[0] - 30, d.c[1] + 18, d.c[2] - 20); look.set(d.c[0], d.c[1] - 5, d.c[2]); return true; }
@@ -338,6 +342,7 @@ const MAP = {
         // хмари й веселка тіні не кидають (інакше чорні плями на трасі)
         o.castShadow = !(deco && /^D_(Cloud|Foam|RB|Water)/.test(m.name)); o.receiveShadow = !deco || /^D_(Grass|Rock)/.test(m.name);
       });
+      if (window.mbDepthLayers) mbDepthLayers(root);   // без мерехтіння на стиках і там, де декор у площині траси
       holder.add(root);
       const rb = root.getObjectByName('D_rainbow');
       if (rb) { const X = track.extra.sky; X.rbNode = rb; X.rbY = rb.position.y; X.rbX = rb.position.x; X.rbMats = []; rb.traverse(o => { if (o.isMesh && /^D_RB/.test(o.material.name)) { X.rbMats.push({ m: o.material, e: o.material.emissive.clone() }); } }); }

@@ -670,6 +670,8 @@ function mbBuildWorld(track) {
         if (g.gate) gates.push(col);
       }
       for (const s of g.balls) fixed(R.ColliderDesc.ball(s.r).setTranslation(s.pos[0], s.pos[1], s.pos[2]), MB_FR_BUMP, MB_E_BUMP);
+      // шпильки/кілки: циліндр уздовж осі quat·Y (pos — центр, hh — половина висоти)
+      for (const c of (g.cyls || [])) fixed(R.ColliderDesc.cylinder(c.hh, c.r).setTranslation(c.pos[0], c.pos[1], c.pos[2]).setRotation(mbQ(c.quat)), MB_FR_BUMP, c.e != null ? c.e : MB_E_BUMP);
     } else if (g.kind === 'spinner') {
       // обертовий елемент (млинок, колесо-мішень): кінематичне тіло, кут веде mbSimStep
       const body = world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(g.c[0], g.c[1], g.c[2]));
@@ -1179,7 +1181,7 @@ function mbKillfeed(st) {
   while (kf._n < st.eliminated.length) {
     const nick = st.eliminated[kf._n++];
     const b = st.balls.find(x => x.nick === nick) || {};
-    const [ico, why] = b.zeusBy === 'streamer' ? ['⚡', 'испепелён стримером'] : b.zeusT != null ? ['⚡', 'испепелён Зевсом']
+    const [ico, why] = b.zeusBy === 'streamer' ? ['⚡', 'испепелён Зевсом'] : b.zeusT != null ? ['⚡', 'испепелён Зевсом']
                      : b.crushT != null ? ['🏠', 'раздавлен будкой'] : b.cutT != null ? ['🌈', 'разрезан радугой'] : b.leapT != null ? ['💥', 'не долетел'] : ['🕳', 'вылетел с трассы'];
     const row = document.createElement('div'); row.className = 'mb-kf-row';
     row.innerHTML = '<span class="mb-kf-ico"></span><span class="mb-kf-nick"></span><span class="mb-kf-why"></span>';
@@ -1201,6 +1203,19 @@ function mbSetCount(txt) {
   // кільце, що «спливає» за секунду, і число в центрі; GO — золотий спалах
   el.innerHTML = '<div class="mb-cd-wrap' + (go ? ' mb-cd-go' : '') + '"><svg class="mb-cd-ring" viewBox="0 0 200 200"><circle cx="100" cy="100" r="90"/></svg><span class="mb-cd-num"></span></div>';
   el.querySelector('.mb-cd-num').textContent = go ? 'GO' : txt;
+}
+// екран завантаження (до вибору карти й між вибором і стартом): темний, з кульками, що котяться
+function mbLoading(txt) {
+  if (!mbDom) return;
+  let el = mbDom.loading;
+  if (!el || !el.isConnected) {
+    el = mbDom.loading = document.createElement('div'); el.id = 'mb-loading';
+    el.innerHTML = '<div class="mb-ld-box"><div class="mb-ld-track"><i></i><i></i><i></i><i></i></div><div class="mb-ld-t">Шарики</div><div class="mb-ld-s"></div></div>';
+    mbDom.root.appendChild(el);
+  }
+  if (!txt) { el.classList.remove('show'); return; }
+  el.querySelector('.mb-ld-s').textContent = txt;
+  el.classList.add('show');
 }
 function mbShowControls() { if (mbDom) mbDom.controls.style.display = 'flex'; }
 
@@ -2380,7 +2395,7 @@ function mbBoardUpdate(st, ranking) {
     }
     row.style.transform = 'translateY(' + i * MB_ROW_H + 'px)';
     row.querySelector('.mb-place').textContent = r.dead ? '💀' : (r.fin ? '✓' : String(i + 1));
-    row.classList.toggle('mb-p1', i === 0 && !r.dead); row.classList.toggle('mb-p2', i === 1 && !r.dead); row.classList.toggle('mb-p3', i === 2 && !r.dead);
+    row.classList.toggle('mb-p1', i === 0 && !r.dead);   // золото — лише лідер (переможець один, без срібла/бронзи)
     row.classList.toggle('mb-fin', !!r.fin);
     row.classList.toggle('mb-dead', !!r.dead);
     row.classList.remove('mb-exit');
@@ -2395,41 +2410,6 @@ function mbBoardUpdate(st, ranking) {
   });
 }
 
-// ── Подіум топ-3: 3 секунди слави ДО загальної заставки ──────
-function mbShowPodium(st) {
-  if (!mbDom) return;
-  const medals = ['🥇', '🥈', '🥉'];
-  const labels = ['1 место', '2 место', '3 место'];
-  const top = st.finishOrder.slice(0, Math.min(3, st.balls.length));
-  // золото в центрі, срібло зліва, бронза справа — класика подіуму
-  const order = top.length >= 3 ? [1, 0, 2] : (top.length === 2 ? [1, 0] : [0]);
-  let html = '';
-  for (let k = 0; k < order.length; k++) {
-    const i = order[k];
-    html += '<div class="mb-pod-card mb-pod-' + (i + 1) + '">' +
-      '<div class="mb-pod-medal">' + medals[i] + '</div>' +
-      '<div class="mb-pod-av"><span></span><img alt=""></div>' +
-      '<div class="mb-pod-nick"></div>' +
-      '<div class="mb-pod-place">' + labels[i] + '</div></div>';
-  }
-  mbDom.podium.innerHTML = html;
-  const nickEls = mbDom.podium.querySelectorAll('.mb-pod-nick');
-  for (let k = 0; k < order.length; k++) nickEls[k].textContent = String(top[order[k]]);
-  // аватарки Kick на подіумі (або кольорова літера, якщо фото нема)
-  const avEls = mbDom.podium.querySelectorAll('.mb-pod-av');
-  for (let k = 0; k < order.length; k++) {
-    const nick = String(top[order[k]]), av = avEls[k];
-    if (window.WC) WC.avatar(av, nick);
-    else av.querySelector('span').textContent = (nick.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
-  }
-  mbDom.podium.classList.add('visible');
-  if (mbPodTimer) clearTimeout(mbPodTimer);
-  mbPodTimer = setTimeout(() => {
-    mbPodTimer = 0;
-    mbHidePodium();
-    mbAnnounceWinner(st);
-  }, 3000);
-}
 function mbHidePodium() { if (mbDom) mbDom.podium.classList.remove('visible'); }
 // загальна заставка переможця (addWinner) — рівно один раз на гонку
 function mbAnnounceWinner(st) {
@@ -2449,7 +2429,7 @@ async function startMarblesGame() {
   if (typeof phase !== 'undefined') phase = 'racing';
   mbDom.root.classList.add('visible');
   mbDom.controls.style.display = 'none';
-  mbSetCount('…');
+  mbLoading('Загружаем физику…');
   // Rapier (WASM) вантажиться один раз — далі проміс закешовано
   try {
     await mbInitPhysics();
@@ -2461,12 +2441,13 @@ async function startMarblesGame() {
   }
   if (typeof THREE === 'undefined') { alert('Марблс: three.js не завантажився'); closeMarblesOverlay(); return; }
   if (!mbDom.root.classList.contains('visible')) return; // закрили, поки чекали
+  mbLoading('Загружаем карты…');
   await mbPreloadMaps();
   const mapId = await mbPickMap();
   if (!mapId || !mbDom.root.classList.contains('visible')) return;
   // стартовий порядок — перестановка random.org з доказом (кнопка перевірки
   // на заставці переможця працює сама через lastRollProof в app.js)
-  mbSetCount('…');
+  mbLoading('Жеребьёвка стартовых мест…');
   const order = await rollPick(list, list.length, 'Марблс: стартовый порядок ' + list.length + ' шариков');
   if (!mbDom.root.classList.contains('visible')) return;
   mbStartRace(order, mapId);
@@ -2481,28 +2462,37 @@ function mbPickMap() {
     if (!ids.length) { resolve(null); return; }
     if (mbPickResolve) mbPickResolve(null);
     mbPickResolve = resolve;
-    mbSetCount('');
+    mbSetCount(''); mbLoading(null);
     const cards = mbDom.pickerCards; cards.innerHTML = '';
     let last = null; try { last = localStorage.getItem('mb_map'); } catch (e) { /* приватний режим */ }
     for (const id of ids) {
       const m = mbMapDef(id);
       const el = document.createElement('button');
       el.type = 'button'; el.className = 'mb-card' + (id === last ? ' mb-card-last' : '');
-      el.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico"></div></div><div class="mb-card-body"><div class="mb-card-name"></div><div class="mb-card-time"></div></div>';
+      el.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico"></div></div><span class="mb-card-key">' + (cards.children.length + 1) + '</span><div class="mb-card-body"><div class="mb-card-name"></div><div class="mb-card-time"></div></div>';
       // прев'ю карти (рендер з Blender); немає файлу — лишається градієнт з іконкою
       const img = new Image(); img.onload = () => { el.querySelector('.mb-card-img').style.backgroundImage = 'url(' + img.src + ')'; el.classList.add('mb-has-img'); };
       img.src = '/assets/models/marbles/' + id + '_thumb.jpg';
       el.querySelector('.mb-card-ico').textContent = m.icon || '🔮';
       el.querySelector('.mb-card-name').textContent = m.name || id;
-      el.querySelector('.mb-card-time').textContent = '⏱ ≈ ' + mbFmtApprox(m.approxSec || 120) + (m.allSec ? ' · все ≈ ' + mbFmtApprox(m.allSec) : '');
+      el.querySelector('.mb-card-time').innerHTML = '<span>⏱ ≈ ' + mbFmtApprox(m.approxSec || 120) + '</span>' + (m.allSec ? '<span>все ≈ ' + mbFmtApprox(m.allSec) + '</span>' : '');
       el.onclick = () => mbChooseMap(id);
       cards.appendChild(el);
     }
     const rnd = document.createElement('button');
     rnd.type = 'button'; rnd.className = 'mb-card mb-card-rnd';
-    rnd.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico">🎲</div></div><div class="mb-card-body"><div class="mb-card-name">Случайная</div><div class="mb-card-time">карту выберет жребий</div></div>';
+    rnd.innerHTML = '<div class="mb-card-img"><div class="mb-card-ico">🎲</div></div><span class="mb-card-key">' + (ids.length + 1) + '</span><div class="mb-card-body"><div class="mb-card-name">Случайная</div><div class="mb-card-time"><span>карту выберет жребий</span></div></div>';
     rnd.onclick = () => mbChooseMap(ids[Math.floor(Math.random() * ids.length)]);
     cards.appendChild(rnd);
+    cards.style.setProperty('--n', ids.length + 1);
+    const nEl = document.getElementById('mb-pk-n'); if (nEl) nEl.textContent = ids.length + 1;
+    // клавіші 1…N — швидкий вибір (стрімеру не треба цілитись мишкою)
+    const onKey = e => {
+      if (mbDom.picker.style.display === 'none') { document.removeEventListener('keydown', onKey); return; }
+      const k = parseInt(e.key, 10);
+      if (k >= 1 && k <= cards.children.length) { e.preventDefault(); document.removeEventListener('keydown', onKey); cards.children[k - 1].click(); }
+    };
+    document.addEventListener('keydown', onKey);
     mbDom.picker.style.display = 'flex';
   });
 }
@@ -2516,10 +2506,11 @@ function mbChooseMap(id) {
 async function mbChangeMap() {
   if (!mbEnsureDom() || !mbBaseList.length) return;
   mbDom.controls.style.display = 'none';
+  mbLoading('Загружаем карты…');
   await mbPreloadMaps();
   const mapId = await mbPickMap();
   if (!mapId || !mbDom.root.classList.contains('visible')) return;
-  mbSetCount('…');
+  mbLoading('Жеребьёвка стартовых мест…');
   const order = await rollPick(mbBaseList, mbBaseList.length, 'Марблс: стартовый порядок ' + mbBaseList.length + ' шариков');
   if (!mbDom.root.classList.contains('visible')) return;
   mbStartRace(order, mapId);
@@ -2540,7 +2531,7 @@ function mbStartRace(order, mapId) {
   mbSt.podShown = false;
   mbSt.winnerAnnounced = false;
   mbSt.finishZoom = 0;
-  // переможець відомий одразу, але заставка — після подіуму; зараз лише наїзд на фініш
+  // переможець відомий одразу; заставка — за 1.6 с (спершу наїзд камери на фініш)
   mbSt.onWinner = () => { mbSt.finishZoom = 2.0; };
   mbSt.onDone = () => {
     window.mbLastResults = mbFinalOrder(mbSt).slice(0, 10);
@@ -2554,7 +2545,7 @@ function mbStartRace(order, mapId) {
   mbBoardReset();
   mbHidePodium();
   if (mbPodTimer) { clearTimeout(mbPodTimer); mbPodTimer = 0; }
-  mbSetCount('');
+  mbSetCount(''); mbLoading(null);
   mbHudReset(order.length);
   if (mbGoTimer) { clearTimeout(mbGoTimer); mbGoTimer = 0; }
   if (!mbRaf) {
@@ -2575,7 +2566,7 @@ function mbHudReset(n) {
 async function mbRestartRace() {
   if (!mbEnsureDom() || !mbBaseList.length) return;
   mbDom.controls.style.display = 'none';
-  mbSetCount('…');
+  mbLoading('Жеребьёвка стартовых мест…');
   const order = await rollPick(mbBaseList, mbBaseList.length, 'Марблс: стартовый порядок ' + mbBaseList.length + ' шариков');
   if (!mbDom.root.classList.contains('visible')) return;
   mbStartRace(order, mbCurMapId);
@@ -2595,7 +2586,7 @@ function closeMarblesOverlay() {
     mbDom.root.classList.remove('visible');
     mbDom.controls.style.display = 'none';
     if (mbDom.picker) mbDom.picker.style.display = 'none';
-    mbSetCount('');
+    mbSetCount(''); mbLoading(null);
     if (mbDom.hud) mbDom.hud.style.display = 'none';
     if (mbDom.cambar) mbDom.cambar.style.display = 'none';
     mbBoardReset();
@@ -2650,10 +2641,11 @@ function mbAdvance(st, dtReal) {
       }
     } else {
       mbSimStep(st, MB_DT);
-      // подіум — щойно є вся трійка (на 2 учасниках — двійка)
-      if (!st.podShown && st.finishOrder.length >= Math.min(3, st.balls.length)) {
+      // переможець лише один — без подіуму 1-2-3: за 1.6 с після першого фінішу (наїзд камери) його заставка
+      if (!st.podShown && st.finishOrder.length >= 1) {
         st.podShown = true;
-        mbShowPodium(st);
+        if (mbPodTimer) clearTimeout(mbPodTimer);
+        mbPodTimer = setTimeout(() => { mbPodTimer = 0; mbAnnounceWinner(st); }, 1600);
       }
       if (st.done) { st.phase = 'done'; break; }
     }
@@ -2765,6 +2757,30 @@ window.mbChangeMap = mbChangeMap;
 window.mbChooseMap = mbChooseMap;
 window.mbToggleFly = mbToggleFly;
 window.mbAutoCam = mbAutoCam;
+// Шари глибини для моделі карти з Blender: стики жолобів навмисно перекриваються (наступний
+// сегмент на 0.3 м раніше й на 0.15 нижче) — копланарні борти мерехтіли; декор (земля, двір,
+// хмари), що лежить у площині траси, теж. Сусідні сегменти R_T* отримують різний polygonOffset
+// (через один — «ближче»), декор D_*/Cloud — «далі». Матеріали спільні, тож ставимо перед кожним draw.
+function mbDepthLayers(root) {
+  // назва вузла з Blender: у мешу з кількома матеріалами вона на батьківській групі
+  const nameOf = o => { for (let q = o; q && q !== root.parent; q = q.parent) if (/^(R_T|D_|Cloud|F_|X_)/.test(q.name)) return q.name; return o.name || ''; };
+  const trk = new Set();
+  root.traverse(o => { if (o.isMesh) { const n = nameOf(o).match(/^R_T[^.]*/); if (n) trk.add(n[0]); } });
+  const order = [...trk].sort();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const n = nameOf(o);
+    let f = 0, u = 0;
+    const t = n.match(/^R_T[^.]*/);
+    if (t) { if (order.indexOf(t[0]) % 2) { f = -1; u = -3; } }
+    else if (/^(D_|Cloud)/.test(n)) { f = 1; u = 4; }
+    o.onBeforeRender = (r, sc, cam, g, m) => {
+      if (!m) return;
+      m.polygonOffset = f !== 0 || u !== 0; m.polygonOffsetFactor = f; m.polygonOffsetUnits = u;
+    };
+  });
+}
+window.mbDepthLayers = mbDepthLayers;
 window.mbGfx = () => mbG;          // сцена/рендерер — для дебагу і заміру renderer.info
 // ручний pump фаз шоу (тести без rAF). Інша назва навмисно: у classic-скрипті
 // top-level function mbAdvance і є window.mbAdvance — перезапис дав би рекурсію
