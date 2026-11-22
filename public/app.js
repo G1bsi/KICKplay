@@ -292,7 +292,7 @@ function renderParticipants(list) {
       ? '<div class="empty-box">Сообщения из чата идут, но слово <b>' + escapeHtml(state.joinCmd || '—') + '</b> никто не написал.<br>Проверь раскладку (лес / les) и знак «!» — бот принимает слово и с ним, и без него.</div>'
       : (raffleOpen
         ? emptyState('users live', 'Ждём участников')
-        : emptyState('users', 'Регистрация закрыта', 'впиши слово и нажми <b>▶</b>, чтобы начать'));
+        : emptyState('users', 'Регистрация закрыта'));
     return;
   }
   /* нові учасники ЗВЕРХУ (номер лишається порядком реєстрації) —
