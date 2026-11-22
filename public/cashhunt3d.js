@@ -164,6 +164,17 @@
     }
     return bag.shift();
   }
+  // поява талісмана: «випірнає» з нуля з пружинкою (як після вибуху), а не з'являється різко
+  function popMascot(m, delay) {
+    if (!m || R.pgBusy || R.pgDown) return;
+    const s0 = m.userData.s0 || 1, my = (m.userData.popN = (m.userData.popN || 0) + 1);
+    m.visible = true; m.scale.setScalar(0.01);
+    setTimeout(() => {
+      if (m.userData.popN !== my) return;
+      snd('flip', 0.4, 0.9);
+      tween(600, k => { m.scale.setScalar(Math.max(0.01, s0 * k)); }, ease.back);
+    }, delay || 0);
+  }
   function loadPenguin(scene) {
     const list = [];
     const first = Math.floor(Math.random() * MASCOTS.length);   // хто стоїть першим — теж навмання   // R ще не створено — підвʼязуємо в колбеках (вони асинхронні, R тоді вже є)
@@ -181,7 +192,12 @@
         if (!R) return;
         R.mascots = list;
         // першим стоїть пінгвін (або той, хто завантажився першим, поки пінгвіна нема)
-        if (!R.penguin || (idx === first && !R.pgBusy && !R.pgDown)) { if (R.penguin) R.penguin.visible = false; R.penguin = m; m.visible = true; }
+        if (!R.penguin || (idx === first && !R.pgBusy && !R.pgDown)) {
+          if (R.penguin) R.penguin.visible = false;
+          R.penguin = m;
+          const shown = document.getElementById('cashhunt-overlay').classList.contains('ch3d');
+          if (shown) popMascot(m, 150); else m.visible = true;   // завантажився, коли гра вже на екрані — теж плавно
+        }
       }, undefined, () => {});
     });
   }
@@ -588,6 +604,7 @@
     if (token !== my) return;
     resize(); R.fast = false; R.aimAt = null; R.ring.visible = false; R.hover.visible = false;
     buildTiles(game.cells);
+    popMascot(R.penguin, 700);
     startLoop();
     intro(my);
   }
