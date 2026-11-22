@@ -291,7 +291,7 @@ function renderParticipants(list) {
     box.innerHTML = stuck
       ? '<div class="empty-box">Сообщения из чата идут, но слово <b>' + escapeHtml(state.joinCmd || '—') + '</b> никто не написал.<br>Проверь раскладку (лес / les) и знак «!» — бот принимает слово и с ним, и без него.</div>'
       : (raffleOpen
-        ? emptyState('users live', 'Ждём участников', 'зрители пишут <b>' + escapeHtml(state.joinCmd || '!слово') + '</b> в чат')
+        ? emptyState('users live', 'Ждём участников')
         : emptyState('users', 'Регистрация закрыта', 'впиши слово и нажми <b>▶</b>, чтобы начать'));
     return;
   }
@@ -316,21 +316,26 @@ async function saveRaffleCmd() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cmd })
   });
-  const el = document.getElementById('saved-msg');
-  el.style.color = res.ok ? 'var(--accent)' : 'var(--danger)';
-  el.textContent = res.ok ? '✓ сохранено' : '✗ ошибка';
-  setTimeout(() => el.textContent = '', 2000);
+  regNote(res.ok ? 'ok' : 'err', res.ok ? 'Слово «' + cmd + '» сохранено' : 'Не удалось сохранить слово');
   return res.ok;
+}
+// плашка під полем слова: ok — зелена з галочкою, err — червона; сама зникає
+function regNote(kind, text) {
+  const el = document.getElementById('saved-msg'); if (!el) return;
+  el.className = 'reg-note ' + kind;
+  el.innerHTML = '<i>' + (kind === 'ok' ? '✓' : '!') + '</i><span></span>';
+  el.querySelector('span').textContent = text;
+  el.style.color = '';
+  void el.offsetWidth; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
 async function toggleRegistration() {
   if (!raffleOpen) {
     const cmd = document.getElementById('raffle-cmd').value.trim();
     if (!cmd) {
-      const el = document.getElementById('saved-msg');
-      el.style.color = '#ff4444';
-      el.textContent = '✗ введите слово';
-      setTimeout(() => el.textContent = '', 2000);
+      regNote('err', 'Сначала впиши слово для участия');
+      document.getElementById('raffle-cmd').focus();
       return;
     }
     const ok = await saveRaffleCmd();
@@ -2579,7 +2584,7 @@ function renderWinners() {
   document.getElementById('winners-count-title').textContent = winnersHistory.length;
   const box = document.getElementById('winners-box');
   if (!winnersHistory.length) {
-    box.innerHTML = emptyState('trophy', 'Пока без победителей', 'здесь появятся победители розыгрышей');
+    box.innerHTML = emptyState('trophy', 'Пока без победителей');
     return;
   }
 

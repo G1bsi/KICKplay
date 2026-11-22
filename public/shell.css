@@ -497,3 +497,21 @@ body.reg-open .reg-sub .rs-off { display: none; }
 /* ── Шапка: лічильники дублювали інфу з панелей — прибрано; плашка «чат Kick» видна лише коли зв'язку з чатом НЕМАЄ ── */
 .top-stats { display: none !important; }
 #floating-status:has(.dot.open) { display: none !important; }
+
+/* ── Плашка «слово збережено / помилка» під смугою реєстрації ── */
+#saved-msg.reg-note {
+  display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%;
+  margin-top: 0; padding: 0 12px 0 6px; height: 0; overflow: hidden; opacity: 0; border-radius: 999px;
+  font: 700 12px/1 var(--font-ui); font-family: var(--font-ui);
+  transform: translateY(-4px); transition: opacity .2s, transform .25s var(--ease-spring), height .2s, margin-top .2s;
+}
+#saved-msg.reg-note.show { height: 30px; margin-top: 10px; opacity: 1; transform: none; }
+#saved-msg.reg-note i {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto;
+  font-style: normal; font-size: 11px; font-weight: 900;
+}
+#saved-msg.reg-note span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#saved-msg.reg-note.ok { color: var(--accent); background: rgba(var(--accent-rgb), .1); border: 1px solid rgba(var(--accent-rgb), .3); }
+#saved-msg.reg-note.ok i { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 10px rgba(var(--accent-rgb), .6); }
+#saved-msg.reg-note.err { color: #ff7a8a; background: rgba(var(--danger-rgb), .1); border: 1px solid rgba(var(--danger-rgb), .35); }
+#saved-msg.reg-note.err i { background: var(--danger); color: #fff; }
