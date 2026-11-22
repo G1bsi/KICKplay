@@ -475,3 +475,7 @@ body.reg-open .reg-sub .rs-off { display: none; }
 .chat-msg b { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: .2px; }
 .chat-msg:hover { background: rgba(255,255,255,.06); border-color: rgba(var(--violet-rgb), .3); }
 @keyframes chatIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Шапка: лічильники дублювали інфу з панелей — прибрано; плашка «чат Kick» видна лише коли зв'язку з чатом НЕМАЄ ── */
+.top-stats { display: none !important; }
+#floating-status:has(.dot.open) { display: none !important; }
