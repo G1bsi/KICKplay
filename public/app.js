@@ -277,6 +277,10 @@ async function loadState() {
 /* скільки повідомлень чату прийшло в панель (для підказки нижче) */
 let chatSeen = 0;
 
+// порожній стан панелі: іконка в плитці + заголовок + підпис (kind: users / trophy / chat, + live — пульс «чекаємо»)
+function emptyState(kind, title, sub) {
+  return '<div class="empty-box eb ' + kind.split(' ').map(k => 'eb-' + k).join(' ') + '"><i class="eb-ico"></i><span class="eb-t">' + title + '</span>' + (sub ? '<span class="eb-s">' + sub + '</span>' : '') + '</div>';
+}
 function renderParticipants(list) {
   const box = document.getElementById('main-box');
   if (!list.length) {
@@ -286,7 +290,9 @@ function renderParticipants(list) {
     const stuck = raffleOpen && chatSeen >= 10;
     box.innerHTML = stuck
       ? '<div class="empty-box">Сообщения из чата идут, но слово <b>' + escapeHtml(state.joinCmd || '—') + '</b> никто не написал.<br>Проверь раскладку (лес / les) и знак «!» — бот принимает слово и с ним, и без него.</div>'
-      : '<div class="empty-box">Ожидание регистрации...</div>';
+      : (raffleOpen
+        ? emptyState('users live', 'Ждём участников', 'зрители пишут <b>' + escapeHtml(state.joinCmd || '!слово') + '</b> в чат')
+        : emptyState('users', 'Регистрация закрыта', 'впиши слово и нажми <b>▶</b>, чтобы начать'));
     return;
   }
   /* нові учасники ЗВЕРХУ (номер лишається порядком реєстрації) —
@@ -2573,7 +2579,7 @@ function renderWinners() {
   document.getElementById('winners-count-title').textContent = winnersHistory.length;
   const box = document.getElementById('winners-box');
   if (!winnersHistory.length) {
-    box.innerHTML = '<div class="empty-box">Победителей пока нет</div>';
+    box.innerHTML = emptyState('trophy', 'Пока без победителей', 'здесь появятся победители розыгрышей');
     return;
   }
 

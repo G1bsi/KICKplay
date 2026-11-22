@@ -125,7 +125,7 @@
       <span class="live-tag" id="reg-live-tag">● регистрация</span>
     </div>
     <div class="box" id="main-box">
-      <div class="empty-box">Ожидание регистрации...</div>
+      <div class="empty-box eb eb-users"><i class="eb-ico"></i><span class="eb-t">Регистрация закрыта</span><span class="eb-s">впиши слово и нажми <b>▶</b>, чтобы начать</span></div>
     </div>
     <div class="btn-row" id="game-controls" style="display:none;">
       <button class="btn-gold" id="btn-go" onclick="startReveal()" disabled>🔫 Выстрел</button>
@@ -137,26 +137,24 @@
   <aside class="side">
     <section class="card winners-card">
       <div class="card-head">
-        <span class="card-step gold">★</span>
         <h2>Победители</h2>
         <span class="count-badge gold" id="winners-count-title">0</span>
         <span class="head-spacer"></span>
         <button class="btn-icon" onclick="deleteAllWinners()" title="Удалить всех победителей">🗑</button>
       </div>
       <div class="box" id="winners-box">
-        <div class="empty-box">Победителей пока нет</div>
+        <div class="empty-box eb eb-trophy"><i class="eb-ico"></i><span class="eb-t">Пока без победителей</span><span class="eb-s">здесь появятся победители розыгрышей</span></div>
       </div>
     </section>
 
     <section class="card chat-card" id="chat-col">
       <div class="card-head">
-        <span class="card-step violet">#</span>
         <h2>Чат</h2>
         <span class="head-spacer"></span>
         <span class="live-tag violet">live</span>
       </div>
       <div class="box chat-flow" id="chat-box">
-        <div class="empty-box">Ожидание сообщений...</div>
+        <div class="empty-box eb eb-chat"><i class="eb-ico"></i><span class="eb-t">Чат пока молчит</span><span class="eb-s">сообщения с Kick появятся здесь</span></div>
       </div>
     </section>
   </aside>
