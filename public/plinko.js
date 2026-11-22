@@ -213,7 +213,8 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   // ── підписи виграшів під лунками (HTML — чіткий текст) ──
   function buildLabels() {
     const box = $('pl-labels'); box.innerHTML = '';
-    S.labels = S.values.map(v => { const el = document.createElement('div'); el.className = 'pl-lbl' + (v.dbl ? ' pl-lbl-dbl' : ''); el.textContent = labelOf(v); box.appendChild(el); return el; });
+    // ікси не показуємо до відкриття по черзі — лунки одразу закриті «?» (раніше цифри мигали й зникали)
+    S.labels = S.values.map(() => { const el = document.createElement('div'); el.className = 'pl-lbl pl-hide'; el.textContent = '?'; box.appendChild(el); return el; });
     placeLabels(true);
   }
   function placeLabels(instant) {
@@ -240,7 +241,8 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   async function doShuffle(anim, fresh) {
     // нова розкладка й відкриття іксів по черзі — від найменшого до найбільшого
     S.values = makeBoard(); S.order = placeOrder(S.values);
-    refreshLabels(false); placeLabels(true);
+    S.labels.forEach((el, i) => { el.classList.add('pl-hide'); el.classList.remove('pl-pop', 'pl-pop-big'); el.classList.remove('pl-lbl-dbl'); el.textContent = '?'; });   // DOUBLE теж не видно до відкриття
+    placeLabels(true);
     await revealSeq();
   }
   // інтрига: усі лунки закриті «?», ікси відкриваються по одному за зростанням;
@@ -248,7 +250,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   async function revealSeq() {
     const my = token, st = S;
     st.revealing = true; st.flash = st.flash || {};
-    S.labels.forEach(el => { el.classList.add('pl-hide'); el.textContent = '?'; });
+    S.labels.forEach(el => { el.classList.add('pl-hide'); el.classList.remove('pl-lbl-dbl'); el.textContent = '?'; });
     $('pl-maxwin').textContent = 'максимум: ?';
     const idx = S.values.map((v, i) => i).filter(i => !S.values[i].dbl).sort((a, b) => S.values[a].m - S.values[b].m);
     const top = idx.pop(), seq = idx.concat(S.values.map((v, i) => i).filter(i => S.values[i].dbl), [top]);
@@ -256,7 +258,8 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     for (let k = 0; k < seq.length; k++) {
       if (my !== token || S !== st) return;
       const i = seq[k], el = S.labels[i], last = k === seq.length - 1, slow = k >= seq.length - 2;
-      el.textContent = labelOf(S.values[i]); el.classList.remove('pl-hide', 'pl-pop'); void el.offsetWidth; el.classList.add('pl-pop');
+      el.textContent = labelOf(S.values[i]); el.classList.toggle('pl-lbl-dbl', !!S.values[i].dbl);
+      el.classList.remove('pl-hide', 'pl-pop'); void el.offsetWidth; el.classList.add('pl-pop');
       if (last) el.classList.add('pl-pop-big');
       S.flash[S.order[i]] = performance.now();
       tone(380 + k * 55, last ? 0.2 : 0.1, last ? 0.7 : 0.18, last ? 'triangle' : 'sine');
@@ -375,7 +378,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     resize();
     S = { state: 'pick', values: makeBoard(), dx: 0, tx: 0, b: null, win: -1, hits: 0, doubles: 0 };
     S.order = placeOrder(S.values);
-    buildLabels(); updateMaxWin();
+    buildLabels(); $('pl-maxwin').textContent = 'максимум: ?';
     if (!R.raf) R.raf = requestAnimationFrame(frame);
     ac();
     // хто кидає: швидкий перебір ніків, а тим часом — ролл random.org

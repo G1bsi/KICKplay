@@ -8,12 +8,20 @@
    Якщо WebGL/модель недоступні — працює стара 2D-версія.
    ══════════════════════════════════════════════════════════════ */
 (function () {
-  const GLB = '/assets/models/revolver/revolver.glb';
-  const RC = 1.36;                 // радіус кола камор (від осі барабана)
-  const RIM_X = -1.75;             // задня площина барабана (тут сидять фланці патронів)
-  const MUZZLE = [14.1, 1.36, 0];  // дуло в координатах моделі
-  const FLOOR_Y = -9.2;            // стіл під револьвером (низ руків'я ~ −8.5)
-  const CAM = { pos: [-17.0, 5.0, -7.6], look: [1.4, -1.1, 0] };
+  // моделі револьвера: однакова схема вузлів (REV_FRAME/REV_CYL/REV_HAMMER/REV_BULLET/REV_CASE), свої мітки
+  //   RC — радіус кола камор, RIM_X — задня площина барабана (тут сидять фланці патронів), MUZZLE — дуло,
+  //   FLOOR_Y — стіл під руків'ям, PIVOT — точка віддачі біля руків'я, cap — декоративна розетка в центрі барабана
+  const MODELS = {
+    classic: { glb: '/assets/models/revolver/revolver.glb', RC: 1.36, RIM_X: -1.75, MUZZLE: [14.1, 1.36, 0], FLOOR_Y: -9.2,
+               PIVOT: [-4.2, -4.5, 0], CAM: { pos: [-17.0, 5.0, -7.6], look: [1.4, -1.1, 0] }, cap: true },
+    // Кольт Нейві 1851 (blender/colt_build.py): довгий ствол, курок на гвинті нижче осі барабана
+    colt:    { glb: '/assets/models/revolver/revolver_colt.glb?v=20261122c', RC: 1.36, RIM_X: -2.495, MUZZLE: [22.31, 1.36, 0], FLOOR_Y: -11.47,
+               PIVOT: [-7.6, -6.4, 0], CAM: { pos: [-19.5, 5.6, -8.6], look: [1.6, -1.4, 0] }, cap: false,   // з-за плеча стрільця на торець барабана (як було спочатку)
+               // барабан відкидається вбік на «кронштейні»: вісь повороту паралельна стволу, у точці (y, z) під барабаном; ang — кут (рад)
+               swing: { y: -3.0, z: 0, ang: -1.66 } },
+  };
+  const MODEL = MODELS.colt;
+  const GLB = MODEL.glb, RC = MODEL.RC, RIM_X = MODEL.RIM_X, MUZZLE = MODEL.MUZZLE, FLOOR_Y = MODEL.FLOOR_Y, CAM = MODEL.CAM;
   const runRevolver2D = window.runRevolver;
   let glbP = null, R = null;
 
@@ -72,8 +80,8 @@
     const nodes = {}; root.traverse(o => { if (/^REV_/.test(o.name) && !nodes[o.name]) nodes[o.name] = o; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     const gun = new THREE.Group(); scene.add(gun);
     // точка віддачі — біля руків'я: група-шарнір, у якій сидить модель
-    const pivot = new THREE.Group(); pivot.position.set(-4.2, -4.5, 0); gun.add(pivot);
-    root.position.set(4.2, 4.5, 0); pivot.add(root);
+    const pivot = new THREE.Group(); pivot.position.set(MODEL.PIVOT[0], MODEL.PIVOT[1], MODEL.PIVOT[2]); gun.add(pivot);
+    root.position.set(-MODEL.PIVOT[0], -MODEL.PIVOT[1], -MODEL.PIVOT[2]); pivot.add(root);
     const tplB = nodes.REV_BULLET, tplC = nodes.REV_CASE;
     if (tplB) tplB.visible = false; if (tplC) tplC.visible = false;
     // латунь патрона: повністю металева в темному оточенні виходила коричневою — робимо світлішою й теплішою
@@ -81,7 +89,7 @@
     headMat = new THREE.MeshStandardMaterial({ map: headTex(), metalness: 0.55, roughness: 0.28, emissive: new THREE.Color('#ffffff'), emissiveMap: null, emissiveIntensity: 0 });
     headMat.emissiveMap = headMat.map; headMat.emissiveIntensity = 0.14;
     // центр барабана: замість «зірки» екстрактора з кубиків — полірована розетка з зеленим камінцем
-    if (nodes.REV_CYL) {
+    if (nodes.REV_CYL && MODEL.cap) {
       // саму «зірку» з моделі вирізаємо (золоті трикутники біля осі на задньому торці) — тоді кришка може бути маленькою
       root.updateMatrixWorld(true);
       const inv = new THREE.Matrix4().copy(nodes.REV_CYL.matrixWorld).invert();
@@ -119,7 +127,8 @@
     const labels = document.createElement('div'); labels.className = 'rev3d-labels';
     area.appendChild(renderer.domElement); area.appendChild(labels);
     R = { area, renderer, scene, camera, gun, pivot, root, nodes, cyl: nodes.REV_CYL, hammer: nodes.REV_HAMMER, tplB, tplC, flash, flashL, smokes, glowL,
-          labels, chambers: [], tweens: [], free: [], shake: 0, raf: 0, recoil: 0, cyl0: nodes.REV_CYL ? nodes.REV_CYL.quaternion.clone() : null,
+          labels, chambers: [], tweens: [], free: [], shake: 0, raf: 0, recoil: 0, swing: 0, cylP0: nodes.REV_CYL ? nodes.REV_CYL.position.clone() : null,
+          cyl0: nodes.REV_CYL ? nodes.REV_CYL.quaternion.clone() : null,
           ham0: nodes.REV_HAMMER ? nodes.REV_HAMMER.quaternion.clone() : null, spin: 0, cock: 0, t: 0 };
     resize(); window.addEventListener('resize', resize);
     return R;
@@ -148,7 +157,16 @@
     }
     const t = now / 1000;
     // барабан: кут spin навколо осі X моделі
-    if (R.cyl && R.cyl0) { R.cyl.quaternion.copy(R.cyl0); R.cyl.rotateX(R.spin); }
+    if (R.cyl && R.cyl0) {
+      // відкидання барабана вбік (заряджання): поворот навколо осі кронштейна, паралельної стволу
+      const sw = MODEL.swing, th = sw ? sw.ang * (R.swing || 0) : 0;
+      if (sw) {
+        const dy = R.cylP0.y - sw.y, dz = R.cylP0.z - sw.z, c = Math.cos(th), sn = Math.sin(th);
+        R.cyl.position.set(R.cylP0.x, sw.y + dy * c - dz * sn, sw.z + dy * sn + dz * c);
+      }
+      R.cyl.quaternion.copy(R.cyl0); if (th) R.cyl.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), th));
+      R.cyl.rotateX(R.spin);
+    }
     if (R.hammer && R.ham0) { R.hammer.quaternion.copy(R.ham0); R.hammer.rotateZ(R.cock * 0.62); }
     R.pivot.rotation.z = R.recoil * 0.22;
     // камера: легке «дихання» + трусіння від пострілу
@@ -227,6 +245,25 @@
   }
 
   // ── постріл: курок, спалах, дим, віддача, трусіння, гільза вилітає ──
+  // відкинути барабан убік (заряджання, викидання гільзи)
+  async function swingOut(ms) {
+    if (typeof playSfx === 'function') playSfx('rev-load', 0.5, 0.8, 220);
+    await tween(ms || 520, k => { R.swing = k; }, ease.outCubic);
+    R.swing = 1;
+  }
+  // закрити: змах із розгоном і прокрутом на ходу (повний оберт — камори знову навпроти ствола), клацання, ледь помітний відскок
+  async function swingIn() {
+    const s0 = R.spin;
+    if (typeof playSfx === 'function') playSfx('rev-spin', 0.6, 1.6);
+    await tween(420, k => {
+      R.swing = 1 - k * k * k;
+      R.spin = s0 - Math.PI * 2 * (1 - Math.pow(1 - k, 2));
+    }, k => k);
+    R.swing = 0; R.spin = s0 - Math.PI * 2;
+    if (typeof playSfx === 'function') playSfx('rev-load', 0.85, 1.1, 260);
+    await tween(140, k => { R.swing = 0.025 * Math.sin(Math.PI * k); }, ease.outCubic);
+    R.swing = 0;
+  }
   async function fire(ch) {
     tween(110, k => { R.cock = 1 - k; }, ease.outCubic);
     await sleep(90);
@@ -236,11 +273,28 @@
     tween(90, k => { R.recoil = k; }, ease.outCubic).then(() => tween(520, k => { R.recoil = 1 - k; }, ease.inOut));
     const mw = new THREE.Vector3(); R.flash.getWorldPosition(mw);
     R.smokes.forEach((s, j) => { s.visible = true; s.userData.age = -j * 0.04; s.position.copy(mw); s.userData.v = new THREE.Vector3(1.5 + Math.random() * 2, 1 + Math.random() * 1.6, (Math.random() - 0.5) * 1.5); });
-    // патрон → гільза; через мить гільза вилітає назад, у бік камери
     const [y, z] = [ch.y, ch.z];
+    ch.alive = false; ch.label.classList.add('dead');
+    if (MODEL.swing) {
+      // кольт: весь патрон вилітає вперед — з камори крізь ствол і далі за дуло
+      const b = ch.obj; ch.obj = null;
+      const wp = new THREE.Vector3(), wq = new THREE.Quaternion(); b.getWorldPosition(wp); b.getWorldQuaternion(wq);
+      R.cyl.remove(b); R.root.add(b);
+      R.root.updateMatrixWorld(true);
+      b.position.copy(R.root.worldToLocal(wp.clone()));
+      b.quaternion.copy(R.root.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(wq));
+      b.scale.setScalar(0.78);                                   // калібр ствола вужчий за камору
+      const x0 = b.position.x, y0 = b.position.y, z0 = b.position.z, x1 = MUZZLE[0] + 40;
+      await tween(320, k => {
+        b.position.set(x0 + (x1 - x0) * k, y0 + (MUZZLE[1] - y0) * Math.min(1, k * 4), z0 * (1 - Math.min(1, k * 4)));
+        b.visible = k < 0.98;
+      }, k => k);
+      R.root.remove(b);
+      return;
+    }
+    // старий револьвер: патрон → стріляна гільза, що вилітає назад
     R.cyl.remove(ch.obj);
     const cs = R.tplC.clone(true); cs.visible = true; cs.position.set(RIM_X, y, z); R.cyl.add(cs); ch.obj = cs;
-    ch.alive = false; ch.label.classList.add('dead');
     await sleep(260);
     const wp = new THREE.Vector3(), wq = new THREE.Quaternion(); cs.getWorldPosition(wp); cs.getWorldQuaternion(wq);
     R.cyl.remove(cs); R.scene.add(cs); cs.position.copy(wp); cs.quaternion.copy(wq); ch.obj = null;
@@ -264,8 +318,10 @@
       overlay.classList.remove('rev3d'); return runRevolver2D(qualifiers);
     }
     resize(); startLoop();
-    clearChambers(); R.spin = 0; R.cock = 0; R.recoil = 0;
+    clearChambers(); R.spin = 0; R.cock = 0; R.recoil = 0; R.swing = 0;
     const n = qualifiers.length;
+    // барабан відкидається вбік — задня стінка відкрита, патрони заходять у камори, а не крізь рамку
+    if (MODEL.swing) { await sleep(250); await swingOut(520); await sleep(150); }
     // ── заряджання: патрони по одному в'їжджають у камори ──
     for (let i = 0; i < n; i++) {
       const ch = makeRound(i, qualifiers[i]); R.chambers.push(ch);
@@ -277,6 +333,8 @@
       if (phase !== 'racing') return;
     }
     await sleep(300);
+    // барабан закривається зі змахом і прокрутом на ходу
+    if (MODEL.swing) { await swingIn(); await sleep(250); }
     let remaining = R.chambers.slice();
 
     // ── пауза: чекаємо кнопку СТАРТ ──
@@ -338,6 +396,7 @@
   // підміняємо глобальну функцію: startRevolverGame() у app.js кличе runRevolver(...)
   if (typeof THREE !== 'undefined' && THREE.GLTFLoader) {
     window.runRevolver = runRevolver3D;
+    window.__rev = () => ({ R, CAM, MODEL });   // для відладки з консолі (камера, модель)
     // прогрів моделі у фоні — перший старт без підвантаження
     setTimeout(() => { loadGLB().catch(() => {}); }, 2500);
   }

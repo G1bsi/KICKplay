@@ -250,12 +250,14 @@ async function loadState() {
 
   const regBtn = document.getElementById('btn-reg-toggle');
   if (raffleOpen) {
-    regBtn.textContent = '⏹ Остановить регистрацию';
+    regBtn.innerHTML = '<span class="rb-ico">■</span>';
     regBtn.className = 'btn-red';
+    regBtn.title = 'Остановить регистрацию';
     cmdInput.disabled = true;
   } else {
-    regBtn.textContent = '▶ Начать регистрацию';
+    regBtn.innerHTML = '<span class="rb-ico">▶</span>';
     regBtn.className = 'btn-green';
+    regBtn.title = 'Начать регистрацию';
     cmdInput.disabled = false;
   }
 

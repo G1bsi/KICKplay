@@ -12,7 +12,13 @@
   const BOARD = { x0: -12.6, x1: 12.6, y0: 0.7, y1: 15.1, z: 0.35 };   // зона плиток у площині отвору будки
   const CAM = { pos: [0, 6, 30], look: [0, 6.4, 0] };   // табло — на всю висоту, ствол — під ним
   const BARREL = [0, 1.6, 13.5];                           // ствол висить у повітрі перед прилавком
-  const PENGUIN = { url: '/assets/models/cashhunt/penguin.glb', scale: 1.55, pos: [14.3, -0.25, 3.4], yaw: -0.35 };
+  const PENGUIN = { pos: [14.3, -0.25, 3.4], yaw: -0.35 };   // місце талісмана на прилавку
+  // h — висота в сцені, dx — зсув уліво (ширші моделі не мають виходити за кадр), cols — кольори клаптиків при вибуху
+  const MASCOTS = [
+    { kind: 'penguin', url: '/assets/models/cashhunt/penguin2.glb?v=20261122', h: 4.0, dx: -1.1, cols: ['#16171c', '#16171c', '#f2f2f4', '#f2a23a'] },
+    { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122h', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'] },
+    { kind: 'egg', url: '/assets/models/cashhunt/egg.glb?v=20261122', h: 4.1, dx: -0.9, cols: ['#e8b48c', '#6b4a32', '#5d8fd0', '#1b1b1b'] },
+  ];
   const SIGN_Y = 19.3;                                    // вище — вивіска, її не показуємо
   const ICONS = ['TGT_can', 'TGT_duck', 'TGT_star', 'TGT_apple', 'TGT_bottle', 'TGT_balloon', 'TGT_horseshoe', 'TGT_diamond'];
   const orig = { renderGame: window.renderGame, startReveal: window.startReveal, close: window.closeCashhuntOverlay };
@@ -143,18 +149,41 @@
     resize(); window.addEventListener('resize', resize);
     return R;
   }
-  // пінгвін у темних окулярах із газетою (blender/cashhunt.blend, колекція PENGUIN) — стоїть на прилавку праворуч
+  // талісмани на прилавку праворуч: згенеровані моделі (blender/hero_import.py), поділені на частини тіла для вибуху.
+  // Стоїть один; після кожного «вбивства» на його місці з'являється наступний: пінгвін → герой → яйце → пінгвін…
+  // наступний талісман: випадкова черга без повторів — кожен з'являється раз за коло,
+  // і на стику кіл той самий не стоїть двічі поспіль
+  function nextMascot(all, cur) {
+    if (all.length < 2) return cur;
+    let bag = R.mascotBag;
+    if (!bag || !bag.length || bag.some(m => !all.includes(m))) {
+      bag = all.slice();
+      for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+      if (bag[0] === cur) { const k = 1 + Math.floor(Math.random() * (bag.length - 1)); [bag[0], bag[k]] = [bag[k], bag[0]]; }   // не двічі поспіль
+      R.mascotBag = bag;
+    }
+    return bag.shift();
+  }
   function loadPenguin(scene) {
-    new THREE.GLTFLoader().load(PENGUIN.url, g => {
-      const p = g.scene;
-      p.traverse(o => {
-        if (!o.isMesh) return;
-        o.castShadow = true; o.receiveShadow = true;
-        if (o.material.name === 'PG_Paper') { o.material = o.material.clone(); o.material.map = paperTex(); o.material.color.set('#ffffff'); }
-      });
-      p.scale.setScalar(PENGUIN.scale); p.position.set(PENGUIN.pos[0], PENGUIN.pos[1], PENGUIN.pos[2]); p.rotation.y = PENGUIN.yaw;
-      scene.add(p); if (R) R.penguin = p;
-    }, undefined, () => {});
+    const list = [];
+    const first = Math.floor(Math.random() * MASCOTS.length);   // хто стоїть першим — теж навмання   // R ще не створено — підвʼязуємо в колбеках (вони асинхронні, R тоді вже є)
+    MASCOTS.forEach((M, idx) => {
+      new THREE.GLTFLoader().load(M.url, g => {
+        const m = g.scene;
+        m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        // висота в сцені однакова для всіх (моделі з генератора мають різний масштаб)
+        const hh = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).y || 1;
+        const s0 = M.h / hh;
+        m.scale.setScalar(s0); m.position.set(PENGUIN.pos[0] + M.dx, PENGUIN.pos[1], PENGUIN.pos[2]); m.rotation.y = PENGUIN.yaw;
+        m.userData.s0 = s0; m.userData.kind = M.kind; m.userData.cols = M.cols; m.userData.order = idx;
+        m.visible = false; scene.add(m);
+        list.push(m); list.sort((a, b) => a.userData.order - b.userData.order);
+        if (!R) return;
+        R.mascots = list;
+        // першим стоїть пінгвін (або той, хто завантажився першим, поки пінгвіна нема)
+        if (!R.penguin || (idx === first && !R.pgBusy && !R.pgDown)) { if (R.penguin) R.penguin.visible = false; R.penguin = m; m.visible = true; }
+      }, undefined, () => {});
+    });
   }
   function paperTex() {
     const c = document.createElement('canvas'); c.width = 1024; c.height = 700; const x = c.getContext('2d');
@@ -430,9 +459,10 @@
       o.userData.v.x = -Math.abs(o.userData.v.x) * 0.7 + (Math.random() - 0.5) * 4;   // пінгвін справа — шматки летять у кадр, а не за край
       o.userData.w = new THREE.Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14);
     }
-    // пір'я: чорно-білі пластинки
+    // пір'я (пінгвін) або клаптики комбінезона й зелені шматочки (другий талісман)
+    const cols = p.userData.cols || ['#16171c', '#f2f2f4'];
     for (let i = 0; i < 40; i++) {
-      const f = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.16), new THREE.MeshStandardMaterial({ color: i % 3 ? '#16171c' : '#f2f2f4', side: THREE.DoubleSide, transparent: true }));
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.16), new THREE.MeshStandardMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, transparent: true }));
       f.position.copy(c); R.scene.add(f);
       R.parts.push({ o: f, v: new THREE.Vector3((Math.random() - 0.5) * 12, 4 + Math.random() * 9, 2 + Math.random() * 7), w: [Math.random() * 10, Math.random() * 10], g: 6, drag: true, life: 2.6 + Math.random() });
     }
@@ -441,10 +471,14 @@
     for (const pp of R.pgParts) {
       pp.parent.add(pp.o); pp.o.position.copy(pp.home.pos); pp.o.quaternion.copy(pp.home.quat); pp.o.scale.copy(pp.home.scale);
     }
-    R.pgParts = null; R.pgDown = false;
-    const s0 = PENGUIN.scale; p.scale.setScalar(0.01);
+    R.pgParts = null;
+    // на місці знищеного «випірнає» інший талісман (пінгвін ↔ герой); якщо другий не завантажився — той самий
+    const all = R.mascots || [p], nx = nextMascot(all, p);
+    if (nx !== p) { p.visible = false; p.scale.setScalar(p.userData.s0 || 1); nx.visible = true; R.penguin = nx; }
+    R.pgDown = false;
+    const s0 = nx.userData.s0 || 1; nx.scale.setScalar(0.01);
     snd('flip', 0.5, 0.9);
-    await tween(520, k => { p.scale.setScalar(Math.max(0.01, s0 * k)); }, ease.back);
+    await tween(520, k => { nx.scale.setScalar(Math.max(0.01, s0 * k)); }, ease.back);
     R.pgBusy = false;
   }
   function bindPointer() {

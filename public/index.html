@@ -50,28 +50,21 @@
   <!-- ── Ліва колонка: пульт ─────────────────────────────── -->
   <aside class="stack deck">
 
-    <section class="card">
+    <section class="card reg-card">
       <div class="card-head">
-        <span class="card-step">01</span>
         <h2>Регистрация</h2>
       </div>
-      <div class="field-row">
-        <div class="field" style="flex:1;">
-          <label class="field-label" for="raffle-cmd">Слово для участия</label>
-          <input type="text" id="raffle-cmd" value="" placeholder="!join" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
-        </div>
-        <div class="field small">
-          <label class="field-label" for="winners-count">Победителей</label>
-          <input type="number" id="winners-count" value="1" min="1" max="200">
-        </div>
+      <!-- слово для участия і кнопка старт/стоп — одна смуга -->
+      <div class="reg-bar">
+        <input type="text" id="raffle-cmd" value="" placeholder="!join" aria-label="Слово для участия" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+        <button type="button" id="btn-reg-toggle" class="btn-green" title="Начать регистрацию" onclick="toggleRegistration()"><span class="rb-ico">▶</span></button>
       </div>
-      <button type="button" id="btn-reg-toggle" class="btn-green" onclick="toggleRegistration()">▶ Начать регистрацию</button>
+      <div class="field" style="display:none;"><input type="number" id="winners-count" value="1" min="1" max="200"></div>
       <span id="saved-msg"></span>
     </section>
 
     <section class="card">
       <div class="card-head">
-        <span class="card-step">02</span>
         <h2>Режим игры</h2>
       </div>
       <!-- Плитки режимів будує ui.js із GAME_MODES (app.js); карусель лишається прихованою — app.js оновлює її -->
@@ -126,7 +119,6 @@
   <!-- ── Центр: сцена учасників ──────────────────────────── -->
   <main class="card stage" id="participants-col">
     <div class="card-head">
-      <span class="card-step">03</span>
       <h2>Участники</h2>
       <span class="count-badge" id="participants-count-title">0</span>
       <span class="head-spacer"></span>
