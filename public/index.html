@@ -56,7 +56,7 @@
       </div>
       <!-- слово для участия і кнопка старт/стоп — одна смуга -->
       <div class="reg-bar">
-        <input type="text" id="raffle-cmd" value="" placeholder="!join" aria-label="Слово для участия" onkeydown="if(event.key==='Enter')saveRaffleCmd()">
+        <input type="text" id="raffle-cmd" value="" placeholder="!join" aria-label="Слово для участия" onkeydown="if(event.key==='Enter'){event.preventDefault();if(!raffleOpen)toggleRegistration();else saveRaffleCmd();}">
         <button type="button" id="btn-reg-toggle" class="btn-green" title="Начать регистрацию" onclick="toggleRegistration()"><span class="rb-ico">▶</span></button>
       </div>
       <div class="field" style="display:none;"><input type="number" id="winners-count" value="1" min="1" max="200"></div>
