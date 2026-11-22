@@ -67,7 +67,7 @@ for k in range(8):
 # hat/head — від якої висоти; hx — голова/капелюх лише в межах |x| < hx (плечі й руки поруч не чіпляємо);
 # arm — руки збоку, лише між leg і armTop; paper — газета пінгвіна (перед глибини, діапазон висоти)
 RULES = {
-    'hero':     dict(hat=0.875, head=0.47, hx=0.34, leg=0.19, arm=0.42, armTop=0.62),
+    'hero':     dict(hat=0.86,  head=0.52, hx=0.50, leg=0.16, arm=0.55, armTop=0.62),   # стилізована версія (велика голова, широкі плечі)
     'egg':      dict(hat=0.77,  head=0.45, hx=0.9,  leg=0.12, arm=0.42, armTop=0.5),
     'penguin2': dict(hat=9.0,   head=0.70, hx=0.9,  leg=0.07, arm=0.55, armTop=0.75, paper=(0.22, 0.15, 0.68)),
 }

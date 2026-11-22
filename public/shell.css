@@ -130,7 +130,19 @@ button, input, select, label, a, [onclick], summary, details { pointer-events: a
 }
 .live-tag.violet { color: var(--violet-hi); background: rgba(var(--violet-rgb), .1); border-color: rgba(var(--violet-rgb), .28); }
 #reg-live-tag { display: none; }
-body.reg-open #reg-live-tag { display: inline-block; animation: livePulse 1.6s ease-in-out infinite; }
+/* «идёт набор»: живий еквалайзер замість крапки, текст не блимає */
+body.reg-open #reg-live-tag {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 10px;
+  font-family: var(--font-display); font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), .16), rgba(var(--accent-rgb), .06));
+  border-color: rgba(var(--accent-rgb), .4); box-shadow: 0 0 16px rgba(var(--accent-rgb), .15);
+}
+#reg-live-tag .rl-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px; }
+#reg-live-tag .rl-eq i { width: 3px; height: 100%; border-radius: 2px; background: var(--accent); opacity: .85; box-shadow: 0 0 8px var(--accent), 0 0 3px var(--accent); transform-origin: bottom; animation: rlEq 1.8s ease-in-out infinite; }
+#reg-live-tag .rl-eq i:nth-child(2) { animation-delay: -.6s; }
+#reg-live-tag .rl-eq i:nth-child(3) { animation-delay: -1.2s; }
+/* спокійно: повільно, невелика амплітуда, зі світінням */
+@keyframes rlEq { 0%, 100% { transform: scaleY(.55); } 50% { transform: scaleY(.9); } }
 @keyframes livePulse { 50% { opacity: .45; } }
 .btn-icon {
   width: 32px; height: 32px; border-radius: 10px; padding: 0; font-size: 14px;

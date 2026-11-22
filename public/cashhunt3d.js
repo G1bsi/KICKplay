@@ -16,7 +16,7 @@
   // h — висота в сцені, dx — зсув уліво (ширші моделі не мають виходити за кадр), cols — кольори клаптиків при вибуху
   const MASCOTS = [
     { kind: 'penguin', url: '/assets/models/cashhunt/penguin2.glb?v=20261122', h: 4.0, dx: -1.1, cols: ['#16171c', '#16171c', '#f2f2f4', '#f2a23a'] },
-    { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122h', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'] },
+    { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122s', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'] },
     { kind: 'egg', url: '/assets/models/cashhunt/egg.glb?v=20261122', h: 4.1, dx: -0.9, cols: ['#e8b48c', '#6b4a32', '#5d8fd0', '#1b1b1b'] },
   ];
   const SIGN_Y = 19.3;                                    // вище — вивіска, її не показуємо
