@@ -15,10 +15,10 @@
   const PENGUIN = { pos: [14.3, -0.25, 3.4], yaw: -0.35 };   // місце талісмана на прилавку
   // h — висота в сцені, dx — зсув уліво (ширші моделі не мають виходити за кадр), cols — кольори клаптиків при вибуху
   const MASCOTS = [
-    { kind: 'penguin', url: '/assets/models/cashhunt/penguin2.glb?v=20261122', h: 4.0, dx: -1.1, cols: ['#16171c', '#16171c', '#f2f2f4', '#f2a23a'] },
-    { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122s', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'] },
-    { kind: 'egg', url: '/assets/models/cashhunt/egg.glb?v=20261122', h: 4.1, dx: -0.9, cols: ['#e8b48c', '#6b4a32', '#5d8fd0', '#1b1b1b'] },
-    { kind: 'dog', url: '/assets/models/cashhunt/dog.glb?v=20261123b', h: 3.7, dx: -1.35, cols: ['#3a2418', '#c8743a', '#b0202a', '#f07fa0'] },
+    { kind: 'penguin', url: '/assets/models/cashhunt/penguin2.glb?v=20261122', h: 4.0, dx: -1.1, cols: ['#16171c', '#16171c', '#f2f2f4', '#f2a23a'], inner: '#3b3f52' },
+    { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122s', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'], inner: '#c2553a' },
+    { kind: 'egg', url: '/assets/models/cashhunt/egg.glb?v=20261122', h: 4.1, dx: -0.9, cols: ['#e8b48c', '#6b4a32', '#5d8fd0', '#1b1b1b'], inner: '#f3b21e' },
+    { kind: 'dog', url: '/assets/models/cashhunt/dog.glb?v=20261123b', h: 3.7, dx: -1.35, cols: ['#3a2418', '#c8743a', '#b0202a', '#f07fa0'], inner: '#8a4526' },
   ];
   const SIGN_Y = 19.3;                                    // вище — вивіска, її не показуємо
   const ICONS = ['TGT_can', 'TGT_duck', 'TGT_star', 'TGT_apple', 'TGT_bottle', 'TGT_balloon', 'TGT_horseshoe', 'TGT_diamond'];
@@ -185,13 +185,31 @@
       tween(600, k => { m.scale.setScalar(Math.max(0.01, s0 * k)); }, ease.back);
     }, delay || 0);
   }
+  // «суцільні» шматки: моделі — це оболонки, і після вибуху було б видно порожнечу всередині.
+  // Малюємо і внутрішній бік поверхні, але суцільним кольором «нутра» — розріз виглядає повним
+  const solidCache = new Map();
+  function solidMat(mat, hex) {
+    if (!mat || !hex) return mat;
+    const key = mat.uuid + hex;
+    if (solidCache.has(key)) return solidCache.get(key);
+    const m2 = mat.clone(); m2.side = THREE.DoubleSide;
+    const inner = new THREE.Color(hex).convertSRGBToLinear();
+    m2.onBeforeCompile = sh => {
+      sh.uniforms.uInner = { value: inner };
+      sh.fragmentShader = 'uniform vec3 uInner;\n' + sh.fragmentShader.replace('#include <tonemapping_fragment>',
+        'if (!gl_FrontFacing) gl_FragColor = vec4(uInner * (0.72 + 0.28 * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0)), 1.0);\n#include <tonemapping_fragment>');
+    };
+    m2.customProgramCacheKey = () => 'kpSolid';
+    solidCache.set(key, m2);
+    return m2;
+  }
   function loadPenguin(scene) {
     const list = [];
     const first = Math.floor(Math.random() * MASCOTS.length);   // хто стоїть першим — теж навмання   // R ще не створено — підвʼязуємо в колбеках (вони асинхронні, R тоді вже є)
     MASCOTS.forEach((M, idx) => {
       new THREE.GLTFLoader().load(M.url, g => {
         const m = g.scene;
-        m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.material = solidMat(o.material, M.inner); } });
         // висота в сцені однакова для всіх (моделі з генератора мають різний масштаб)
         const hh = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).y || 1;
         const s0 = M.h / hh;

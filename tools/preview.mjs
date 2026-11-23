@@ -69,6 +69,7 @@ const MOCK_CHAT = [
   ['Гриць',        'ну шо там',             '#53fc18'],
 ];
 
+let MOCK_BL = [];   // блеклист у памʼяті превʼю (як raffleBlacklist у bot.js)
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
 
@@ -130,11 +131,24 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
+    if (url === '/api/blacklist' && req.method === 'POST') {
+      let body = '';
+      req.on('data', d => body += d);
+      req.on('end', () => {
+        try {
+          const { list } = JSON.parse(body);
+          MOCK_BL = [...new Set((list || []).map(n => String(n).trim().replace(/^@+/, '').toLowerCase()).filter(Boolean))];
+          res.end(JSON.stringify({ ok: true, list: MOCK_BL }));
+        } catch { res.end('{"ok":false}'); }
+      });
+      return;
+    }
     if (url === '/api/raffle/state') {
+      const parts = MOCK_PLAYERS.filter(n => !MOCK_BL.includes(n.toLowerCase()));
       return res.end(JSON.stringify({
         joinCmd: '!призи', accepting: true,
-        participants: MOCK_PLAYERS, count: MOCK_PLAYERS.length,
-        game: null, winners: [], chatgameWinners: [],
+        participants: parts, count: parts.length,
+        game: null, winners: [], chatgameWinners: [], blacklist: MOCK_BL,
       }));
     }
     if (url === '/api/raffle/check/state') return res.end(JSON.stringify({ checks: {} }));

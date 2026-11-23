@@ -2216,3 +2216,97 @@ button > svg.kp-ico-only { margin-right: 0; vertical-align: -3px; }
 .kp-dock .kp-dock-go { background: var(--accent-fill); color: var(--on-accent); box-shadow: 0 8px 22px rgba(var(--accent-rgb), .3), inset 0 1px 0 rgba(255, 255, 255, .4); }
 .kp-dock .kp-dock-go > svg.kp-ico { stroke-width: 2.8; opacity: 1; }
 .kp-dock .kp-dock-go:hover:not(:disabled) { background: var(--accent-fill); border-color: transparent; filter: brightness(1.06); box-shadow: 0 12px 30px rgba(var(--accent-rgb), .42), inset 0 1px 0 rgba(255, 255, 255, .4); }
+
+/* ══ Блеклист (blacklist.js): кнопка в заголовку «Участники», вікно, бан із рядка, тост ══ */
+.bl-open {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 13px; margin-left: auto; border-radius: 999px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border); color: var(--text-muted); font: 700 13px/1 var(--font-ui); box-shadow: none;
+}
+.bl-open svg, .p-ban svg, .bl-hico svg, .bl-empty svg, .bl-tico svg, .bl-win svg, .w-ban svg { fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; }
+.bl-open svg { width: 16px; height: 16px; }
+.bl-open:hover { color: var(--text); border-color: var(--border-strong); background: rgba(255,255,255,.07); }
+.bl-open b { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: rgba(255,255,255,.07); font: 800 12px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.bl-open.has { color: #ffb3bf; border-color: rgba(var(--danger-rgb), .35); background: rgba(var(--danger-rgb), .08); }
+.bl-open.has b { background: rgba(var(--danger-rgb), .3); color: #fff; }
+.topbar #floating-status { margin-left: 10px; }
+
+/* бан переможця: на заставці переможця, у Бонусбурі */
+.bl-win { display: inline-flex; align-items: center; gap: 8px; box-shadow: none; white-space: nowrap;
+  background: rgba(var(--danger-rgb), .1); border: 1px solid rgba(var(--danger-rgb), .38); color: #ffb3bf; }
+.bl-win svg { width: 16px; height: 16px; }
+.bl-win:hover { background: rgba(var(--danger-rgb), .2); color: #fff; }
+.bl-win.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+#winner-announce .wa-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; position: relative; z-index: 4; }
+#winner-announce .wa-actions .wa-close { margin-top: 0; }
+#winner-announce .wa-ban { padding: 11px 20px; border-radius: 12px; font: 800 13px/1 var(--font-ui); letter-spacing: 2px; text-transform: uppercase; opacity: 0; }
+#winner-announce.visible .wa-ban { animation: waFade .4s var(--ease-out) .8s forwards; }
+#chatgame-controls .cg-ban { padding: 0 18px; border-radius: var(--r-sm); font: 800 var(--fs-sm)/1 var(--font-ui); }
+/* список переможців: кнопка бану при наведенні, заблоковані — перекреслені з червоною міткою */
+#winners-box .winner-row { position: relative; }
+#winners-box .w-ban { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; padding: 0; border-radius: 8px;
+  display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .15s;
+  background: rgba(var(--danger-rgb), .14); border: 1px solid rgba(var(--danger-rgb), .35); color: #ff8fa0; box-shadow: none; }
+#winners-box .w-ban svg { width: 14px; height: 14px; }
+#winners-box .winner-row:hover .w-ban { opacity: 1; pointer-events: auto; }
+#winners-box .w-ban:hover { background: rgba(var(--danger-rgb), .3); color: #fff; transform: translateY(-50%); }
+#winners-box .winner-row.w-banned .w-name { text-decoration: line-through; text-decoration-color: rgba(var(--danger-rgb), .8); opacity: .6; }
+#winners-box .winner-row.w-banned .w-ban { opacity: 1; pointer-events: auto; background: var(--danger); color: #fff; }
+
+#bl-modal { position: fixed; inset: 0; z-index: 2147482990; display: none; place-items: center;
+  background: rgba(4, 4, 8, .62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#bl-modal.on { display: grid; animation: blFade .18s ease-out; }
+@keyframes blFade { from { opacity: 0; } to { opacity: 1; } }
+.bl-card { width: min(460px, 92vw); max-height: min(640px, 86vh); display: flex; flex-direction: column; gap: 14px; padding: 18px;
+  border-radius: 20px; background: var(--surface-1, #121218); border: 1px solid var(--border); box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  animation: blPop .22s var(--ease-spring, ease-out); }
+@keyframes blPop { from { transform: translateY(10px) scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+.bl-head { display: flex; align-items: center; gap: 10px; }
+.bl-head h3 { margin: 0; font: 700 17px/1 'Unbounded', var(--font-ui); letter-spacing: .02em; }
+.bl-hico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: #ff8fa0; background: rgba(var(--danger-rgb), .12); border: 1px solid rgba(var(--danger-rgb), .3); }
+.bl-hico svg { width: 17px; height: 17px; }
+.bl-x { width: 32px; height: 32px; padding: 0; border-radius: 10px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); box-shadow: none; }
+.bl-x:hover { color: var(--text); border-color: var(--border-strong); }
+/* поле додавання: одне скляне поле — іконка, ввід, кнопка всередині; фокус — м'яке червоне світіння */
+.bl-add { display: flex; align-items: center; gap: 10px; height: 48px; padding: 5px 5px 5px 14px; border-radius: 14px;
+  background: rgba(0, 0, 0, .28); border: 1px solid var(--border); transition: border-color .15s, box-shadow .15s, background .15s; }
+.bl-add:focus-within { border-color: rgba(var(--danger-rgb), .55); background: rgba(0, 0, 0, .36); box-shadow: 0 0 0 4px rgba(var(--danger-rgb), .1); }
+.bl-add .bl-lead { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--text-muted); stroke-width: 2.2; stroke-linecap: round; transition: stroke .15s; }
+.bl-add:focus-within .bl-lead { stroke: #ff8fa0; }
+#bl-input { flex: 1; min-width: 0; width: auto; height: 100%; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent;
+  outline: none; box-shadow: none; color: var(--text); font: 600 14px/1 var(--font-ui); }
+#bl-input::placeholder { color: var(--text-faint, #6b6b78); font-weight: 500; }
+#bl-input:focus { outline: none; box-shadow: none; border: 0; background: transparent; }
+.bl-add .bl-submit { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 14px; border-radius: 10px; white-space: nowrap; box-shadow: none;
+  background: rgba(var(--danger-rgb), .16); border: 1px solid rgba(var(--danger-rgb), .4); color: #ffc2cb; font: 800 12px/1 var(--font-ui); letter-spacing: .04em; }
+.bl-add .bl-submit svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+.bl-add .bl-submit:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.bl-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 90px; padding-right: 2px; }
+.bl-row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--border); }
+.bl-av { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; flex: none; font: 800 12px/1 var(--font-ui);
+  color: #ff8fa0; background: rgba(var(--danger-rgb), .14); }
+.bl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 14px/1.2 var(--font-ui); }
+.bl-rm { width: 28px; height: 28px; padding: 0; border-radius: 8px; background: transparent; color: var(--text-muted); box-shadow: none; font-size: 12px; }
+.bl-rm:hover { color: #fff; background: rgba(var(--danger-rgb), .25); }
+.bl-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 22px 0; color: var(--text-faint, #666); font: 700 13px/1 var(--font-ui); }
+.bl-empty svg { width: 26px; height: 26px; opacity: .6; }
+
+/* бан прямо з рядка учасника: кнопка з'являється при наведенні */
+#main-box .participant-row { position: relative; }
+#main-box .p-ban { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; padding: 0; border-radius: 8px;
+  display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .15s, background .15s;
+  background: rgba(var(--danger-rgb), .14); border: 1px solid rgba(var(--danger-rgb), .35); color: #ff8fa0; box-shadow: none; }
+#main-box .p-ban svg { width: 14px; height: 14px; }
+#main-box .participant-row:hover .p-ban { opacity: 1; pointer-events: auto; }
+#main-box .p-ban:hover { background: rgba(var(--danger-rgb), .3); color: #fff; transform: translateY(-50%); }
+#main-box .participant-row.p-banned { opacity: .35; filter: grayscale(1); }
+
+#bl-toast { position: fixed; left: 50%; bottom: 26px; z-index: 2147483000;   /* над будь-яким оверлеєм (заставка переможця тощо) */ display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 14px; border-radius: 14px; background: rgba(18, 18, 26, .96); border: 1px solid rgba(var(--danger-rgb), .35);
+  box-shadow: 0 16px 40px rgba(0,0,0,.5); font: 700 13px/1 var(--font-ui); color: var(--text);
+  opacity: 0; transform: translate(-50%, 12px); pointer-events: none; transition: opacity .2s, transform .2s; }
+#bl-toast.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.bl-tico { display: grid; color: #ff8fa0; } .bl-tico svg { width: 16px; height: 16px; }
+.bl-undo { height: 30px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--text); box-shadow: none; font: 800 12px/1 var(--font-ui); }
+.bl-undo:hover { background: rgba(255,255,255,.12); }
+#bl-modal .count-badge { background: rgba(var(--danger-rgb), .22); color: #ffb3bf; box-shadow: none; }

@@ -102,7 +102,14 @@ let rafflePlayers   = [];
 let raffleAccepting = false;
 let raffleJoinCmd   = '';
 let raffleGame      = null; 
-let raffleChecks    = {};   
+let raffleChecks    = {};
+// Блеклист: ніки (у нижньому регістрі), яким не можна брати участь — боти, мультиакаунти.
+// Головна копія живе в браузері панелі (localStorage) і приходить сюди через /api/blacklist:
+// на Render файл стану зникає при кожному деплої, а список банів має жити довго.
+let raffleBlacklist = [];
+const normNick = s => String(s || '').trim().replace(/^@+/, '').toLowerCase();
+const isBanned = name => raffleBlacklist.includes(normNick(name));
+   
 
 // Активні сесії (token → expiry)
 const sessions = new Map();
@@ -132,7 +139,7 @@ let savedChatgameWinners = []; // переможці режиму "Бонусб�
 function saveState() {
   const state = {
     rafflePlayers, raffleAccepting, raffleJoinCmd,
-    savedWinners, savedChatgameWinners,
+    savedWinners, savedChatgameWinners, raffleBlacklist,
     savedAt: new Date().toISOString()
   };
   try {
@@ -152,6 +159,7 @@ function loadState() {
     raffleJoinCmd   = state.raffleJoinCmd || '';
     savedWinners    = Array.isArray(state.savedWinners) ? state.savedWinners : [];
     savedChatgameWinners = Array.isArray(state.savedChatgameWinners) ? state.savedChatgameWinners : [];
+    raffleBlacklist = Array.isArray(state.raffleBlacklist) ? state.raffleBlacklist.map(normNick).filter(Boolean) : [];
     console.log(`[STATE] Восстановлено: ${rafflePlayers.length} участников, ${savedWinners.length} победителей, ${savedChatgameWinners.length} в чат-режиме`);
   } catch (e) {
     console.error('[STATE] Ошибка загрузки:', e.message);
@@ -430,6 +438,7 @@ const server = http.createServer((req, res) => {
       game: raffleGame,
       savedWinners,
       savedChatgameWinners,
+      blacklist: raffleBlacklist,
       // звʼязок із чатом Kick — щоб «бот не реєструє» було видно одразу в панелі
       kick: {
         ok: kick.subscribed,
@@ -533,6 +542,28 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Блеклист: панель надсилає весь список (після правки або коли сервер перезапустився й список порожній)
+  if (req.url === '/api/blacklist' && req.method === 'POST') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { list } = JSON.parse(body);
+        if (!Array.isArray(list)) { res.writeHead(400); res.end(); return; }
+        raffleBlacklist = [...new Set(list.map(normNick).filter(n => n && n.length <= 40))].slice(0, 5000);
+        // хто вже встиг зареєструватися — прибираємо одразу
+        const before = rafflePlayers.length;
+        rafflePlayers = rafflePlayers.filter(n => !isBanned(n));
+        const removed = before - rafflePlayers.length;
+        saveState();
+        if (removed) console.log(`[РОЗІГРАШ ⛔] блеклист: прибрано ${removed} учасників`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, list: raffleBlacklist, removed, count: rafflePlayers.length }));
+      } catch { res.writeHead(400); res.end(); }
+    });
+    return;
+  }
+
   if (req.url === '/api/raffle/addtest' && req.method === 'POST') {
     let body = '';
     req.on('data', d => body += d);
@@ -542,6 +573,7 @@ const server = http.createServer((req, res) => {
         const trimmed = (name || '').trim();
         if (!trimmed) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введите имя' })); return; }
         if (rafflePlayers.includes(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
+        if (isBanned(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Ник в блеклисте' })); return; }
         rafflePlayers.push(trimmed);
         saveState();
         console.log(`[РОЗІГРАШ +тест] ${trimmed} (${rafflePlayers.length})`);
@@ -587,7 +619,7 @@ const server = http.createServer((req, res) => {
         let added = 0;
         names.forEach(name => {
           const n = String(name).trim().slice(0, 64);
-          if (n && !rafflePlayers.includes(n)) {
+          if (n && !rafflePlayers.includes(n) && !isBanned(n)) {
             rafflePlayers.push(n);
             added++;
           }
@@ -1094,6 +1126,7 @@ async function connect() {
       || lower === '!' + raffleJoinCmd
       || (raffleJoinCmd[0] === '!' && lower === raffleJoinCmd.slice(1)));
     if (raffleAccepting && cmdMatch) {
+      if (isBanned(username)) { console.log(`[РОЗІГРАШ ⛔] ${username} у блеклисті — не реєструємо`); continue; }
       if (!rafflePlayers.includes(username)) {
       rafflePlayers.push(username);
       avatarWant(username);

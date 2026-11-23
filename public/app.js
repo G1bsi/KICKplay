@@ -229,7 +229,7 @@ chatEvtSource.onmessage = (e) => {
     appendChatgameChatMsg(username, content, color, badges);
   }
   // В режиме БАТЛ РОЯЛЬ — занимаем клетку по координате
-  if (gameMode === 'royale') {
+  if (gameMode === 'royale' && !(typeof isBlacklisted === 'function' && isBlacklisted(username))) {
     royHandleMessage(username, content);
   }
 };
@@ -238,6 +238,8 @@ async function loadState() {
   const res = await fetch('/api/raffle/state');
   if (res.status === 401) { location.reload(); return; }
   state = await res.json();
+  // блеклист (blacklist.js): синхронізація з сервером і фільтр заблокованих учасників
+  if (typeof blApply === 'function') blApply(state);
 
   const cmdInput = document.getElementById('raffle-cmd');
   if (document.activeElement !== cmdInput) {
