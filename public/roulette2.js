@@ -226,7 +226,7 @@
   async function startRoulette2(fast) {
     if (!state.participants.length) return alert('Нет участников');
     const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
-    const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()));
+    const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()) && !(typeof isBlacklisted === 'function' && isBlacklisted(p)));   // тіньовий бан: у стрічці є, виграти не може
     if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
 
     const overlay = document.getElementById('roulette-overlay');

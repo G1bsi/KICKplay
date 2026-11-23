@@ -15,6 +15,7 @@
   const SUB = 2, DT = 1 / 60;   // крок кадру й підкроки
   const E_WALL = 0.32, E_BALL = 0.22, FR_ROLL = 0.04, VMAX = 30, AIR = 0.012;
   const STUCK_V = 0.35, STUCK_T = 2.2;
+  const BUMP = 7.5;             // швидкість, з якою хмарний бампер відкидає кульку
   const HASH = 8192;            // розмір хеш-таблиці (степінь 2)
 
   // ── карта ──
@@ -34,11 +35,17 @@
     map.pegs.sort((a, b) => a.i - b.i);
     map.faces = []; for (let i = 1; i < n; i++) if (map.open[i - 1] && !map.open[i]) map.faces.push(i);
     map.pegFirst = map.pegs.length ? map.pegs[0].i - 6 : 1e9; map.pegLast = map.pegs.length ? map.pegs[map.pegs.length - 1].i + 6 : -1;
+    map.pegsMove = j.pegsMove !== 0;                 // «Гнев Зевса» — колони стоять на місці
+    // хмарні бампери: циліндри, що відкидають кульку з запасом енергії (як у пінболі)
+    map.bumpers = (j.bumpers || []).map(p => ({ x: p.p[0], y: p.p[1], z: p.p[2], ax: p.a[0], ay: p.a[1], az: p.a[2], r: p.r, h: p.h, i: p.i, hit: 0 }));
+    map.storm = j.storm || [];                       // ділянки рамок, куди б'ють блискавки
     return map;
   }
 
   // ── створення гонки ──
-  function createSim(nicks, map, rnd) {
+  // opts.noWin — індекси кульок, що не можуть виграти (тіньовий бан): їдуть як усі, але не перелітають провал на трампліні
+  // (на трасі без провалу — вилітають за борт на 70% траси); переможець — лише допущений
+  function createSim(nicks, map, rnd, opts) {
     rnd = rnd || Math.random;
     const N = nicks.length;
     const s = {
@@ -50,9 +57,10 @@
       finT: new Float32Array(N), elimT: new Float32Array(N), cause: new Array(N).fill(''),
       cellOf: new Int32Array(N), cellStart: new Int32Array(HASH + 1), cellBalls: new Int32Array(N),
       t: 0, raceT: 0, raceOn: false, gateOpen: false, frame: 0, subT: 0,
-      seed: Math.floor(rnd() * 0x7fffffff), pegOff: new Float32Array(map.pegs.length), pegV: new Float32Array(map.pegs.length),
+      seed: Math.floor(rnd() * 0x7fffffff), rnd, strikes: [], noWin: new Uint8Array(N), ejected: new Uint8Array(N), ghost: new Uint8Array(N), ejT: new Float32Array(N), struckT: new Float32Array(N).fill(-99), pegOff: new Float32Array(map.pegs.length), pegV: new Float32Array(map.pegs.length),
       finishOrder: [], eliminated: [], firstFinishT: null, done: false, kicks: 0, oob: 0,
     };
+    if (opts && opts.noWin) for (const i of opts.noWin) if (i >= 0 && i < N) s.noWin[i] = 1;
     // розставляємо кульки в контейнері ярусами (порядок з розіграшу: перші — ближче до центру нижнього ярусу)
     const B = map.box, half = B.half - 0.6, step = 1.06;
     const per = Math.floor((2 * half) / step) + 1;
@@ -84,7 +92,7 @@
     const { cellStart, cellBalls, cellOf, N } = s;
     cellStart.fill(0);
     for (let i = 0; i < N; i++) {
-      if (!s.alive[i] || s.fin[i] === 2) { cellOf[i] = -1; continue; }
+      if (!s.alive[i] || s.fin[i] === 2 || s.ghost[i]) { cellOf[i] = -1; continue; }   // «привид» (приречений заблокований) нікого не штовхає
       const k = cellKey(s.px[i], s.py[i], s.pz[i]); cellOf[i] = k; cellStart[k + 1]++;
     }
     for (let k = 0; k < HASH; k++) cellStart[k + 1] += cellStart[k];
@@ -184,7 +192,7 @@
     }
     const onTrack = !m.open[bi] && ax < W + 0.6 && ly > -0.9 && ly < H + 1.2;
     if (!onTrack) {
-      if (!m.open[bi]) s.fallT[i] += DT / SUB; // поза жолобом (не в провалі) — падає
+      if (!m.open[bi] || ly < -1.5) s.fallT[i] += DT / SUB; // поза жолобом або вже нижче провалу — падає
       return;
     }
     s.fallT[i] = 0;
@@ -227,6 +235,22 @@
         }
       }
     }
+    // хмарні бампери: відштовхують і додають швидкості вздовж нормалі (мінімум BUMP м/с)
+    const BB = m.bumpers;
+    for (let q = 0; q < BB.length; q++) {
+      const p = BB[q]; if (p.i < bi - 8 || p.i > bi + 8) continue;
+      const qx = s.px[i] - p.x, qy = s.py[i] - p.y, qz = s.pz[i] - p.z;
+      const along = qx * p.ax + qy * p.ay + qz * p.az;
+      if (along > p.h + R * 0.6 || along < -p.h - R) continue;
+      const rx = qx - p.ax * along, ry = qy - p.ay * along, rz = qz - p.az * along, rd = Math.hypot(rx, ry, rz) || 1e-6;
+      if (rd >= p.r + R) continue;
+      const nx = rx / rd, ny = ry / rd, nz = rz / rd;
+      s.px[i] += nx * (p.r + R - rd); s.py[i] += ny * (p.r + R - rd); s.pz[i] += nz * (p.r + R - rd);
+      const vn = s.vx[i] * nx + s.vy[i] * ny + s.vz[i] * nz;
+      const out = Math.max(BUMP, -vn * 1.15);
+      if (vn < out) { const d = out - vn; s.vx[i] += nx * d; s.vy[i] += ny * d; s.vz[i] += nz * d; }
+      p.hit = s.t;                                   // для підсвітки в рендері
+    }
   }
 
   // ── рухомі кілки: кожен за власним випадковим розкладом то ховається в підлогу, то виїжджає.
@@ -248,6 +272,7 @@
   }
   function pegsAt(s, t, outOff, outV) {
     const P = s.map.pegs;
+    if (!s.map.pegsMove) { outOff.fill(0); if (outV) outV.fill(0); return; }
     for (let q = 0; q < P.length; q++) {
       const D = 2 * P[q].h + 0.08, o = -pegLevel(s.seed, q, t) * D;
       if (outV) outV[q] = (o - outOff[q]) / (DT / SUB);
@@ -301,20 +326,40 @@
     const h = DT / SUB, m = s.map;
     for (let k = 0; k < SUB; k++) substep(s, h);
     s.t += DT; s.frame++;
+    stormTick(s, DT);
     if (s.raceOn) s.raceT += DT;
     for (let i = 0; i < s.N; i++) {
       if (!s.alive[i]) continue;
+      // заблокований таки долетів до чаші — вилітає з неї за край (і вибуває); рендер домалює політ
+      if (s.zone[i] === 2 && !s.fin[i] && s.noWin[i]) {
+        const b = m.bowl.c, dx = s.px[i] - b[0], dz = s.pz[i] - b[2], d = Math.hypot(dx, dz) || 1;
+        s.vx[i] = dx / d * 9; s.vz[i] = dz / d * 9; s.vy[i] = 9;
+        s.alive[i] = 0; s.elimT[i] = s.raceT; s.cause[i] = 'вылетел с трассы'; s.eliminated.push(i);
+        continue;
+      }
       if (s.zone[i] === 2 && !s.fin[i]) {
         s.fin[i] = 1; s.finT[i] = s.raceT; s.prog[i] = m.len + 10;
         s.finishOrder.push(i);
-        if (s.firstFinishT == null) { s.firstFinishT = s.raceT; if (s.onWinner) s.onWinner(i); }
+        if (s.firstFinishT == null && !s.noWin[i]) { s.firstFinishT = s.raceT; if (s.onWinner) s.onWinner(i); }
       }
-      if (s.fin[i] === 1 && s.raceT - s.finT[i] > 4) s.fin[i] = 2;     // фінішер «зникає» з чаші
+      if (s.fin[i] === 1 && s.raceT - s.finT[i] > 4) s.fin[i] = 2;
+      // тіньовий бан: заблокований вилітає з траси.
+      //  • у провалі (трамплін) — гасимо швидкість уперед: не долітає;
+      //  • запасний варіант — на 70% траси викидає за борт (на трасі з грозою — блискавкою)
+      if (s.noWin[i] && s.alive[i] && !s.fin[i] && s.zone[i] === 1 && (!s.ejected[i] || s.t - s.ejT[i] > 2.5)) {   // повернувся на трасу — ще раз
+        const b = s.idx[i];
+        if (m.open[b]) { s.vx[i] *= 0.55; s.vz[i] *= 0.55; if (s.vy[i] > 0) s.vy[i] *= 0.5; s.ghost[i] = 1; }   // уже в повітрі над провалом — не долітає (і не збиває тих, хто летить слідом)
+        else if (!m.faces.length && s.prog[i] > m.len * 0.7) {   // траса без провалу — запасний варіант
+          if (m.storm.length) { const x = s.px[i], y = s.py[i] - 0.3, z = s.pz[i]; s.strikes.push({ x, y, z, hit: strike(s, x, y, z, 1.2, STORM_POWER, s.rnd), t: s.raceT }); }
+          else eject(s, i, s.rnd);
+        }
+      }     // фінішер «зникає» з чаші
       // падіння з траси: кілька секунд поза жолобом — вибув (або повертається на трасу)
       if (s.zone[i] === 1 && s.fallT[i] > 1.4) {
         const o = s.idx[i] * 3;
         if (m.eliminate && s.py[i] < m.fp[o + 1] - 4) {
-          s.alive[i] = 0; s.elimT[i] = s.raceT; s.cause[i] = m.open[s.idx[i]] || m.open[Math.max(0, s.idx[i] - 6)] ? 'не допрыгнул' : 'вылетел с трассы';
+          s.alive[i] = 0; s.elimT[i] = s.raceT;
+          s.cause[i] = s.t - s.struckT[i] < 5 ? 'сбит молнией' : (s.ghost[i] && !s.ejected[i]) || m.open[s.idx[i]] || m.open[Math.max(0, s.idx[i] - 6)] ? 'не допрыгнул' : 'вылетел с трассы';
           s.eliminated.push(i); s.fallT[i] = 0;
         } else if (!m.eliminate || s.py[i] < m.fp[o + 1] - 12) {
           s.px[i] = m.fp[o]; s.py[i] = m.fp[o + 1] + 1; s.pz[i] = m.fp[o + 2]; s.vx[i] = s.vy[i] = s.vz[i] = 0; s.fallT[i] = 0; s.oob++;
@@ -323,7 +368,7 @@
       // застряг — поштовх уперед по трасі
       if (s.raceOn && s.zone[i] === 1 && !s.fin[i]) {
         const v2 = s.vx[i] * s.vx[i] + s.vy[i] * s.vy[i] + s.vz[i] * s.vz[i];
-        if (v2 < STUCK_V * STUCK_V) { s.stuck[i] += DT; if (s.stuck[i] > STUCK_T) { const o = s.idx[i] * 3; s.vx[i] += m.ft[o] * 3; s.vy[i] += 2; s.vz[i] += m.ft[o + 2] * 3; s.stuck[i] = 0; s.kicks++; } }
+        if (v2 < STUCK_V * STUCK_V) { s.stuck[i] += DT; if (s.stuck[i] > STUCK_T) { const o = s.idx[i] * 3, kk = s.noWin[i] ? 12 : 3; s.vx[i] += m.ft[o] * kk; s.vy[i] += 2; s.vz[i] += m.ft[o + 2] * kk; s.stuck[i] = 0; s.kicks++; } }   // заблокований, що скотився з трампліна, штовхаємо сильніше: злітає в провал
         else s.stuck[i] = 0;
       }
     }
@@ -333,14 +378,64 @@
       if (!left || (s.firstFinishT != null && s.raceT - s.firstFinishT > 60)) s.done = true;
     }
   }
+  // удар блискавки в точку (x, y, z): кульки в радіусі r отримують поштовх угору й від центру
+  // (сила спадає до краю). Повертає індекси зачеплених — для спалахів у рендері.
+  function strike(s, x, y, z, r, power, rnd) {
+    rnd = rnd || Math.random;
+    const hit = [];
+    for (let i = 0; i < s.N; i++) {
+      if (!s.alive[i] || s.fin[i] || s.zone[i] !== 1) continue;
+      const dx = s.px[i] - x, dy = s.py[i] - y, dz = s.pz[i] - z, d = Math.hypot(dx, dy, dz);
+      if (d > r) continue;
+      const k = 1 - d / r, hd = Math.hypot(dx, dz) || 1e-6;
+      s.struckT[i] = s.t;
+      if (s.noWin[i]) { eject(s, i, rnd); hit.push(i); continue; }
+      const side = power * 0.7 * k * (0.6 + 0.8 * rnd());
+      s.vx[i] += dx / hd * side + (rnd() - 0.5) * 2; s.vz[i] += dz / hd * side + (rnd() - 0.5) * 2;
+      s.vy[i] += power * k * (0.75 + 0.5 * rnd());
+      s.stuck[i] = 0; hit.push(i);
+    }
+    return hit;
+  }
+  // викинути кульку за борт: убік від середини жолоба (вздовж «вправо» рамки) + угору — перелітає будь-який борт
+  function eject(s, i, rnd) {
+    const m = s.map, o = s.idx[i] * 3;
+    const lx = (s.px[i] - m.fp[o]) * m.fr[o] + (s.py[i] - m.fp[o + 1]) * m.fr[o + 1] + (s.pz[i] - m.fp[o + 2]) * m.fr[o + 2];
+    const sd = Math.abs(lx) > 0.3 ? Math.sign(lx) : (rnd() < 0.5 ? -1 : 1);
+    const sp = 9 + rnd() * 3;
+    s.vx[i] = m.fr[o] * sd * sp + m.ft[o] * 3; s.vz[i] = m.fr[o + 2] * sd * sp + m.ft[o + 2] * 3;
+    s.vy[i] = 8 + rnd() * 3;
+    s.ejected[i] = 1; s.ejT[i] = s.t; s.stuck[i] = 0; s.ghost[i] = 1;
+  }
+  // гроза: поки гонка йде, раз на 1.1–2.6 с блискавка б'є в кульку, що зараз у грозовій ділянці
+  // (ціль — випадкова кулька з тих, хто там; так удар припадає туди, де густо). Події — у s.strikes для рендера.
+  const STORM_R = 2.8, STORM_POWER = 12.5;
+  function stormTick(s, dt) {
+    const m = s.map; if (!m.storm.length || !s.raceOn || s.done) return;
+    s.stormT = (s.stormT == null ? 1.5 : s.stormT) - dt;
+    if (s.stormT > 0) return;
+    s.stormT = 1.1 + s.rnd() * 1.5;
+    const cand = [];
+    for (let i = 0; i < s.N; i++) {
+      if (!s.alive[i] || s.fin[i] || s.zone[i] !== 1) continue;
+      const b = s.idx[i];
+      for (const r of m.storm) if (b >= r[0] && b <= r[1]) { cand.push(i); break; }
+    }
+    if (!cand.length) return;
+    const banned = cand.filter(i => s.noWin[i] && (!s.ejected[i] || s.t - s.ejT[i] > 2.5));
+    const t = banned.length && s.rnd() < 0.75 ? banned[Math.floor(s.rnd() * banned.length)] : cand[Math.floor(s.rnd() * cand.length)];
+    const x = s.px[t] + (s.rnd() - 0.5) * 1.2, y = s.py[t] - 0.3, z = s.pz[t] + (s.rnd() - 0.5) * 1.2;
+    const hit = strike(s, x, y, z, STORM_R, STORM_POWER, s.rnd);
+    s.strikes.push({ x, y, z, hit, t: s.raceT });
+  }
   function openGate(s) { s.gateOpen = true; s.raceOn = true; }
   // підсумковий порядок: фінішери за часом, далі — хто далі проїхав, далі — вибулі (останній вибулий вище)
   function standings(s) {
-    const out = s.finishOrder.slice();
+    const out = s.finishOrder.filter(i => !s.noWin[i]).concat(s.finishOrder.filter(i => s.noWin[i]));
     const rest = [];
     for (let i = 0; i < s.N; i++) if (s.alive[i] && !s.fin[i]) rest.push(i);
     rest.sort((a, b) => s.prog[b] - s.prog[a]);
     return out.concat(rest, s.eliminated.slice().reverse());
   }
-  root.MB2Core = { loadMap, createSim, step, openGate, standings, pegsAt, R, DT };
+  root.MB2Core = { loadMap, createSim, step, openGate, standings, pegsAt, strike, R, DT };
 })(typeof window !== 'undefined' ? window : globalThis);

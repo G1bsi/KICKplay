@@ -24,5 +24,5 @@ while (!s.done && s.raceT < maxSec) {
     console.log('t=' + s.raceT.toFixed(0), 'zones', zones.join('/'), 'fin', f, 'elim', s.eliminated.length, 'lead', leader.toFixed(0) + '/' + map.len.toFixed(0), 'ms/step', (ms / steps).toFixed(2));
   }
 }
-console.log(JSON.stringify({ N, time: s.raceT.toFixed(1), finished: s.finishOrder.length, eliminated: s.eliminated.length, done: s.done, marks, kicks: s.kicks, oob: s.oob,
+console.log(JSON.stringify({ N, time: s.raceT.toFixed(1), finished: s.finishOrder.length, eliminated: s.eliminated.length, done: s.done, marks, kicks: s.kicks, oob: s.oob, strikes: s.strikes.length, struck: s.strikes.reduce((a, e) => a + e.hit.length, 0),
   msPerStep: (ms / steps).toFixed(2), maxMs: maxMs.toFixed(1), wall: Math.round(performance.now() - t0) }));

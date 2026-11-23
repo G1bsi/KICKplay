@@ -653,7 +653,7 @@ async function startRoulette(fast) {
   // Виключаємо тих, хто вже випадав (у списку переможців) — повторно випасти не можуть.
   // Знову доступними стають лише після скидання розіграшу та нової реєстрації.
   const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
-  const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()));
+  const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()) && !(typeof isBlacklisted === 'function' && isBlacklisted(p)));
   if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
 
   phase = 'racing';
@@ -1547,7 +1547,7 @@ async function startRevolverGame() {
      ролл, який тут щось вирішує наосліп. Самі прокрути далі крутяться
      локально: там під кінець лишається 2 гравці, і «випало 1 з 2» у звіті
      перевірки виглядало б безглуздо */
-  revolverQualifiers = await rollPick(state.participants, n,
+  revolverQualifiers = await rollPick(typeof blEligible === 'function' ? blEligible(state.participants) : state.participants, n,
     'Револьвер: набор ' + n + ' участников из ' + state.participants.length + ' зарегистрированных');
   runRevolver(revolverQualifiers);
 }
@@ -1841,7 +1841,7 @@ let chatgameTimerSeconds = 0;
 
 async function startChatgame() {
   if (state.participants.length < 1) return alert('Нужно хотя бы 1 участника');
-  const winner = (await rollPick(state.participants, 1,
+  const winner = (await rollPick(typeof blEligible === 'function' ? blEligible(state.participants) : state.participants, 1,
     'Бонусбуря: выбор участника из ' + state.participants.length))[0];
   openChatgameOverlay(winner);
 }
@@ -2134,7 +2134,7 @@ async function chatgameNextWinner() {
   stopChatgameTimer();
   clearChatgameWinner();
   const alreadyWon = new Set(chatgameWinners.map(w => w.nick.toLowerCase()));
-  const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()));
+  const pool = state.participants.filter(p => !alreadyWon.has(p.toLowerCase()) && !(typeof isBlacklisted === 'function' && isBlacklisted(p)));
   if (!pool.length) { alert('Все участники уже победили!'); return; }
   const next = (await rollPick(pool, 1,
     'Бонусбуря: следующий участник из ' + pool.length + ' оставшихся'))[0];
@@ -2443,6 +2443,7 @@ async function startReveal() {
     /* winner-reveal: клітинка спершу виростає, потім повільно перекидається
        і ЛИШАЄТЬСЯ збільшеною (анімація з fill forwards поверх .flipped) */
     cell.classList.add('flipped', 'revealed', 'winner', 'winner-reveal');
+    if (typeof blFixCell === 'function') blFixCell(currentGame, idx);
     const name = currentGame.cells[idx];
     winners.push(name);
     await sleep(1300);          // дати перекиду відіграти ДО заставки переможця

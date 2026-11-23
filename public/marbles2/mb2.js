@@ -9,7 +9,12 @@
    ══════════════════════════════════════════════════════════════ */
 (function () {
   const ASSET = '/assets/marbles2/';
-  const MAPS = { neon: { name: 'Неоновый каскад', v: '20261123e' } };
+  // карти: id → назва, версія файлів (підняти після перебудови в Blender), тема оточення, кольори картки вибору
+  const MAPS = {
+    neon: { name: 'Неоновый каскад', v: '20261123g', theme: 'neon', look: ['#0b0b26', '#3a1450', '#2fe8ff'] },
+    zeus: { name: 'Гнев Зевса', v: '20261123z4', theme: 'zeus', hidden: true,   // прихована: власнику не сподобалась (файли лишаються)
+            look: ['#27315f', '#f0c27a', '#ffffff'] },
+  };
   const PP_BASE = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/';
   const PP_FILES = ['shaders/CopyShader.js', 'shaders/LuminosityHighPassShader.js',
     'postprocessing/EffectComposer.js', 'postprocessing/RenderPass.js', 'postprocessing/ShaderPass.js', 'postprocessing/UnrealBloomPass.js'];
@@ -47,12 +52,18 @@
         <button class="mb2-btn mb2-x" id="mb2-close" title="Закрыть">✕</button>
       </div>
       <div class="mb2-hint" id="mb2-hint">WASD — движение · мышь — обзор · Space/E — вверх · C/Q — вниз · Shift — быстрее · колесо — скорость · Esc — отпустить мышь</div>
-      <div class="mb2-end" id="mb2-end"><button class="btn-dark" id="mb2-again">Ещё раз</button><button class="btn-primary" id="mb2-close2">Закрыть</button></div>`;
+      <div class="mb2-flash" id="mb2-flash"></div>
+      <div class="mb2-pick" id="mb2-pick"><div class="mb2-pick-t">Выбери трассу</div><div class="mb2-pick-cards" id="mb2-pick-cards"></div>
+        <button class="mb2-btn" id="mb2-pick-x" type="button">Закрыть</button></div>
+      <div class="mb2-end" id="mb2-end"><button class="btn-dark" id="mb2-again">Ещё раз</button><button class="btn-dark" id="mb2-other">Другая трасса</button><button class="btn-primary" id="mb2-close2">Закрыть</button></div>`;
     document.body.appendChild(root);
     const $ = id => root.querySelector('#' + id);
     dom = { root, canvas: $('mb2-canvas'), name: $('mb2-name'), alive: $('mb2-alive'), time: $('mb2-time'), cd: $('mb2-cd'), board: $('mb2-board'),
       feed: $('mb2-feed'), labels: $('mb2-labels'), big: $('mb2-big'), win: $('mb2-win'), winN: $('mb2-win-n'), load: $('mb2-load'), loadT: $('mb2-load-t'),
-      free: $('mb2-free'), auto: $('mb2-auto'), hint: $('mb2-hint'), end: $('mb2-end'), rows: [], lab: [] };
+      free: $('mb2-free'), auto: $('mb2-auto'), hint: $('mb2-hint'), end: $('mb2-end'), flash: $('mb2-flash'), pick: $('mb2-pick'), pickCards: $('mb2-pick-cards'), rows: [], lab: [] };
+    $('mb2-other').onclick = () => otherMap();
+    if (Object.keys(MAPS).filter(id => !MAPS[id].hidden).length < 2) $('mb2-other').style.display = 'none';   // одна траса — вибирати нема з чого
+    $('mb2-pick-x').onclick = () => { if (pickResolve) { const r = pickResolve; pickResolve = null; r(null); } };
     $('mb2-close').onclick = $('mb2-close2').onclick = () => closeMarbles2Overlay();
     $('mb2-again').onclick = () => restart();
     dom.free.onclick = () => setFree(!fly.on);
@@ -104,6 +115,28 @@
     g.fillStyle = 'rgba(120,140,255,.10)'; g.fillRect(62, 0, 3, 256); g.fillRect(191, 0, 3, 256);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
   }
+  // мармур: теплий білий із сірими прожилками, золота смуга поперек кожні 4 м
+  function marbleTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+    g.fillStyle = '#f1ece3'; g.fillRect(0, 0, 512, 512);
+    let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 26; k++) {
+      g.strokeStyle = 'rgba(110,104,98,' + (0.05 + r() * 0.12).toFixed(3) + ')'; g.lineWidth = 0.6 + r() * 1.8;
+      g.beginPath(); let x = r() * 512, y = r() * 512; g.moveTo(x, y);
+      for (let q = 0; q < 6; q++) { const nx = x + (r() - 0.3) * 160, ny = y + (r() - 0.5) * 120; g.quadraticCurveTo(x + (r() - 0.5) * 90, y + (r() - 0.5) * 90, nx, ny); x = nx; y = ny; }
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(214,170,74,.55)'; g.fillRect(0, 0, 512, 6);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+  }
+  // небо Олімпу: грозова синява згори → золотий захід на горизонті → світлі хмари внизу
+  function zeusSky() {
+    const c = document.createElement('canvas'); c.width = 4; c.height = 256; const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#2b3a72'); gr.addColorStop(0.32, '#4a5a95'); gr.addColorStop(0.5, '#8a86a8'); gr.addColorStop(0.6, '#f0c27a'); gr.addColorStop(0.7, '#e9d6bf'); gr.addColorStop(1, '#aab3c9');
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
   function skyTexture() {
     const c = document.createElement('canvas'); c.width = 4; c.height = 256; const g = c.getContext('2d');
     const gr = g.createLinearGradient(0, 0, 0, 256);
@@ -144,7 +177,14 @@
     const panel = (col, x, y, z, w, h) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: lin(col), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m); };
     panel(0x33e6ff, 30, 18, 20, 30, 6); panel(0xff2aa8, -30, 14, -18, 26, 6); panel(0x8a96c0, 0, 40, 0, 16, 16); panel(0xffa21a, 10, 6, -40, 20, 4);
     const pm = new THREE.PMREMGenerator(renderer); const envTex = pm.fromScene(env, 0.02).texture; pm.dispose();
-    scene.add(new THREE.HemisphereLight(lin(0x8fa8ff), lin(0x2a1840), 0.55));
+    const hemi = new THREE.HemisphereLight(lin(0x8fa8ff), lin(0x2a1840), 0.55); scene.add(hemi);
+    // оточення Олімпу: світле небо, тепле сонце — золото й мармур відбивають його
+    const env2 = new THREE.Scene();
+    env2.add(new THREE.Mesh(new THREE.SphereGeometry(50, 24, 12), new THREE.MeshBasicMaterial({ color: lin(0x6f7fae), side: THREE.BackSide })));
+    const panel2 = (col, x, y, z, w, h) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: lin(col), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env2.add(m); };
+    panel2(0xfff2d6, 0, 42, 0, 40, 40); panel2(0xffc77a, 40, 10, 10, 40, 12); panel2(0xdfe6f5, -40, 0, -10, 50, 14);
+    const pm2 = new THREE.PMREMGenerator(renderer); const envZeus = pm2.fromScene(env2, 0.02).texture; pm2.dispose();
+    const flashL = new THREE.PointLight(lin(0xcfe2ff), 0, 46, 2); scene.add(flashL);
     const sun = new THREE.DirectionalLight(lin(0xfff1dd), 1.9);
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     const sc = sun.shadow.camera; sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 160;
@@ -162,10 +202,24 @@
     // німб лідера і золоте кільце
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: chevronSprite(), depthWrite: false, depthTest: false, transparent: true, toneMapped: false, fog: false }));
     halo.scale.set(0.9, 0.9, 1); halo.renderOrder = 20; halo.visible = false; scene.add(halo);
-    G = { renderer, scene, camera, sun, envTex, ballMat, ballGeo, balls: null, cap: 0, halo, stars, track: null, trackId: null, gate: null, composer: null, bloom: null,
+    G = { renderer, scene, camera, sun, hemi, envTex, envNeon: envTex, envZeus, flashL, bolts: [], skies: { neon: scene.background, zeus: zeusSky() }, ballMat, ballGeo, balls: null, cap: 0, halo, stars, track: null, trackId: null, gate: null, composer: null, bloom: null,
       cam: { pos: new THREE.Vector3(), look: new THREE.Vector3(), init: false, shot: 'chase', shotT: 0, subj: -1, free: false }, mtmp: new THREE.Matrix4(), v3: new THREE.Vector3() };
     window.addEventListener('resize', resize);
     return G;
+  }
+  // тема оточення під карту: небо, туман, світло, світіння, відбиття
+  function applyTheme(theme) {
+    if (!G || G.theme === theme) return; G.theme = theme;
+    const z = theme === 'zeus';
+    G.scene.background = G.skies[z ? 'zeus' : 'neon'];
+    G.scene.fog.color.copy(lin(z ? 0xaeb6cf : 0x0a0a20)); G.scene.fog.density = z ? 0.0038 : 0.0042;
+    G.hemi.color.copy(lin(z ? 0xe6edff : 0x8fa8ff)); G.hemi.groundColor.copy(lin(z ? 0x8a7a66 : 0x2a1840)); G.hemi.intensity = z ? 0.55 : 0.55;
+    G.sun.color.copy(lin(z ? 0xfff0d2 : 0xfff1dd)); G.sun.intensity = z ? 1.9 : 1.9;
+    G.stars.visible = !z;
+    G.envTex = z ? G.envZeus : G.envNeon;
+    G.ballMat.envMap = G.envTex; G.ballMat.needsUpdate = true;
+    G.renderer.toneMappingExposure = z ? 0.88 : 1.05;
+    if (G.bloom) { G.bloom.strength = z ? 0.45 : 0.8; G.bloom.radius = z ? 0.35 : 0.45; G.bloom.threshold = z ? 0.97 : 0.72; }
   }
   function setupComposer() {
     if (G.composer || !THREE.EffectComposer || !THREE.UnrealBloomPass) return;
@@ -179,6 +233,7 @@
     G.bloom = new THREE.UnrealBloomPass(new THREE.Vector2(sz.x, sz.y), 0.8, 0.45, 0.72);
     c.addPass(G.bloom);
     G.composer = c; resize();
+    const th = G.theme; G.theme = null; if (th) applyTheme(th);
   }
   function resize() {
     if (!G || !dom) return;
@@ -210,7 +265,25 @@
     const chrome = new THREE.MeshStandardMaterial({ color: lin(0xb8c0e8), roughness: 0.22, metalness: 0.9, envMap: G.envTex, envMapIntensity: 1.3 });
     const gateM = new THREE.MeshStandardMaterial({ color: lin(0x3a1450), roughness: 0.4, metalness: 0.3, emissive: lin(0x5a0e6a), emissiveIntensity: 0.5, transparent: true, opacity: 1 });
     const neon = col => new THREE.MeshBasicMaterial({ color: lin(col).multiplyScalar(1.9), toneMapped: false, fog: false });
+    // «Гнев Зевса»: мармур, кришталь, золото, хмари, бампери
+    const zMarble = new THREE.MeshStandardMaterial({ color: lin(0xe6e0d6), map: marbleTexture(), roughness: 0.36, metalness: 0, envMap: G.envTex, envMapIntensity: 0.55 });
+    const zMarblePlain = new THREE.MeshStandardMaterial({ color: lin(0xd9d2c4), roughness: 0.38, metalness: 0, envMap: G.envTex, envMapIntensity: 0.55 });
+    const zGlass = new THREE.MeshStandardMaterial({ color: lin(0xe8f6ff), roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMap: G.envTex, envMapIntensity: 0.9 });
+    const zGold = new THREE.MeshStandardMaterial({ color: lin(0xffcf5a), roughness: 0.22, metalness: 1, envMap: G.envTex, envMapIntensity: 1.25, emissive: lin(0x3a2600), emissiveIntensity: 0.25 });
+    const zUnder = new THREE.MeshStandardMaterial({ color: lin(0xc9c2b4), roughness: 0.7, metalness: 0, envMap: G.envTex, envMapIntensity: 0.3 });
+    const zColumn = new THREE.MeshStandardMaterial({ color: lin(0xf4f0e8), roughness: 0.45, metalness: 0, envMap: G.envTex, envMapIntensity: 0.4 });
+    const zCloud = new THREE.MeshStandardMaterial({ color: lin(0xffffff), roughness: 1, metalness: 0, emissive: lin(0x9aa3bd), emissiveIntensity: 0.35 });
+    const zBump = new THREE.MeshStandardMaterial({ color: lin(0xbfe8ff), roughness: 0.2, metalness: 0, emissive: lin(0x4fc3ff), emissiveIntensity: 1.1, envMap: G.envTex });
+    const zGate = new THREE.MeshStandardMaterial({ color: lin(0xc9a24a), roughness: 0.3, metalness: 0.8, envMap: G.envTex, transparent: true, opacity: 1 });
     const pick = (name, old) => {
+      if (/^ZS_Marble/.test(name)) return zMarble;
+      if (/^ZS_Glass/.test(name)) return zGlass;
+      if (/^ZS_Gold/.test(name)) return zGold;
+      if (/^ZS_Under/.test(name)) return zUnder;
+      if (/^ZS_Column/.test(name)) return zColumn;
+      if (/^ZS_Cloud/.test(name)) return zCloud;
+      if (/^ZS_Bumper/.test(name)) return zBump;
+      if (/^ZS_Gate/.test(name)) return zGate;
       if (/Glass/.test(name)) return glass;
       if (/NeonCyan/.test(name)) return neon(0x2fe8ff);
       if (/NeonPink/.test(name)) return neon(0xff2fae);
@@ -225,23 +298,32 @@
     root.traverse(o => {
       if (!o.isMesh) return;
       if (Array.isArray(o.material)) o.material = o.material.map(m => pick(m.name, m)); else o.material = pick(o.material.name, o.material);
-      if (!o.geometry.attributes.uv) { const a = (Array.isArray(o.material) ? o.material : [o.material]).map(m => m === floor ? floorPlain : m); o.material = a.length === 1 ? a[0] : a; }
+      if (!o.geometry.attributes.uv) { const a = (Array.isArray(o.material) ? o.material : [o.material]).map(m => m === floor ? floorPlain : m === zMarble ? zMarblePlain : m); o.material = a.length === 1 ? a[0] : a; }
       if (/Pegs/.test(o.name)) { const a = (Array.isArray(o.material) ? o.material : [o.material]).map(m => m === tower ? chrome : m); o.material = a.length === 1 ? a[0] : a; }
       const mats = Array.isArray(o.material) ? o.material : [o.material];
-      const isGlass = mats.every(m => m === glass), isNeon = mats.every(m => m.isMeshBasicMaterial);
+      const isGlass = mats.every(m => m === glass || m === zGlass), isNeon = mats.every(m => m.isMeshBasicMaterial);
+      if (mats.every(m => m === zCloud)) { o.castShadow = false; o.receiveShadow = false; return; }
       o.castShadow = !isGlass && !isNeon; o.receiveShadow = !isNeon;
       if (isGlass) o.renderOrder = 5;
-      if (/GATE/.test(o.name)) gate = o;
+      // ворота зникають на старті (прозорість) — свій матеріал, щоб не зникало все, що має такий самий (чаша тощо)
+      if (/GATE/.test(o.name)) { gate = o; o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); }
     });
-    root.traverse(o => { if (o.isMesh && /Pegs/.test(o.name)) o.visible = false; });   // кілки — рухомі, малюємо самі
-    buildPegs(M.map, chrome);
+    // кілки: рухомі (неон) малюємо самі інстансами, нерухомі (колони Олімпу) — як є з GLB
+    if (M.map.pegsMove) { root.traverse(o => { if (o.isMesh && /Pegs/.test(o.name)) o.visible = false; }); buildPegs(M.map, chrome); }
+    else removePegs();
+    // хмарні бампери: у кожного свій матеріал — спалахує при ударі
+    G.bumpers = [];
+    root.traverse(o => { const mm = o.isMesh && /ZS_Bumper_(\d+)/.exec(o.name); if (!mm) return;
+      const k = +mm[1]; const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(m => m === zBump ? zBump.clone() : m);
+      o.material = mats.length === 1 ? mats[0] : mats; const bm = mats.find(m => m.emissive && m.emissiveIntensity === 1.1); if (bm) G.bumpers[k] = bm; });
     G.scene.add(root); G.track = root; G.trackId = mapId; G.gate = gate;
     if (gate) gate.userData.y0 = gate.position.y;
     resetGate();
   }
   // рухомі кілки: корпус «виростає» з підлоги (масштаб по осі), неонова кришка тьмяніє, коли кілок схований
+  function removePegs() { if (G.pegBody) { G.scene.remove(G.pegBody); G.scene.remove(G.pegCap); G.pegBody = G.pegCap = null; } }
   function buildPegs(map, chrome) {
-    if (G.pegBody) { G.scene.remove(G.pegBody); G.scene.remove(G.pegCap); G.pegBody = G.pegCap = null; }
+    removePegs();
     const P = map.pegs; if (!P.length) return;
     const r = P[0].r;
     const bg = new THREE.CylinderGeometry(r, r, 1, 16); bg.translate(0, 0.5, 0);
@@ -279,7 +361,9 @@
   let ST = null;   // стан відображення поточної гонки
   function newRace(order, M) {
     const N = order.length;
-    S = MB2Core.createSim(order, M.map);
+    // тіньовий бан: заблоковані їдуть разом з усіма, але не перелітають трамплін і виграти не можуть
+    const noWin = []; if (typeof isBlacklisted === 'function') order.forEach((n, i) => { if (isBlacklisted(n)) noWin.push(i); });
+    S = MB2Core.createSim(order, M.map, null, { noWin });
     ensureBalls(N);
     const col = new THREE.Color();
     for (let i = 0; i < G.cap; i++) {
@@ -466,7 +550,7 @@
     if (ST.phase === 'intro' || S.raceT < 1.2) return 'intro';
     if (ST.finFocus > 0) return 'fin';
     if (subj < 0) return 'end';
-    if (S.zone[subj] === 0) return 'funnel';
+    if (S.zone[subj] === 0 || (S.map.raw.theme === 'zeus' && S.idx[subj] < 70)) return 'funnel';
     const idx = S.idx[subj];
     for (const g of ST.gaps) if (idx > g[0] - 60 && idx < g[1] + 16) return 'gap' + g[2];
     const tw = m.raw.tower;
@@ -513,8 +597,8 @@
       pos.set(B[0] + Math.cos(a) * r, B[1] + 14, B[2] + Math.sin(a) * r); look.set(B[0], B[1] - 2, B[2]); return 1.5;
     }
     if (mode === 'fin' || mode === 'end') {
-      const b = m.bowl.c, f = frameLerp(m.n - 1, FR);
-      pos.set(b[0] - f.t[0] * 16 + f.r[0] * 9, b[1] + 11, b[2] - f.t[2] * 16 + f.r[2] * 9); look.set(b[0], b[1] + 1, b[2]); return 2;
+      const b = m.bowl.c, f = frameLerp(m.n - 1, FR), zs = m.raw.theme === 'zeus';
+      pos.set(b[0] - f.t[0] * (zs ? 12 : 16) + f.r[0] * (zs ? 4 : 9), b[1] + (zs ? 17 : 11), b[2] - f.t[2] * (zs ? 12 : 16) + f.r[2] * (zs ? 4 : 9)); look.set(b[0], b[1] + 1, b[2]); return 2;
     }
     if (mode === 'funnel') {
       const F = m.funnel.c;
@@ -548,6 +632,7 @@
     if (!C.init) { C.pos.copy(tp.a); C.look.copy(tp.b); C.init = true; }
     C.pos.lerp(tp.a, 1 - Math.exp(-k * dt)); C.look.lerp(tp.b, 1 - Math.exp(-k * 1.8 * dt));
     cam.position.copy(C.pos); cam.lookAt(C.look);
+    if (C.shake > 0.01) { const a = C.shake; cam.position.x += (Math.random() - 0.5) * a; cam.position.y += (Math.random() - 0.5) * a; cam.position.z += (Math.random() - 0.5) * a; C.shake *= Math.exp(-7 * dt); }
   }
   // ── вільний політ (як у старих Шариках): WASD — рух, миша — огляд (pointer lock або затиснута кнопка),
   //    Space/E — вгору, C/Q — вниз, Shift — швидше, колесо — швидкість. Ctrl не чіпаємо: Ctrl+W закриває вкладку ──
@@ -659,6 +744,47 @@
     }
   }
 
+  // ── блискавки (події з ядра: S.strikes) ──
+  const boltMat = () => new THREE.MeshBasicMaterial({ color: lin(0xd6e9ff).multiplyScalar(5), toneMapped: false, fog: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  function boltPath(a, b, segs, jag) {
+    const path = new THREE.CurvePath(); let prev = a.clone();
+    for (let k = 1; k <= segs; k++) {
+      const t = k / segs, p = a.clone().lerp(b, t);
+      if (k < segs) { p.x += (Math.random() - 0.5) * jag * (1 - t * 0.6); p.z += (Math.random() - 0.5) * jag * (1 - t * 0.6); }
+      path.add(new THREE.LineCurve3(prev, p)); prev = p;
+    }
+    return path;
+  }
+  function spawnStrike(e) {
+    const end = new THREE.Vector3(e.x, e.y, e.z), top = new THREE.Vector3(e.x + (Math.random() - 0.5) * 14, e.y + 46, e.z + (Math.random() - 0.5) * 14);
+    const grp = new THREE.Group(), mat = boltMat();
+    grp.add(new THREE.Mesh(new THREE.TubeGeometry(boltPath(top, end, 16, 5), 64, 0.13, 5), mat));
+    for (let k = 0; k < 3; k++) {     // гілки
+      const from = top.clone().lerp(end, 0.25 + Math.random() * 0.5), to = from.clone().add(new THREE.Vector3((Math.random() - 0.5) * 12, -6 - Math.random() * 8, (Math.random() - 0.5) * 12));
+      grp.add(new THREE.Mesh(new THREE.TubeGeometry(boltPath(from, to, 6, 3), 24, 0.06, 4), mat));
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 1.0, 40), new THREE.MeshBasicMaterial({ color: lin(0xbfe0ff).multiplyScalar(4), toneMapped: false, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    ring.position.copy(end).y += 0.15; ring.rotation.x = -Math.PI / 2; grp.add(ring);
+    G.scene.add(grp);
+    G.bolts.push({ grp, ring, mat, t: 0 });
+    G.flashL.position.copy(end).y += 4; G.flashT = 0.38;
+    const d = end.distanceTo(G.camera.position);
+    if (d < 70) { G.cam.shake = Math.max(G.cam.shake || 0, 0.7 * (1 - d / 70)); dom.flash.classList.remove('on'); void dom.flash.offsetWidth; dom.flash.classList.add('on'); }
+  }
+  function updateFx(dt) {
+    if (S && S.strikes.length) { for (const e of S.strikes) spawnStrike(e); S.strikes.length = 0; }
+    for (let i = G.bolts.length - 1; i >= 0; i--) {
+      const b = G.bolts[i]; b.t += dt;
+      b.grp.children.forEach(c => { if (c !== b.ring) c.visible = b.t < 0.32 && (b.t < 0.08 || Math.random() > 0.35); });   // мерехтіння
+      b.mat.opacity = Math.max(0, 1 - b.t / 0.32);
+      const k = Math.min(1, b.t / 0.5); b.ring.scale.setScalar(1 + k * 4.5); b.ring.material.opacity = 1 - k;
+      if (b.t > 0.55) { G.scene.remove(b.grp); b.grp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); b.mat.dispose(); b.ring.material.dispose(); G.bolts.splice(i, 1); }
+    }
+    if (G.flashT > 0) { G.flashT -= dt; G.flashL.intensity = Math.max(0, G.flashT / 0.38) * 14 * (Math.random() > 0.3 ? 1 : 0.4); } else G.flashL.intensity = 0;
+    // хмарні бампери спалахують при ударі
+    if (G.bumpers && S) S.map.bumpers.forEach((bp, k) => { const m = G.bumpers[k]; if (!m) return; const age = S.t - bp.hit; m.emissiveIntensity = 1.1 + (age >= 0 && age < 0.3 ? (1 - age / 0.3) * 3.5 : 0); });
+  }
+
   // ── цикл ──
   function loop(ts) {
     raf = requestAnimationFrame(loop);
@@ -695,7 +821,7 @@
       }
     } else if (ST.phase === 'intro') { if (!ST.ranking.length) { rankNow(); } }
     writeInstances(Math.min(1, acc / MB2Core.DT)); updatePegs(Math.min(1, acc / MB2Core.DT));
-    updateCamera(dt); updateSun(); labels();
+    updateFx(dt); updateCamera(dt); updateSun(); labels();
     if (G.composer) G.composer.render(); else G.renderer.render(G.scene, G.camera);
   }
   let bigTo = 0;
@@ -704,6 +830,35 @@
     dom.big.textContent = t; dom.big.classList.toggle('on', !!t);
     if (t) { dom.big.classList.remove('pop'); void dom.big.offsetWidth; dom.big.classList.add('pop'); }
     if (ms) { clearTimeout(bigTo); bigTo = setTimeout(() => { if (dom) { dom.big.classList.remove('on'); ST && (ST.bigTxt = ''); } }, ms); }
+  }
+
+  // ── вибір траси ──
+  let pickResolve = null;
+  function pickMap() {
+    const ids = Object.keys(MAPS).filter(id => !MAPS[id].hidden);
+    if (ids.length < 2) return Promise.resolve(ids[0]);
+    dom.pickCards.innerHTML = ids.map((id, k) => { const m = MAPS[id];
+      return '<button class="mb2-card" type="button" data-id="' + id + '" style="--c1:' + m.look[0] + ';--c2:' + m.look[1] + ';--c3:' + m.look[2] + '">' +
+        '<span class="mb2-card-art"></span><span class="mb2-card-n">' + m.name + '</span><span class="mb2-card-k">' + (k + 1) + '</span></button>'; }).join('') +
+      '<button class="mb2-card mb2-card-rnd" type="button" data-id="*"><span class="mb2-card-art"></span><span class="mb2-card-n">Случайная</span><span class="mb2-card-k">' + (ids.length + 1) + '</span></button>';
+    dom.pick.classList.add('on');
+    return new Promise(res => {
+      pickResolve = res;
+      const done = id => { if (!pickResolve) return; pickResolve = null; dom.pick.classList.remove('on'); document.removeEventListener('keydown', onKey, true);
+        res(id === '*' ? ids[Math.floor(Math.random() * ids.length)] : id); };
+      dom.pickCards.onclick = e => { const b = e.target.closest('.mb2-card'); if (b) done(b.dataset.id); };
+      const onKey = e => { const k = parseInt(e.key, 10); if (k >= 1 && k <= ids.length + 1) { e.preventDefault(); done(k === ids.length + 1 ? '*' : ids[k - 1]); } };
+      document.addEventListener('keydown', onKey, true);
+      const prev = pickResolve; pickResolve = id => { document.removeEventListener('keydown', onKey, true); dom.pick.classList.remove('on'); prev(id); };
+    });
+  }
+  async function otherMap() {
+    if (!baseList.length) return;
+    dom.end.classList.remove('on');
+    if (S && !announced && winnerName) announce();
+    const id = await pickMap();
+    if (!id || !dom.root.classList.contains('visible')) { dom.end.classList.add('on'); return; }
+    mapId = id; return restart();
   }
 
   // ── публічний контракт ──
@@ -715,14 +870,18 @@
     baseList = list;
     if (typeof phase !== 'undefined') phase = 'racing';
     dom.root.classList.add('visible'); dom.end.classList.remove('on');
-    loading('Загружаем трассу…');
     gfxInit(); resize();
+    loadPost();
+    const picked = await pickMap();
+    if (!picked || !dom.root.classList.contains('visible')) { if (!picked) closeMarbles2Overlay(); return; }
+    mapId = picked;
+    loading('Загружаем трассу…');
     let M;
     try { [M] = await Promise.all([loadMap(mapId), loadPost()]); }
     catch (e) { console.error('[mb2] карта не загрузилась', e); alert('Шарики: не удалось загрузить трассу'); closeMarbles2Overlay(); return; }
     if (!dom.root.classList.contains('visible')) return;
     setupComposer();
-    buildTrack(M);
+    applyTheme(MAPS[mapId].theme); buildTrack(M);
     loading('Жеребьёвка стартовых мест…');
     const order = await rollPick(list, list.length, 'Шарики: стартовый порядок ' + list.length + ' шариков');
     if (!dom.root.classList.contains('visible')) return;
@@ -741,7 +900,7 @@
     loading('Жеребьёвка стартовых мест…');
     const [M, order] = await Promise.all([loadMap(mapId), rollPick(baseList, baseList.length, 'Шарики: стартовый порядок ' + baseList.length + ' шариков')]);
     if (!dom.root.classList.contains('visible')) return;
-    buildTrack(M); begin(order, M);
+    applyTheme(MAPS[mapId].theme); buildTrack(M); begin(order, M);
   }
   function closeMarbles2Overlay() {
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
@@ -754,12 +913,15 @@
       for (const L of dom.lab) { L.el.style.display = 'none'; L.on = false; L.txt = ''; }
     }
     if (G && fly.on) setFree(false);
+    if (dom) dom.pick.classList.remove('on');
+    if (pickResolve) { const r = pickResolve; pickResolve = null; r(null); }
+    if (G) { for (const b of G.bolts) G.scene.remove(b.grp); G.bolts.length = 0; G.flashL.intensity = 0; }
     if (typeof phase !== 'undefined' && phase === 'racing') phase = 'idle';
   }
   function isMarbles2Open() { return !!(dom && dom.root.classList.contains('visible')); }
 
   // для прогріву кешу в app.js (ті самі URL, що й при завантаженні траси)
-  window.MB2_ASSETS = Object.keys(MAPS).flatMap(id => [ASSET + 'maps/' + id + '.glb?v=' + MAPS[id].v, ASSET + 'maps/' + id + '.json?v=' + MAPS[id].v]);
+  window.MB2_ASSETS = Object.keys(MAPS).filter(id => !MAPS[id].hidden).flatMap(id => [ASSET + 'maps/' + id + '.glb?v=' + MAPS[id].v, ASSET + 'maps/' + id + '.json?v=' + MAPS[id].v]);
   window.startMarbles2Game = startMarbles2Game;
   window.closeMarbles2Overlay = closeMarbles2Overlay;
   window.isMarbles2Open = isMarbles2Open;

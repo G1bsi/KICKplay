@@ -167,6 +167,28 @@ for i in range(n):
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 put('MB2_Track', bm)
 
+# ── перевірка перетинів: траса сама з собою + мінімальний радіус повороту (вивід у консоль) ──
+def track_report():
+    bad = []
+    for i in range(0, n, 4):
+        for j in range(i + 60, n, 4):
+            a, b = fr[i]['p'], fr[j]['p']
+            dz = abs(a.z - b.z); dh = Vector((a.x - b.x, a.y - b.y)).length
+            if dh < fr[i]['W'] + fr[j]['W'] + 1.4 and dz < max(fr[i]['H'], fr[j]['H']) + 1.2:
+                bad.append((i, j, round(dh, 1), round(dz, 1)))
+    # горизонтальний радіус повороту: якщо він менший за ширину жолоба — внутрішній борт «складається» сам у себе
+    tight = []
+    for i in range(3, n - 3):
+        a, b = fr[i - 3]['T'], fr[i + 3]['T']
+        a2, b2 = Vector((a.x, a.y)), Vector((b.x, b.y))
+        if a2.length < 1e-3 or b2.length < 1e-3: continue
+        ang = a2.angle(b2, 0)
+        if ang > 1e-4:
+            r = (6 * DS) / ang
+            if r < fr[i]['W'] + 2.0: tight.append((i, round(r, 1), round(fr[i]['W'], 1)))
+    print('TRACK CHECK overlaps', len(bad), bad[:6], 'tight turns', len(tight), tight[:12])
+track_report()
+
 # ── тіла обертання: вирва під контейнером і фінішна чаша ──
 def lathe(name, c, prof, matn, rim=None, N=72):
     bm = bmesh.new(); rs = []
@@ -188,7 +210,8 @@ def lathe(name, c, prof, matn, rim=None, N=72):
 FC = Vector((0, 0, 44.0))
 FUN = [(4.0, 0.0), (4.0, 2.5), (8.0, 6.0), (12.5, 10.0), (17.0, 14.0), (17.0, 16.0)]
 lathe('MB2_Funnel', FC, [(r, z) for (r, z) in FUN] + [(17.4, 16.0), (17.4, 13.6), (4.4, 2.2), (4.4, 0.0)], 'MB2_Floor', rim=(17.0, 16.0))
-BC = Vector((0, -222.0, -3.0))
+_fe = fr[-1]; _th = Vector((_fe['T'].x, _fe['T'].y, 0)).normalized()
+BC = Vector((_fe['p'].x, _fe['p'].y, _fe['p'].z - 4.2 - 0.9)) + _th * (9.6 - 0.3)   # край чаші під кінцем жолоба
 BOWL = [(0.0, 0.0), (5.0, 0.3), (8.6, 1.2), (9.6, 3.2), (9.6, 4.2)]
 lathe('MB2_Bowl', BC, BOWL + [(10.0, 4.2), (10.0, -0.4), (0.0, -0.4)], 'MB2_Floor', rim=(9.6, 4.2))
 # ── контейнер на старті: скло + неонова рамка, дно-ворота (MB2_GATE ховається на старті) ──
@@ -247,7 +270,7 @@ for k in range(6):
     for f in b2.faces: f.material_index = MI['MB2_NeonGold' if k % 2 else 'MB2_NeonPink']
     put('MB2_TowerRing', b2)
 # ── фінішна арка над кінцем траси ──
-fe = fr[-1]
+fe = fr[-11]   # арка — за 5 м до кінця жолоба (кінець нависає над чашею)
 for sx in (-1, 1):
     box('MB2_ArchPost', fe['p'] + fe['R'] * sx * (fe['W'] + 1.0) + Vector((0, 0, 3.2)), (0.3, 0.3, 3.4), 'MB2_NeonGold')
 box('MB2_ArchTop', fe['p'] + Vector((0, 0, 6.6)), (fe['W'] + 1.3, 0.3, 0.3), 'MB2_NeonGold')

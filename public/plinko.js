@@ -386,7 +386,9 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     $('pl-who').classList.add('pl-rolling');
     let spin = true;
     (async () => { while (spin) { whoN.textContent = pool[Math.floor(Math.random() * pool.length)]; tone(900, 0.03, 0.04, 'square'); await wait(70); } })();
-    const [player] = await rollPick(pool, 1, 'Плинко: кто бросает шарик (из ' + pool.length + ')');
+    // тіньовий бан: у переборі ніків крутяться всі, кидає — лише допущений
+    const drawPool = typeof blEligible === 'function' && blEligible(pool).length ? blEligible(pool) : pool;
+    const [player] = await rollPick(drawPool, 1, 'Плинко: кто бросает шарик (из ' + drawPool.length + ')');
     await wait(900);
     spin = false;
     if (my !== token) return;

@@ -39,13 +39,20 @@
       } else if (!same(list, srv) && lastSrv !== srv.join(',')) push();   // сервер перезапустився (порожній) — повертаємо список
       lastSrv = srv.join(',');
     }
-    if (list.length && Array.isArray(st.participants)) {
-      st.participants = st.participants.filter(n => !has(n));
-      st.count = st.participants.length;
-    }
     updCount();
   };
   window.isBlacklisted = has;
+  // «тіньовий бан»: заблоковані лишаються в списку учасників і в анімаціях, але переможця обирають лише з цього пулу
+  window.blEligible = arr => (arr || []).filter(n => !has(n));
+  // Cash Hunt: клітинки розкладає сервер, а обирає стрімер наосліп. Якщо влучили в заблокованого —
+  // непомітно міняємо його місцем із випадковим допущеним із решти клітинок (поки нічого не відкрито)
+  window.blFixCell = (game, idx) => {
+    if (!game || !Array.isArray(game.cells) || !has(game.cells[idx])) return;
+    const ok = []; game.cells.forEach((n, j) => { if (j !== idx && n && !has(n)) ok.push(j); });
+    if (!ok.length) return;
+    const j = ok[Math.floor(Math.random() * ok.length)];
+    const t = game.cells[idx]; game.cells[idx] = game.cells[j]; game.cells[j] = t;
+  };
 
   function add(names) {
     const add = names.map(norm).filter(n => n && n.length <= 40 && !list.includes(n));
@@ -108,7 +115,6 @@
         const row = b.closest('.participant-row'), nameEl = row && row.querySelector('span:last-child');
         const name = nameEl ? nameEl.textContent.trim() : '';
         if (!name) return;
-        row.classList.add('p-banned');
         add([name]);
         note(name + ' — в блеклисте', () => remove(name));
       });

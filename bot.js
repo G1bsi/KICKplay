@@ -103,12 +103,15 @@ let raffleAccepting = false;
 let raffleJoinCmd   = '';
 let raffleGame      = null; 
 let raffleChecks    = {};
-// Блеклист: ніки (у нижньому регістрі), яким не можна брати участь — боти, мультиакаунти.
+// Блеклист («тіньовий бан»): ніки (у нижньому регістрі) ботів і мультиакаунтів. Вони реєструються й видні
+// в списку учасників, але виграти не можуть — розіграші беруть лише допущених (eligible()).
+// Клієнтські режими фільтрують так само (blacklist.js → blEligible).
 // Головна копія живе в браузері панелі (localStorage) і приходить сюди через /api/blacklist:
 // на Render файл стану зникає при кожному деплої, а список банів має жити довго.
 let raffleBlacklist = [];
 const normNick = s => String(s || '').trim().replace(/^@+/, '').toLowerCase();
 const isBanned = name => raffleBlacklist.includes(normNick(name));
+const eligible = list => list.filter(n => !isBanned(n));
    
 
 // Активні сесії (token → expiry)
@@ -551,14 +554,9 @@ const server = http.createServer((req, res) => {
         const { list } = JSON.parse(body);
         if (!Array.isArray(list)) { res.writeHead(400); res.end(); return; }
         raffleBlacklist = [...new Set(list.map(normNick).filter(n => n && n.length <= 40))].slice(0, 5000);
-        // хто вже встиг зареєструватися — прибираємо одразу
-        const before = rafflePlayers.length;
-        rafflePlayers = rafflePlayers.filter(n => !isBanned(n));
-        const removed = before - rafflePlayers.length;
         saveState();
-        if (removed) console.log(`[РОЗІГРАШ ⛔] блеклист: прибрано ${removed} учасників`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, list: raffleBlacklist, removed, count: rafflePlayers.length }));
+        res.end(JSON.stringify({ ok: true, list: raffleBlacklist, count: rafflePlayers.length }));
       } catch { res.writeHead(400); res.end(); }
     });
     return;
@@ -573,7 +571,6 @@ const server = http.createServer((req, res) => {
         const trimmed = (name || '').trim();
         if (!trimmed) { res.writeHead(400); res.end(JSON.stringify({ error: 'Введите имя' })); return; }
         if (rafflePlayers.includes(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Уже в списке' })); return; }
-        if (isBanned(trimmed)) { res.writeHead(200); res.end(JSON.stringify({ error: 'Ник в блеклисте' })); return; }
         rafflePlayers.push(trimmed);
         saveState();
         console.log(`[РОЗІГРАШ +тест] ${trimmed} (${rafflePlayers.length})`);
@@ -619,7 +616,7 @@ const server = http.createServer((req, res) => {
         let added = 0;
         names.forEach(name => {
           const n = String(name).trim().slice(0, 64);
-          if (n && !rafflePlayers.includes(n) && !isBanned(n)) {
+          if (n && !rafflePlayers.includes(n)) {
             rafflePlayers.push(n);
             added++;
           }
@@ -776,8 +773,10 @@ const server = http.createServer((req, res) => {
         if (!count || count < 1 || count > rafflePlayers.length) {
           res.writeHead(400); res.end(JSON.stringify({ error: 'Некоректна кількість переможців' })); return;
         }
-        const shuffled = await trueShuffle(rafflePlayers,
-          'Быстрый реролл: выбор ' + count + ' победителей из ' + rafflePlayers.length);
+        const pool = eligible(rafflePlayers);
+        if (!pool.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Немає учасників' })); return; }
+        const shuffled = await trueShuffle(pool,
+          'Быстрый реролл: выбор ' + count + ' победителей из ' + pool.length);
         const winnersList = shuffled.slice(0, count);
         raffleGame = { winnersNeeded: count, cells: null, winners: winnersList, fast: true };
         console.log(`[РОЗІГРАШ] Швидкий рерол: ${winnersList.join(', ')} (рандом: ${lastRollSource})`);
@@ -1126,7 +1125,6 @@ async function connect() {
       || lower === '!' + raffleJoinCmd
       || (raffleJoinCmd[0] === '!' && lower === raffleJoinCmd.slice(1)));
     if (raffleAccepting && cmdMatch) {
-      if (isBanned(username)) { console.log(`[РОЗІГРАШ ⛔] ${username} у блеклисті — не реєструємо`); continue; }
       if (!rafflePlayers.includes(username)) {
       rafflePlayers.push(username);
       avatarWant(username);

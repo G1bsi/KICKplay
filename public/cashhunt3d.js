@@ -703,6 +703,7 @@
     await wait(700);
     // переможець: на місці розбитої плитки перевертається темна картка з золотою рамкою й ніком
     for (const idx of order) {
+      if (typeof blFixCell === 'function') blFixCell(currentGame, idx);   // тіньовий бан: влучили в заблокованого — тихо міняємо клітинки
       const t = R.tiles[idx], name = currentGame.cells[idx];
       const card = winnerCard(name), w = Math.min(11, Math.max(9.5, t.sz * 5));
       const tx = Math.min(BOARD.x1 - w / 2, Math.max(BOARD.x0 + w / 2, t.x)), ty = Math.min(BOARD.y1 - w * 0.25, Math.max(BOARD.y0 + w * 0.25, t.y));

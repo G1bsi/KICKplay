@@ -785,7 +785,9 @@ function rlFxEliminate(players) {
 
 // ── Фінал / переможець ───────────────────────────────────────
 function rlCheckWinner() {
-  const alive = rlAlive();
+  let alive = rlAlive();
+  // тіньовий бан: заблокований не може стати переможцем — коли вирішується переможець, він «вибуває»
+  if (typeof isBlacklisted === 'function' && alive.length <= 1 && alive.length && isBlacklisted(alive[0].nick)) { rlKill(alive[0]); alive = []; }
   if (alive.length > 1) {
     const cells = new Set(alive.map(p => p.col + ',' + p.row));
     if (cells.size === 1) rlPrepareFight(alive.map(p => ({ nick: p.nick, col: p.col, row: p.row, startHP: 100 })), '⚔️ Все в одной клетке! Финал: ' + alive.length);
@@ -812,6 +814,14 @@ function royLaunchFight() {
     // список міг застаріти (червона зона після підготовки) — лишаємо тільки живих
     finalists = rlPendingFight.map(f => { const p = rlPlayers[f.nick]; return p && p.alive ? { nick: p.nick, col: p.col, row: p.row, startHP: f.startHP || 100 } : null; }).filter(Boolean);
   } else return;   // фінал запускає лише остання клітинка зони
+  // тіньовий бан: заблоковані до фіналу не доходять — «вибувають» перед перестрілкою (якщо лишається хоч хтось допущений)
+  if (typeof isBlacklisted === 'function') {
+    const clean = finalists.filter(f => !isBlacklisted(f.nick));
+    if (clean.length && clean.length < finalists.length) {
+      finalists.forEach(f => { if (isBlacklisted(f.nick) && rlPlayers[f.nick]) rlKill(rlPlayers[f.nick]); });
+      finalists = clean; royRender();
+    }
+  }
   if (finalists.length < 2) { rlPendingFight = null; rlSyncControls(); rlCheckWinner(); return; }
   if (!window.RSO || typeof window.RSO.start !== 'function') {
     rlStatus('⚠️ Модуль перестрелки (shootout.js) не загружен — финал недоступен');

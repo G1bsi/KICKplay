@@ -144,7 +144,7 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (url === '/api/raffle/state') {
-      const parts = MOCK_PLAYERS.filter(n => !MOCK_BL.includes(n.toLowerCase()));
+      const parts = MOCK_PLAYERS;   // тіньовий бан: заблоковані лишаються в списку (як у bot.js)
       return res.end(JSON.stringify({
         joinCmd: '!призи', accepting: true,
         participants: parts, count: parts.length,
