@@ -176,6 +176,7 @@
   // поява талісмана: «випірнає» з нуля з пружинкою (як після вибуху), а не з'являється різко
   function popMascot(m, delay) {
     if (!m || R.pgBusy || R.pgDown) return;
+    R.mascotSeen = true;                 // талісман уже на екрані — пізні завантаження його не підмінюють
     const s0 = m.userData.s0 || 1, my = (m.userData.popN = (m.userData.popN || 0) + 1);
     m.visible = true; m.scale.setScalar(0.01);
     setTimeout(() => {
@@ -200,8 +201,10 @@
         list.push(m); list.sort((a, b) => a.userData.order - b.userData.order);
         if (!R) return;
         R.mascots = list;
-        // першим стоїть пінгвін (або той, хто завантажився першим, поки пінгвіна нема)
-        if (!R.penguin || (idx === first && !R.pgBusy && !R.pgDown)) {
+        // першим стоїть випадково обраний (або той, хто завантажився першим, поки обраного нема).
+        // Обраний, що довантажився пізніше, підміняє лише того, кого ще ніхто не бачив: на сайті моделі
+        // приходять повільно, і раніше він вистрибував замість щойно показаного (після пострілу — «двічі»)
+        if (!R.penguin || (idx === first && !R.mascotSeen && !R.pgBusy && !R.pgDown)) {
           if (R.penguin) R.penguin.visible = false;
           R.penguin = m;
           const shown = document.getElementById('cashhunt-overlay').classList.contains('ch3d');
@@ -471,7 +474,7 @@
   }
   async function shootPenguin() {
     if (R.pgBusy || phase === 'revealing') return;
-    R.pgBusy = true;
+    R.pgBusy = true; R.mascotSeen = true;
     const p = R.penguin, box = new THREE.Box3().setFromObject(p), c = box.getCenter(new THREE.Vector3());
     const prevAim = R.aimAt; R.aimAt = c.clone();
     await wait(420);
