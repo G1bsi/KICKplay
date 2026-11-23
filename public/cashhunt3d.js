@@ -676,7 +676,7 @@
     phase = 'done';
     hint.innerHTML = '🏆 Готово!';
     ctrl.style.display = 'flex';
-    ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()">🔄 Рерол</button><button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
+    ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>Рерол</button><button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
   }
   // картка переможця (1 × 0.42 у світових одиницях, масштабується до потрібної ширини):
   // темне скло, золота рамка, кружок із літерою ніка, нік — золотим градієнтом

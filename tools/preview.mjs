@@ -11,6 +11,7 @@
 import http from 'http';
 import crypto from 'crypto';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createPlayRelay } from '../ws-play.js';
@@ -93,6 +94,22 @@ const server = http.createServer((req, res) => {
         else res.writeHead(404, { 'Cache-Control': 'no-store' });
         res.end();
       });
+    return;
+  }
+
+  // Лише для локальної перевірки графіки: сторінка шле кадр канваса (dataURL),
+  // файл лягає в системну тимчасову теку — kp-snap-<name>.jpg
+  if (url === '/api/dev/snap' && req.method === 'POST') {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      try {
+        const { name, data } = JSON.parse(body);
+        const file = path.join(os.tmpdir(), 'kp-snap-' + String(name || 'x').replace(/[^\w-]/g, '') + '.jpg');
+        fs.writeFileSync(file, Buffer.from(String(data).split(',')[1], 'base64'));
+        res.end(JSON.stringify({ file }));
+      } catch (e) { res.end(JSON.stringify({ error: String(e) })); }
+    });
     return;
   }
 

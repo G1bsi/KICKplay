@@ -617,11 +617,11 @@ function rlSyncControls() {
   if (rlDom.fightBtn) {
     const n = rlFinalAvailable();
     rlDom.fightBtn.classList.toggle('rl-on', n >= 2);
-    rlDom.fightBtn.textContent = '⚔️ НАЧАТЬ ФИНАЛ (' + n + ')';
+    rlDom.fightBtn.innerHTML = '<svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg>НАЧАТЬ ФИНАЛ (' + n + ')';
   }
   if (rlDom.testPartBtn) {
     const parts = (typeof state !== 'undefined' && state && Array.isArray(state.participants)) ? state.participants.length : 0;
-    rlDom.testPartBtn.textContent = '👥 Из участников (' + parts + ')';
+    rlDom.testPartBtn.innerHTML = '<svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>Из участников (' + parts + ')';
     rlDom.testPartBtn.disabled = !parts;
   }
 }

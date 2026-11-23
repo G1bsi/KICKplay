@@ -93,13 +93,12 @@
     if (!col || !timer || typeof window.openChatgameOverlay !== 'function') return;
     let raf = 0, t0 = 0, total = 0;
     function setState() {
-      const t = timer.textContent.trim();
-      const st = t === '✓' ? 'answered' : t === '⏰' ? 'timeout' : (t === '—' || !t) ? 'idle' : timer.classList.contains('expiring') ? 'expiring' : 'running';
+      const st = timer.dataset.st || 'idle';
       for (const s of ['answered', 'timeout', 'idle', 'expiring', 'running']) col.classList.toggle('cg-' + s, s === st);
       if (st !== 'running' && st !== 'expiring') cancelAnimationFrame(raf);
       if (st === 'timeout') ring.style.strokeDashoffset = RING.toFixed(1);
     }
-    new MutationObserver(setState).observe(timer, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    new MutationObserver(setState).observe(timer, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-st'] });
     function ringLoop() {
       const left = Math.max(0, total - (performance.now() - t0) / 1000);
       ring.style.strokeDashoffset = (RING * (1 - left / total)).toFixed(1);
@@ -107,7 +106,6 @@
     }
     const origOpen = window.openChatgameOverlay;
     window.openChatgameOverlay = function (nick) {
-      timer.style.color = '';                       // app.js фарбує «✓» у зелений і не скидає для наступного
       ring.style.strokeDashoffset = '0';
       const r = origOpen.apply(this, arguments);
       avatar($('cg-avatar'), nick);

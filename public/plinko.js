@@ -120,7 +120,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     $('pl-shuffle').onclick = async () => {
       if (!S || S.state !== 'ready' || S.revealing) return;
       setCtrl(''); await doShuffle(true, true);
-      if (S && S.state === 'ready') { setCtrl('<button class="pl-btn pl-btn-drop" id="pl-drop">🎱 Бросить шарик</button>'); $('pl-drop').onclick = dropBall; }
+      if (S && S.state === 'ready') { setCtrl('<button class="pl-btn pl-btn-drop" id="pl-drop"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="5.5"/><path d="M12 17v5M9 19.5l3 3 3-3"/></svg>Бросить шарик</button>'); $('pl-drop').onclick = dropBall; }
     };
     $('pl-bet').addEventListener('input', () => updateMaxWin());
     $('pl-bet').addEventListener('change', () => { readBet(); updateMaxWin(); });
@@ -396,7 +396,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     await doShuffle(true, true);
     if (my !== token) return;
     S.state = 'ready';
-    setCtrl('<button class="pl-btn pl-btn-drop" id="pl-drop">🎱 Бросить шарик</button>');
+    setCtrl('<button class="pl-btn pl-btn-drop" id="pl-drop"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="5.5"/><path d="M12 17v5M9 19.5l3 3 3-3"/></svg>Бросить шарик</button>');
     $('pl-drop').onclick = dropBall;
   }
   async function dropBall() {
@@ -441,7 +441,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
       window.WA_PRIZE = fmt(prize) + ' · x' + it.m;
       addWinner(S.player);
       phase = 'done';
-      setCtrl('<button class="pl-btn pl-btn-drop" onclick="startPlinko()">🔄 Ещё раз</button><button class="pl-btn pl-btn-ghost" onclick="closePlinkoOverlay()">Закрыть</button>');
+      setCtrl('<button class="pl-btn pl-btn-drop" onclick="startPlinko()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>Ещё раз</button><button class="pl-btn pl-btn-ghost" onclick="closePlinkoOverlay()">Закрыть</button>');
     }, 1600);
   }
   // DOUBLE: усі множники ×2 (з анімацією), шарик повертається в скидач і падає ще раз

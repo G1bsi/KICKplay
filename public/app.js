@@ -116,7 +116,7 @@ let phase = 'idle';
 // не дає сторінці скасувати ці комбінації, але покаже «Покинуть сайт?» — гра не пропаде
 window.addEventListener('beforeunload', e => {
   const mb = document.getElementById('marbles-overlay');
-  const busy = phase !== 'idle' || (mb && mb.classList.contains('visible'));
+  const busy = phase !== 'idle' || (mb && mb.classList.contains('visible')) || (typeof isMarbles2Open === 'function' && isMarbles2Open());
   if (!busy) return;
   e.preventDefault();
   e.returnValue = '';
@@ -519,6 +519,7 @@ function setGameMode(mode) {
   if (typeof closeRoyaleOverlay === 'function') closeRoyaleOverlay();
   // Марблс теж живе в окремому файлі (marbles.js) — та сама пересторога
   if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
+  if (typeof closeMarbles2Overlay === 'function') closeMarbles2Overlay();
   if (typeof closePlinkoOverlay === 'function') closePlinkoOverlay(true);
   phase = 'idle';
 
@@ -578,7 +579,7 @@ async function startGame() {
   if (gameMode === 'revolver') return startRevolverGame();
   if (gameMode === 'chatgame') return startChatgame();
   if (gameMode === 'royale') return startRoyale();
-  if (gameMode === 'marbles') return startMarblesGame();
+  if (gameMode === 'marbles') return (typeof startMarbles2Game === 'function') ? startMarbles2Game() : startMarblesGame();
   if (gameMode === 'plinko' && typeof startPlinko === 'function') return startPlinko();
 
   const n = 1;   // Cash Hunt: завжди один переможець
@@ -630,6 +631,7 @@ function resetGameUIKeepMode() {
   hideRouletteOverlay();
   // марблс живе в marbles.js (вантажиться після app.js) — guard як для рояля
   if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
+  if (typeof closeMarbles2Overlay === 'function') closeMarbles2Overlay();
   /* selecting-mode ховає системний курсор (cursor:none) — знімаємо разом
      з оверлеєм, інакше клас доживає до наступної гри і курсор зникає */
   document.getElementById('cashhunt-overlay').classList.remove('visible', 'selecting-mode');
@@ -1433,7 +1435,7 @@ async function runRace(qualifiers, totalLaps) {
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
     btn.style.cssText = 'font-size:24px;padding:14px 60px;margin:0;letter-spacing:3px;flex-shrink:0;';
-    btn.textContent = '🚀 СТАРТ';
+    btn.innerHTML = '<svg class="kp-ico kp-ico-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>СТАРТ';
     btn.onclick = () => { area.removeChild(preRace); resolve(); };
 
     preRace.appendChild(grid);
@@ -1640,14 +1642,14 @@ async function runRevolver(qualifiers) {
     const btn = document.createElement('button');
     btn.className = 'btn-primary';
     btn.style.cssText = 'font-size:22px;padding:14px 44px;margin:20px 0 0;letter-spacing:3px;';
-    btn.textContent = '🔫 СТАРТ';
+    btn.innerHTML = '<svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.8v4.4M12 17.8v4.4M1.8 12h4.4M17.8 12h4.4"/></svg>СТАРТ';
     controls.style.display = 'flex';
     controls.innerHTML = '';
     controls.appendChild(btn);
     btn.onclick = () => {
       controls.style.display = 'none';
       controls.innerHTML =
-        '<button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>' +
+        '<button class="btn-dark" onclick="startRevolverGame()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>Ещё раз</button>' +
         '<button class="btn-primary" style="width:auto;margin-bottom:0;" onclick="closeRevolverOverlay()">Завершить</button>';
       resolve();
     };
@@ -1853,7 +1855,7 @@ function openChatgameOverlay(nick) {
 
   document.getElementById('chatgame-winner-name').textContent = nick;
   document.getElementById('chatgame-msgs').innerHTML =
-    '<div id="chatgame-no-msgs"></div>';
+    '<div id="chatgame-no-msgs"><span class="cg-typing"><i></i><i></i><i></i></span>ждём ответ в чате</div>';
   const oldBadge = document.getElementById('chatgame-replied-badge');
   if (oldBadge) oldBadge.remove();
 
@@ -1870,8 +1872,7 @@ function openChatgameOverlay(nick) {
       clearInterval(chatgameTimer);
       chatgameTimer = null;
       chatgameTimedOut = true;
-      document.getElementById('chatgame-timer').textContent = '⏰';
-      document.getElementById('chatgame-timer').className = '';
+      setChatgameTimer('timeout', 0);
       document.getElementById('chatgame-sub').textContent = 'ВРЕМЯ ВЫШЛО — НЕТ ОТВЕТА';
       document.getElementById('chatgame-sub').style.color = 'var(--red)';
       document.getElementById('chatgame-sub').style.display = '';
@@ -1881,11 +1882,25 @@ function openChatgameOverlay(nick) {
   renderChatgameWinners();
 }
 
+// Бейдж часу під аватаркою (Бонусбуря і заставка переможця всіх режимів): стан у data-st
+// (running / expiring / timeout / answered / idle), вміст — SVG-іконка + текст.
+// wincard-modes.js читає data-st Бонусбурі й фарбує кільце; стилі — .kp-timer в app.css.
+const CG_SAVE = '<svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Сохранить', CG_SAVED = '<svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Сохранено';
+const CG_ICO = {
+  clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.8l2.4 1.6M9.5 3h5M12 3v2.5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+};
+function setKpTimer(el, st, sec) {
+  if (!el) return;
+  el.dataset.st = st;
+  el.classList.toggle('expiring', st === 'expiring');
+  el.innerHTML = st === 'idle' ? '' : st === 'answered' ? CG_ICO.check + '<b>Ответил</b>' : CG_ICO.clock + '<b>' + fmtCgSec(sec || 0) + '</b>';
+}
+function setChatgameTimer(st, sec) { setKpTimer(document.getElementById('chatgame-timer'), st, sec); }
+function fmtCgSec(sec) { sec = Math.max(0, sec); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
 function renderChatgameTimer(sec) {
-  const el = document.getElementById('chatgame-timer');
   const sub = document.getElementById('chatgame-sub');
-  el.textContent = sec + 'с';
-  el.className = sec <= 10 ? 'expiring' : '';
+  setChatgameTimer(sec <= 10 ? 'expiring' : 'running', sec);
   sub.textContent = 'ВРЕМЯ НА ОТВЕТ';
   sub.style.color = '';
   sub.style.display = sec > 0 ? '' : 'none';
@@ -1910,14 +1925,13 @@ function handleChatgameMessage(username, content) {
     if (!replied) {
       const badge = document.createElement('div');
       badge.id = 'chatgame-replied-badge';
-      badge.style.cssText = 'font-size:12px;font-weight:700;color:var(--kick);letter-spacing:2px;text-transform:uppercase;padding:4px 0;';
-      badge.textContent = '✓ ОТВЕТИЛ';
+      badge.className = 'cg-replied';
+      badge.innerHTML = '<i>✓</i>Ответил';
       box.before(badge);
     }
     // Зупиняємо таймер — людина вже відповіла
     if (chatgameTimer) { clearInterval(chatgameTimer); chatgameTimer = null; }
-    document.getElementById('chatgame-timer').textContent = '✓';
-    document.getElementById('chatgame-timer').style.color = 'var(--kick)';
+    setChatgameTimer('answered');
     document.getElementById('chatgame-sub').style.display = 'none';
   }
 
@@ -1931,18 +1945,18 @@ function handleChatgameMessage(username, content) {
 
   const btn = document.createElement('button');
   btn.className = 'chatgame-msg-save';
-  btn.textContent = '✓ Сохранить';
+  btn.innerHTML = CG_SAVE;
   const captured = content;
   const capturedNick = chatgameCurrentNick;
   btn.onclick = () => {
     document.querySelectorAll('.chatgame-msg-save').forEach(b => {
-      b.textContent = '✓ Сохранить';
+      b.innerHTML = CG_SAVE;
       b.style.background = '';
       b.disabled = false;
       b.style.opacity = '1';
       b.style.cursor = 'pointer';
     });
-    btn.textContent = '✅ Сохранено';
+    btn.innerHTML = CG_SAVED;
     btn.style.background = '#1a5c1a';
     btn.disabled = true;
     addChatgameWinner(capturedNick, captured);
@@ -1998,65 +2012,99 @@ function renderChatgameWinners() {
   const list = document.getElementById('chatgame-winners-list');
   document.getElementById('chatgame-count').textContent = chatgameWinners.length;
   if (!chatgameWinners.length) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">Победителей пока нет</div>';
+    list.innerHTML = emptyState('trophy', 'Пока без победителей');
     return;
   }
-  list.innerHTML = chatgameWinners.map((w, i) =>
-    '<div class="chatgame-winner-row">' +
-      '<div class="cg-num">' + (i+1) + '</div>' +
-      '<div class="chatgame-winner-info">' +
-        '<div class="cg-nick">' + escapeHtml(w.nick) + '</div>' +
-        '<div class="cg-slot' + (w.slot ? '' : ' empty') + '">' +
-          escapeHtml(w.slot || 'ожидаем сообщение...') +
-        '</div>' +
-        '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + w.time + '</div>' +
+  // якщо список перемальовується посеред редагування (прийшло повідомлення) — не губимо набране
+  const keepMsg = document.getElementById('cg-inl-msg');
+  const draft = keepMsg ? { msg: keepMsg.value } : null;
+  // уже завантажені аватарки переносимо в новий список (інакше нові <img> мигають, поки знову вантажаться)
+  const oldAv = new Map();
+  list.querySelectorAll('.chatgame-winner-row[data-nick]').forEach(r => { const a = r.querySelector('.cg-av'); if (a) oldAv.set(r.dataset.nick, a); });
+  // аватарка + нік + «колл» окремою плашкою; редагувати/видалити — на наведенні
+  list.innerHTML = chatgameWinners.map((w, i) => i === cgEditingIdx ?
+    // редагування прямо в рядку: лише повідомлення (нік не змінюється), ✓ — зберегти (Enter), ✕ — скасувати (Esc)
+    '<div class="chatgame-winner-row cg-editing" data-nick="' + escapeHtml(w.nick) + '">' +
+      '<div class="cg-av"><span></span><img alt=""><b class="cg-num">' + (i + 1) + '</b></div>' +
+      '<div class="chatgame-winner-info cg-inl">' +
+        '<div class="cg-top"><span class="cg-nick">' + escapeHtml(w.nick) + '</span><span class="cg-time">' + escapeHtml(w.time || '') + '</span></div>' +
+        '<textarea id="cg-inl-msg" class="cg-inl-msg" rows="1" placeholder="Сообщение (колл)" onkeydown="cgInlKey(event)" oninput="cgInlFit(this)">' + escapeHtml(draft ? draft.msg : (w.slot || '')) + '</textarea>' +
       '</div>' +
-      '<button class="chatgame-delete-btn" onclick="editChatgameWinner(' + i + ')" title="Редактировать" style="color:var(--accent);border-color:var(--border-strong);margin-right:4px;">✎</button>' +
-      '<button class="chatgame-delete-btn" onclick="deleteChatgameWinner(' + i + ')" title="Удалить">🗑</button>' +
+      '<div class="cg-acts cg-acts-on">' +
+        '<button class="cg-tbtn cg-ok" onclick="submitCGEdit()" title="Enter">Сохранить</button>' +
+        '<button class="cg-tbtn" onclick="hideCGEditForm()" title="Esc">Отмена</button>' +
+      '</div>' +
+    '</div>' :
+    '<div class="chatgame-winner-row" data-nick="' + escapeHtml(w.nick) + '">' +
+      '<div class="cg-av"><span></span><img alt=""><b class="cg-num">' + (i + 1) + '</b></div>' +
+      '<div class="chatgame-winner-info">' +
+        '<div class="cg-top"><span class="cg-nick">' + escapeHtml(w.nick) + '</span><span class="cg-time">' + escapeHtml(w.time || '') + '</span></div>' +
+        (w.slot ? '<div class="cg-slot" title="' + escapeHtml(w.slot) + '">' + escapeHtml(w.slot) + '</div>'
+                : '<div class="cg-slot empty"><span class="cg-typing"><i></i><i></i><i></i></span>ждём сообщение</div>') +
+      '</div>' +
+      '<div class="cg-acts">' +
+        '<button class="cg-tbtn cg-edit" onclick="editChatgameWinner(' + i + ')">Изменить</button>' +
+        '<button class="cg-tbtn cg-del" onclick="deleteChatgameWinner(' + i + ')">Удалить</button>' +
+      '</div>' +
     '</div>'
   ).join('');
+  list.querySelectorAll('.cg-av').forEach((el, i) => {
+    const nick = chatgameWinners[i].nick, old = oldAv.get(nick);
+    if (old) { old.querySelector('.cg-num').textContent = i + 1; el.replaceWith(old); return; }   // та сама людина — та сама аватарка
+    if (window.WC) WC.avatar(el, nick);
+    else el.querySelector('span').textContent = (nick.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
+  });
 }
 
 let cgEditingIdx = -1;
 
 function editChatgameWinner(i) {
-  cgEditingIdx = i;
-  const w = chatgameWinners[i];
   hideCGAddForm();
-  const f = document.getElementById('cg-edit-form');
-  f.style.display = 'flex';
-  document.getElementById('cg-edit-nick').value = w.nick;
-  document.getElementById('cg-edit-msg').value = w.slot || '';
-  document.getElementById('cg-edit-nick').focus();
-  // Прокручуємо форму редагування у видиму область
-  f.scrollIntoView({ block: 'nearest' });
+  const prev = document.querySelectorAll('#chatgame-winners-list .chatgame-winner-row')[i];
+  const slotH = prev && prev.querySelector('.cg-slot') ? prev.querySelector('.cg-slot').offsetHeight : 0;
+  cgEditingIdx = i;
+  renderChatgameWinners();
+  const m = document.getElementById('cg-inl-msg');
+  if (m) { if (slotH) m.style.height = slotH + 'px'; cgInlFit(m); m.focus(); m.select(); m.closest('.chatgame-winner-row').scrollIntoView({ block: 'nearest' }); }
+}
+// поле редагування росте до 2 рядків (як плашка повідомлення), далі — прокрутка
+function cgInlFit(t) {
+  const min = parseFloat(t.style.height) || 0;
+  t.style.height = 'auto';
+  t.style.height = Math.max(min, Math.min(t.scrollHeight + 2, 50)) + 'px';   // не нижче за плашку, яку редагуємо
+}
+function cgInlKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); submitCGEdit(); }
+  else if (e.key === 'Escape') { e.preventDefault(); hideCGEditForm(); }
 }
 function hideCGEditForm() {
-  document.getElementById('cg-edit-form').style.display = 'none';
+  if (cgEditingIdx < 0) return;
   cgEditingIdx = -1;
+  renderChatgameWinners();
 }
 function submitCGEdit() {
   if (cgEditingIdx < 0) return;
   const w = chatgameWinners[cgEditingIdx];
-  const newNick = document.getElementById('cg-edit-nick').value.trim();
-  const newMsg = document.getElementById('cg-edit-msg').value.trim();
-  w.nick = newNick || w.nick;
-  w.slot = newMsg || null;
+  const newMsg = (document.getElementById('cg-inl-msg') || {}).value || '';
+  w.slot = newMsg.trim() || null;
+  cgEditingIdx = -1;
   renderChatgameWinners();
   saveChatgameWinnersToServer();
-  hideCGEditForm();
 }
 
 function showCGAddForm() {
   hideCGEditForm();
   const f = document.getElementById('cg-add-form');
   f.style.display = 'flex';
+  // поки відкрита форма, кнопка «Добавить вручную» не потрібна — форма стає на її місце
+  const b = document.querySelector('.cg-add-btn'); if (b) b.style.display = 'none';
   document.getElementById('cg-add-nick').value = '';
   document.getElementById('cg-add-msg').value = '';
   document.getElementById('cg-add-nick').focus();
 }
 function hideCGAddForm() {
   document.getElementById('cg-add-form').style.display = 'none';
+  const b = document.querySelector('.cg-add-btn'); if (b) b.style.display = '';
 }
 function submitCGAdd() {
   const nick = document.getElementById('cg-add-nick').value.trim();
@@ -2072,7 +2120,7 @@ function submitCGAdd() {
 function stopChatgameTimer() {
   if (chatgameTimer) { clearInterval(chatgameTimer); chatgameTimer = null; }
   // НЕ очищаємо chatgameCurrentNick — щоб нові повідомлення продовжували надходити
-  document.getElementById('chatgame-timer').textContent = '—';
+  setChatgameTimer('idle');
   document.getElementById('chatgame-sub').style.display = 'none';
 }
 
@@ -2325,7 +2373,7 @@ function onCellClick(idx, cellEl) {
   const ctrl = document.getElementById('cashhunt-controls');
   if (selected.size === currentGame.winnersNeeded) {
     ctrl.style.display = 'flex';
-    ctrl.innerHTML = '<button class="btn-gold" onclick="startReveal()">🔫 Выстрел</button>' +
+    ctrl.innerHTML = '<button class="btn-gold" onclick="startReveal()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.8v4.4M12 17.8v4.4M1.8 12h4.4M17.8 12h4.4"/></svg>Выстрел</button>' +
       '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
   } else {
     ctrl.style.display = 'none';
@@ -2405,7 +2453,7 @@ async function startReveal() {
   phase = 'done';
   hint.innerHTML = '🏆 Готово!';
   ctrl.style.display = 'flex';
-  ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()">🔄 Рерол</button>' +
+  ctrl.innerHTML = '<button class="btn-orange" onclick="reroll()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>Рерол</button>' +
     '<button class="btn-dark" onclick="closeCashhuntOverlay()">Закрыть</button>';
 }
 
@@ -2454,16 +2502,14 @@ function showAnnounce(name, seconds, confirmOn) {
 
   if (confirmOn) {
     announceSeconds = seconds;
-    timerEl.textContent = seconds + 'с';
-    timerEl.className = 'wa-timer';
+    setKpTimer(timerEl, seconds <= 10 ? 'expiring' : 'running', seconds);
     subEl.style.display = '';
     subEl.textContent = 'ВРЕМЯ НА ОТВЕТ';
     document.getElementById('winner-announce').classList.add('visible');
 
     announceTimer = setInterval(() => {
       announceSeconds--;
-      timerEl.textContent = Math.max(0, announceSeconds) + 'с';
-      timerEl.className = 'wa-timer' + (announceSeconds <= 10 ? ' expiring' : '');
+      setKpTimer(timerEl, announceSeconds <= 0 ? 'timeout' : announceSeconds <= 10 ? 'expiring' : 'running', announceSeconds);
       if (announceSeconds <= 0) {
         clearInterval(announceTimer);
         announceTimer = null;
@@ -2472,7 +2518,7 @@ function showAnnounce(name, seconds, confirmOn) {
       }
     }, 1000);
   } else {
-    timerEl.textContent = '';
+    setKpTimer(timerEl, 'idle');
     subEl.style.display = 'none';
     document.getElementById('winner-announce').classList.add('visible');
   }
@@ -2489,7 +2535,7 @@ function updateAnnounceMsg(name, message) {
   const msgEl   = document.getElementById('wa-msg');
   const subEl   = document.getElementById('wa-sub');
 
-  timerEl.style.display = 'none';
+  setKpTimer(timerEl, 'answered');   // відповів — бейдж стає зеленим «Ответил», як у Бонусбурі
   subEl.style.display = 'none';
   msgEl.textContent = message;
   msgEl.style.display = '';
@@ -2716,6 +2762,8 @@ function warmAssetCache() {
   if (typeof RSO !== 'undefined' && RSO.assets) list.push.apply(list, RSO.assets());
   // фізика Марблс (Rapier, ~2 МБ) — інакше перше відкриття режиму чекає на завантаження
   if (typeof startMarblesGame === 'function') list.push('/assets/vendor/rapier3d-compat.mjs');
+  // траса Шариків 2.0 (~1.5 МБ) — щоб старт гонки не чекав завантаження
+  if (typeof MB2_ASSETS !== 'undefined') list.push.apply(list, MB2_ASSETS);
   // три потоки: по одному файлу за раз прогрів тягнувся б хвилини, а стрімер
   // часто тисне «Старт» через пів хвилини після відкриття панелі
   let i = 0;

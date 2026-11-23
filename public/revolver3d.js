@@ -349,7 +349,7 @@
       controls.style.display = 'flex'; controls.innerHTML = ''; controls.appendChild(btn);
       btn.onclick = () => {
         controls.style.display = 'none';
-        controls.innerHTML = '<button class="btn-dark" onclick="startRevolverGame()">🔄 Ещё раз</button>' +
+        controls.innerHTML = '<button class="btn-dark" onclick="startRevolverGame()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>Ещё раз</button>' +
           '<button class="btn-primary" onclick="closeRevolverOverlay()">Завершить</button>';
         resolve();
       };
