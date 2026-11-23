@@ -29,6 +29,8 @@ const STATE_DIR   = process.env.STATE_DIR || __dirname;   // де лежать �
 const STATE_FILE  = path.join(STATE_DIR, 'marble_state.json');
 
 // ── Стрімери (окремі «сайти» за одним посиланням) ──
+// чат-боти Kick: не реєструємо їх, коли участь — за будь-яке повідомлення
+const CHAT_BOTS = new Set(['botrix', 'kicklet', 'kickbot', 'streamelements', 'nightbot', 'fossabot', 'moobot', 'sery_bot', 'wizebot']);
 function parseStreamers() {
   const raw = (process.env.STREAMERS || '').trim();
   if (!raw) {
@@ -528,11 +530,12 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const { cmd } = JSON.parse(body);
+        // порожнє слово = участь за будь-яке повідомлення в чаті
         const trimmed = (cmd || '').trim().toLowerCase();
-        if (!trimmed || trimmed.length > 30) { res.writeHead(400); res.end(); return; }
+        if (trimmed.length > 30) { res.writeHead(400); res.end(); return; }
         T.joinCmd = trimmed;
         saveState(T);
-        console.log('[РОЗІГРАШ] Слово реєстрації: ' + T.joinCmd);
+        console.log('[РОЗІГРАШ] Слово реєстрації: ' + (T.joinCmd || '(будь-яке повідомлення)'));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, cmd: T.joinCmd }));
       } catch { res.writeHead(400); res.end(); }
@@ -1038,7 +1041,7 @@ async function connect(T) {
     setTimeout(() => connect(T), 10000);
     return;
   }
-  const ws = new WebSocket(KICK_WS_URL, { headers: { Origin: 'https://T.kick.com' } });
+  const ws = new WebSocket(KICK_WS_URL, { headers: { Origin: 'https://kick.com' } });
   let aliveTimer = null, subTimer = null;
   // будь-який байт = звʼязок живий; тиша довше 90с означає напівмертвий сокет
   // (на хмарному хостингу так буває після простою): сокет «відкритий», а чату вже нема
@@ -1139,7 +1142,9 @@ async function connect(T) {
 
     // слово збігається з точністю до знаку «!»: стрімер пише в панель «призи»,
     // а глядачі в чаті — «!призи» (і навпаки), і реєстрація мовчки не працювала
-    const cmdMatch = T.joinCmd && (lower === T.joinCmd
+    // слово не задане — бере участь будь-яке повідомлення (крім самого стрімера і чат-ботів)
+    const unameL = username.toLowerCase();
+    const cmdMatch = !T.joinCmd ? (unameL !== T.channel && !CHAT_BOTS.has(unameL)) : (lower === T.joinCmd
       || lower === '!' + T.joinCmd
       || (T.joinCmd[0] === '!' && lower === T.joinCmd.slice(1)));
     if (T.accepting && cmdMatch) {
@@ -1172,7 +1177,7 @@ async function connect(T) {
 async function resolveChatroom(T) {
   if (!T.channel) return;
   try {
-    const r = await fetch('https://T.kick.com/api/v2/channels/' + encodeURIComponent(T.channel), {
+    const r = await fetch('https://kick.com/api/v2/channels/' + encodeURIComponent(T.channel), {
       headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);

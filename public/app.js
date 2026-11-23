@@ -309,7 +309,7 @@ function renderParticipants(list) {
     /* найчастіша причина «бот не реєструє»: чат іде, але слово в панелі не
        збігається з тим, що пишуть глядачі — інша розкладка (лес/les) або
        зайвий «!». Показуємо це прямо тут, а не залишаємо гадати */
-    const stuck = raffleOpen && chatSeen >= 10;
+    const stuck = raffleOpen && chatSeen >= 10 && !!state.joinCmd;
     box.innerHTML = stuck
       ? '<div class="empty-box">Сообщения из чата идут, но слово <b>' + escapeHtml(state.joinCmd || '—') + '</b> никто не написал.<br>Проверь раскладку (лес / les) и знак «!» — бот принимает слово и с ним, и без него.</div>'
       : (raffleOpen
@@ -332,13 +332,13 @@ function downloadCSV() {
 let raffleOpen = false;
 
 async function saveRaffleCmd() {
-  const cmd = document.getElementById('raffle-cmd').value.trim();
-  if (!cmd) return false;
+  const cmd = document.getElementById('raffle-cmd').value.trim();   // порожнє — участь за будь-яке повідомлення
   const res = await fetch('/api/raffle/setcmd', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cmd })
   });
-  regNote(res.ok ? 'ok' : 'err', res.ok ? 'Слово «' + cmd + '» сохранено' : 'Не удалось сохранить слово');
+  regNote(res.ok ? 'ok' : 'err', !res.ok ? 'Не удалось сохранить слово'
+    : cmd ? 'Слово «' + cmd + '» сохранено' : 'Без слова: участвует любое сообщение в чате');
   return res.ok;
 }
 // плашка під полем слова: ok — зелена з галочкою, err — червона; сама зникає
@@ -354,12 +354,6 @@ function regNote(kind, text) {
 
 async function toggleRegistration() {
   if (!raffleOpen) {
-    const cmd = document.getElementById('raffle-cmd').value.trim();
-    if (!cmd) {
-      regNote('err', 'Сначала впиши слово для участия');
-      document.getElementById('raffle-cmd').focus();
-      return;
-    }
     const ok = await saveRaffleCmd();
     if (!ok) return;
   }
