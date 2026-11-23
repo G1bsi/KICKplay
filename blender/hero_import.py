@@ -70,6 +70,8 @@ RULES = {
     'hero':     dict(hat=0.86,  head=0.52, hx=0.50, leg=0.16, arm=0.55, armTop=0.62),   # стилізована версія (велика голова, широкі плечі)
     'egg':      dict(hat=0.77,  head=0.45, hx=0.9,  leg=0.12, arm=0.42, armTop=0.5),
     'penguin2': dict(hat=9.0,   head=0.70, hx=0.9,  leg=0.07, arm=0.55, armTop=0.75, paper=(0.22, 0.15, 0.68)),
+    # пес (сидячий ротвейлер): велика голова від ~0.42 висоти, задні лапи по боках, передні лапи внизу посередині
+    'dog':      dict(hat=9.0,   head=0.42, hx=1.1,  leg=0.08, arm=0.6,  armTop=0.32),
 }
 R = RULES.get(NAME, RULES['hero'])
 D = mx.y - mn.y

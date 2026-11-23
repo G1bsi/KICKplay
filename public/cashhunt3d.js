@@ -18,6 +18,7 @@
     { kind: 'penguin', url: '/assets/models/cashhunt/penguin2.glb?v=20261122', h: 4.0, dx: -1.1, cols: ['#16171c', '#16171c', '#f2f2f4', '#f2a23a'] },
     { kind: 'hero', url: '/assets/models/cashhunt/hero.glb?v=20261122s', h: 4.44, dx: -0.9, cols: ['#e5512a', '#d99a7c', '#1fae3f', '#8c1f61'] },
     { kind: 'egg', url: '/assets/models/cashhunt/egg.glb?v=20261122', h: 4.1, dx: -0.9, cols: ['#e8b48c', '#6b4a32', '#5d8fd0', '#1b1b1b'] },
+    { kind: 'dog', url: '/assets/models/cashhunt/dog.glb?v=20261123b', h: 3.7, dx: -1.35, cols: ['#3a2418', '#c8743a', '#b0202a', '#f07fa0'] },
   ];
   const SIGN_Y = 19.3;                                    // вище — вивіска, її не показуємо
   const ICONS = ['TGT_can', 'TGT_duck', 'TGT_star', 'TGT_apple', 'TGT_bottle', 'TGT_balloon', 'TGT_horseshoe', 'TGT_diamond'];
@@ -162,7 +163,15 @@
       if (bag[0] === cur) { const k = 1 + Math.floor(Math.random() * (bag.length - 1)); [bag[0], bag[k]] = [bag[k], bag[0]]; }   // не двічі поспіль
       R.mascotBag = bag;
     }
+    // чиї шматки ще летять — пропускаємо (переносимо в кінець черги)
+    for (let k = 0; k < bag.length; k++) { const m = bag.shift(); if (!m.userData.inFlight && m !== cur) return m; bag.push(m); }
     return bag.shift();
+  }
+  const RESPAWN = 1300, DEBRIS_LIFE = 3.4;   // мс до появи наступного талісмана; скільки секунд живуть уламки
+  // уламки повертаються на свої місця в моделі (модель у цей момент схована або вже інша на прилавку)
+  function debrisHome(g) {
+    for (const pp of g.parts) { pp.parent.add(pp.o); pp.o.position.copy(pp.home.pos); pp.o.quaternion.copy(pp.home.quat); pp.o.scale.copy(pp.home.scale); }
+    g.m.userData.inFlight = false;
   }
   // поява талісмана: «випірнає» з нуля з пружинкою (як після вибуху), а не з'являється різко
   function popMascot(m, delay) {
@@ -414,12 +423,19 @@
       R.barrel.position.y = BARREL[1] + Math.sin(T * 1.7) * 0.16;          // ствол легенько «пливе» в повітрі
     }
     // частини підстреленого пінгвіна: падають, відскакують від прилавка/підлоги
-    if (R.pgParts) for (const pp of R.pgParts) {
-      const o = pp.o, v = o.userData.v, w = o.userData.w, dt = 1 / 60;
-      v.y -= 30 * dt; o.position.addScaledVector(v, dt);
-      o.rotation.x += w.x * dt; o.rotation.y += w.y * dt; o.rotation.z += w.z * dt;
-      const floor = o.position.z < 6.6 && o.position.x > -16.5 && o.position.x < 16.5 ? -0.25 : -12;
-      if (o.position.y < floor) { o.position.y = floor; v.y = Math.abs(v.y) * 0.35; v.x *= 0.7; v.z *= 0.7; w.multiplyScalar(0.6); }
+    // кілька вибухів можуть летіти одночасно: кожна група живе DEBRIS_LIFE с, потім тане й повертається в свого талісмана
+    if (R.debris) for (let gi = R.debris.length - 1; gi >= 0; gi--) {
+      const g = R.debris[gi], dt = 1 / 60; g.t += dt;
+      const fade = g.t > DEBRIS_LIFE - 0.4 ? Math.max(0.001, (DEBRIS_LIFE - g.t) / 0.4) : 1;
+      for (const pp of g.parts) {
+        const o = pp.o, v = o.userData.v, w = o.userData.w;
+        v.y -= 30 * dt; o.position.addScaledVector(v, dt);
+        o.rotation.x += w.x * dt; o.rotation.y += w.y * dt; o.rotation.z += w.z * dt;
+        const floor = o.position.z < 6.6 && o.position.x > -16.5 && o.position.x < 16.5 ? -0.25 : -12;
+        if (o.position.y < floor) { o.position.y = floor; v.y = Math.abs(v.y) * 0.35; v.x *= 0.7; v.z *= 0.7; w.multiplyScalar(0.6); }
+        if (fade < 1) o.scale.copy(pp.wscale).multiplyScalar(fade);
+      }
+      if (g.t >= DEBRIS_LIFE) { debrisHome(g); R.debris.splice(gi, 1); }
     }
     // уламки й конфеті
     for (let i = R.parts.length - 1; i >= 0; i--) {
@@ -463,13 +479,14 @@
     R.aimAt = prevAim;
     R.pgDown = true; R.shake = 0.9; snd('hit', 1, 0.8);
     R.hitL.position.set(c.x, c.y, c.z + 2); R.hitL.intensity = 9; tween(450, k => { R.hitL.intensity = 9 * (1 - k); });
-    // кожна частина пінгвіна (тулуб, голова, окуляри, газета…) летить своєю дорогою з обертанням
+    // кожна частина талісмана (тулуб, голова, лапи…) летить своєю дорогою з обертанням
     p.updateMatrixWorld(true);
-    R.pgParts = [];
+    const grp = { m: p, t: 0, parts: [] };
     const kids = []; p.traverse(o => { if (o.isMesh) kids.push(o); });
     for (const o of kids) {
-      R.pgParts.push({ o, parent: o.parent, home: { pos: o.position.clone(), quat: o.quaternion.clone(), scale: o.scale.clone() } });
-      R.scene.attach(o);
+      const pp = { o, parent: o.parent, home: { pos: o.position.clone(), quat: o.quaternion.clone(), scale: o.scale.clone() } };
+      grp.parts.push(pp);
+      R.scene.attach(o); pp.wscale = o.scale.clone();
       const d = o.getWorldPosition(new THREE.Vector3()).sub(c); d.z = Math.abs(d.z) + 0.6;
       o.userData.v = d.normalize().multiplyScalar(8 + Math.random() * 9).add(new THREE.Vector3((Math.random() - 0.5) * 4, 7 + Math.random() * 6, 3 + Math.random() * 4));
       o.userData.v.x = -Math.abs(o.userData.v.x) * 0.7 + (Math.random() - 0.5) * 4;   // пінгвін справа — шматки летять у кадр, а не за край
@@ -482,15 +499,15 @@
       f.position.copy(c); R.scene.add(f);
       R.parts.push({ o: f, v: new THREE.Vector3((Math.random() - 0.5) * 12, 4 + Math.random() * 9, 2 + Math.random() * 7), w: [Math.random() * 10, Math.random() * 10], g: 6, drag: true, life: 2.6 + Math.random() });
     }
-    await wait(5200);
-    // збираємо назад: частини повертаються в пінгвіна й «випірнають» із нуля
-    for (const pp of R.pgParts) {
-      pp.parent.add(pp.o); pp.o.position.copy(pp.home.pos); pp.o.quaternion.copy(pp.home.quat); pp.o.scale.copy(pp.home.scale);
-    }
-    R.pgParts = null;
-    // на місці знищеного «випірнає» інший талісман (пінгвін ↔ герой); якщо другий не завантажився — той самий
+    p.userData.inFlight = true;
+    (R.debris || (R.debris = [])).push(grp);
+    // наступний талісман «випірнає» вже за RESPAWN мс — уламки попереднього тим часом долітають і самі тануть
+    await wait(RESPAWN);
     const all = R.mascots || [p], nx = nextMascot(all, p);
-    if (nx !== p) { p.visible = false; p.scale.setScalar(p.userData.s0 || 1); nx.visible = true; R.penguin = nx; }
+    if (nx.userData.inFlight) {           // єдиний талісман (інші не завантажились) — забираємо його шматки додому одразу
+      const g = R.debris.find(d => d.m === nx); if (g) { debrisHome(g); R.debris.splice(R.debris.indexOf(g), 1); }
+    }
+    if (nx !== p) { p.visible = false; nx.visible = true; R.penguin = nx; }
     R.pgDown = false;
     const s0 = nx.userData.s0 || 1; nx.scale.setScalar(0.01);
     snd('flip', 0.5, 0.9);
