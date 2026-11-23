@@ -2310,3 +2310,10 @@ button > svg.kp-ico-only { margin-right: 0; vertical-align: -3px; }
 .bl-undo { height: 30px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--text); box-shadow: none; font: 800 12px/1 var(--font-ui); }
 .bl-undo:hover { background: rgba(255,255,255,.12); }
 #bl-modal .count-badge { background: rgba(var(--danger-rgb), .22); color: #ffb3bf; box-shadow: none; }
+
+/* кнопка блеклиста в панелі рулетки */
+.kp-dock .kp-dock-ban { color: #ffb3bf; }
+.kp-dock .kp-dock-ban > svg { width: 18px; height: 18px; fill: none; stroke: #ff7a90; stroke-width: 2.3; stroke-linecap: round; }
+.kp-dock .kp-dock-ban:hover:not(:disabled) { background: rgba(var(--danger-rgb), .12); border-color: rgba(var(--danger-rgb), .35); color: #fff; }
+.kp-dock .kp-dock-ban.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.kp-dock .kp-dock-ban.on > svg { stroke: #fff; }

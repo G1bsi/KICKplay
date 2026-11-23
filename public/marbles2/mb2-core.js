@@ -15,6 +15,7 @@
   const SUB = 2, DT = 1 / 60;   // крок кадру й підкроки
   const E_WALL = 0.32, E_BALL = 0.22, FR_ROLL = 0.04, VMAX = 30, AIR = 0.012;
   const STUCK_V = 0.35, STUCK_T = 2.2;
+  const BOOST_A = 16, BOOST_V = 14;   // прискорення на бусті (м/с²) і до якої швидкості вздовж траси
   const BUMP = 7.5;             // швидкість, з якою хмарний бампер відкидає кульку
   const HASH = 8192;            // розмір хеш-таблиці (степінь 2)
 
@@ -34,11 +35,13 @@
     };
     map.pegs.sort((a, b) => a.i - b.i);
     map.faces = []; for (let i = 1; i < n; i++) if (map.open[i - 1] && !map.open[i]) map.faces.push(i);
+    map.gapStarts = []; for (let i = 1; i < n; i++) if (!map.open[i - 1] && map.open[i]) map.gapStarts.push(i);   // губи трамплінів
     map.pegFirst = map.pegs.length ? map.pegs[0].i - 6 : 1e9; map.pegLast = map.pegs.length ? map.pegs[map.pegs.length - 1].i + 6 : -1;
     map.pegsMove = j.pegsMove !== 0;                 // «Гнев Зевса» — колони стоять на місці
     // хмарні бампери: циліндри, що відкидають кульку з запасом енергії (як у пінболі)
     map.bumpers = (j.bumpers || []).map(p => ({ x: p.p[0], y: p.p[1], z: p.p[2], ax: p.a[0], ay: p.a[1], az: p.a[2], r: p.r, h: p.h, i: p.i, hit: 0 }));
     map.storm = j.storm || [];                       // ділянки рамок, куди б'ють блискавки
+    map.boost = j.boost || [];                       // бусти: ділянки рамок, де кульку розганяє вздовж траси
     return map;
   }
 
@@ -57,10 +60,10 @@
       finT: new Float32Array(N), elimT: new Float32Array(N), cause: new Array(N).fill(''),
       cellOf: new Int32Array(N), cellStart: new Int32Array(HASH + 1), cellBalls: new Int32Array(N),
       t: 0, raceT: 0, raceOn: false, gateOpen: false, frame: 0, subT: 0,
-      seed: Math.floor(rnd() * 0x7fffffff), rnd, strikes: [], noWin: new Uint8Array(N), ejected: new Uint8Array(N), ghost: new Uint8Array(N), ejT: new Float32Array(N), struckT: new Float32Array(N).fill(-99), pegOff: new Float32Array(map.pegs.length), pegV: new Float32Array(map.pegs.length),
+      seed: Math.floor(rnd() * 0x7fffffff), rnd, strikes: [], noWin: new Uint8Array(N), ejected: new Uint8Array(N), ghost: new Uint8Array(N), weakV: new Float32Array(N), ejT: new Float32Array(N), struckT: new Float32Array(N).fill(-99), pegOff: new Float32Array(map.pegs.length), pegV: new Float32Array(map.pegs.length),
       finishOrder: [], eliminated: [], firstFinishT: null, done: false, kicks: 0, oob: 0,
     };
-    if (opts && opts.noWin) for (const i of opts.noWin) if (i >= 0 && i < N) s.noWin[i] = 1;
+    if (opts && opts.noWin) for (const i of opts.noWin) if (i >= 0 && i < N) { s.noWin[i] = 1; s.weakV[i] = 5.2 + rnd() * 0.9; }
     // розставляємо кульки в контейнері ярусами (порядок з розіграшу: перші — ближче до центру нижнього ярусу)
     const B = map.box, half = B.half - 0.6, step = 1.06;
     const per = Math.floor((2 * half) / step) + 1;
@@ -343,12 +346,28 @@
         if (s.firstFinishT == null && !s.noWin[i]) { s.firstFinishT = s.raceT; if (s.onWinner) s.onWinner(i); }
       }
       if (s.fin[i] === 1 && s.raceT - s.finT[i] > 4) s.fin[i] = 2;
+      // буст: на ділянці зі стрілками кулька розганяється вздовж траси (до BOOST_V)
+      if (s.alive[i] && s.zone[i] === 1 && m.boost.length) {
+        const b = s.idx[i];
+        for (const r of m.boost) if (b >= r[0] && b <= r[1]) {
+          const o = b * 3, vf = s.vx[i] * m.ft[o] + s.vy[i] * m.ft[o + 1] + s.vz[i] * m.ft[o + 2];
+          if (vf < BOOST_V) { const d = Math.min(BOOST_A * DT, BOOST_V - vf); s.vx[i] += m.ft[o] * d; s.vy[i] += m.ft[o + 1] * d; s.vz[i] += m.ft[o + 2] * d; }
+          break;
+        }
+      }
       // тіньовий бан: заблокований вилітає з траси.
       //  • у провалі (трамплін) — гасимо швидкість уперед: не долітає;
       //  • запасний варіант — на 70% траси викидає за борт (на трасі з грозою — блискавкою)
       if (s.noWin[i] && s.alive[i] && !s.fin[i] && s.zone[i] === 1 && (!s.ejected[i] || s.t - s.ejT[i] > 2.5)) {   // повернувся на трасу — ще раз
         const b = s.idx[i];
-        if (m.open[b]) { s.vx[i] *= 0.55; s.vz[i] *= 0.55; if (s.vy[i] > 0) s.vy[i] *= 0.5; s.ghost[i] = 1; }   // уже в повітрі над провалом — не долітає (і не збиває тих, хто летить слідом)
+        // на розгоні перед трампліном (останні ~6 м) плавно втрачає швидкість, як від тертя, — злітає слабше і по звичайній дузі
+        // не долітає. У повітрі вже нічого не робимо. Із цього моменту — «привид»: його не штовхають і він нікого не збиває
+        const g0 = m.gapStarts.find(g => b >= g - 12 && b < g);
+        if (g0 != null) {
+          const o = b * 3, vf = s.vx[i] * m.ft[o] + s.vz[i] * m.ft[o + 2], target = s.weakV[i];
+          if (vf > target) { const f = Math.max(target / vf, 0.95); s.vx[i] *= f; s.vz[i] *= f; }
+          s.ghost[i] = 1;
+        }
         else if (!m.faces.length && s.prog[i] > m.len * 0.7) {   // траса без провалу — запасний варіант
           if (m.storm.length) { const x = s.px[i], y = s.py[i] - 0.3, z = s.pz[i]; s.strikes.push({ x, y, z, hit: strike(s, x, y, z, 1.2, STORM_POWER, s.rnd), t: s.raceT }); }
           else eject(s, i, s.rnd);

@@ -275,6 +275,11 @@ for sx in (-1, 1):
     box('MB2_ArchPost', fe['p'] + fe['R'] * sx * (fe['W'] + 1.0) + Vector((0, 0, 3.2)), (0.3, 0.3, 3.4), 'MB2_NeonGold')
 box('MB2_ArchTop', fe['p'] + Vector((0, 0, 6.6)), (fe['W'] + 1.3, 0.3, 0.3), 'MB2_NeonGold')
 
+# ── бусти: останні ~12 м спіралі + 4 м прямої до чаші (світні стрілки на підлозі, кульки розганяються) ──
+_hel = [i for i, f in enumerate(fr) if abs(Vector((f['p'].x - HC.x, f['p'].y - HC.y)).length - HR) < 0.7 and f['p'].z < hz0 + 0.5]
+_he = max(_hel)
+boost = [[_he - 24, min(n - 2, _he + 8)]]
+print('BOOST', boost, 'helix end', _he, 'of', n)
 # ── експорт фізики ──
 fin_i = n - 1
 data = dict(version=1, ds=DS, ballR=0.5,
@@ -285,6 +290,7 @@ data = dict(version=1, ds=DS, ballR=0.5,
     box=dict(c=C(Vector((0, 0, CZ))), half=CH, h=CWH),
     pegs=[dict(p=C(p['p']), a=C(p['a']), r=p['r'], h=p['h'], i=p['i']) for p in pegs],
     tower=dict(c=C(Vector((HC.x, HC.y, 0))), r=3.2, hr=HR, z0=hz0, z1=hz1),
+    boost=boost,
     eliminate=1)
 with open(os.path.join(OUT, 'neon.json'), 'w') as fjs: json.dump(data, fjs, separators=(',', ':'))
 for s_ in bpy.context.selected_objects: s_.select_set(False)

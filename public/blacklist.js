@@ -152,16 +152,18 @@
   }
   function winnerHooks() {
     const nameOf = id => () => { const el = document.getElementById(id); const t = el ? el.textContent.trim() : ''; return t && t !== '—' ? t : ''; };
-    // на заставці переможця — в один ряд із «Закрыть»
-    const wa = document.querySelector('#winner-announce .wa-close');
-    if (wa) {
-      const row = document.createElement('div'); row.className = 'wa-actions';
-      wa.parentNode.insertBefore(row, wa); row.appendChild(wa);
-      winBtn(row, wa, nameOf('wa-name'), 'wa-ban');
+    // рулетка: у панелі після прокруту (Рерол · Фаст рерол · В блеклист · Завершить) — банимо щойно обраного переможця
+    const rc = document.getElementById('roulette-overlay-controls');
+    if (rc) {
+      const fin = rc.querySelector('.kp-dock-go');
+      winBtn(rc, fin, () => (typeof winnersHistory !== 'undefined' && winnersHistory[0] && winnersHistory[0].name) || '', 'kp-dock-btn kp-dock-ban');
+      const hint = document.getElementById('roulette-overlay-hint');
+      if (hint) new MutationObserver(syncWinBtns).observe(hint, { childList: true, characterData: true, subtree: true });
+      new MutationObserver(syncWinBtns).observe(rc, { attributes: true, attributeFilter: ['style'] });
     }
     const cg = document.getElementById('chatgame-controls');
     if (cg) winBtn(cg, cg.lastElementChild, nameOf('chatgame-winner-name'), 'cg-ban');
-    for (const id of ['wa-name', 'chatgame-winner-name']) {
+    for (const id of ['chatgame-winner-name']) {
       const el = document.getElementById(id);
       if (el) new MutationObserver(syncWinBtns).observe(el, { childList: true, characterData: true, subtree: true });
     }

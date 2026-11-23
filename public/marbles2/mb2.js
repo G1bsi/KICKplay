@@ -11,7 +11,7 @@
   const ASSET = '/assets/marbles2/';
   // карти: id → назва, версія файлів (підняти після перебудови в Blender), тема оточення, кольори картки вибору
   const MAPS = {
-    neon: { name: 'Неоновый каскад', v: '20261123g', theme: 'neon', look: ['#0b0b26', '#3a1450', '#2fe8ff'] },
+    neon: { name: 'Неоновый каскад', v: '20261123h', theme: 'neon', look: ['#0b0b26', '#3a1450', '#2fe8ff'] },
     zeus: { name: 'Гнев Зевса', v: '20261123z4', theme: 'zeus', hidden: true,   // прихована: власнику не сподобалась (файли лишаються)
             look: ['#27315f', '#f0c27a', '#ffffff'] },
   };
@@ -316,11 +316,42 @@
     root.traverse(o => { const mm = o.isMesh && /ZS_Bumper_(\d+)/.exec(o.name); if (!mm) return;
       const k = +mm[1]; const mats = (Array.isArray(o.material) ? o.material : [o.material]).map(m => m === zBump ? zBump.clone() : m);
       o.material = mats.length === 1 ? mats[0] : mats; const bm = mats.find(m => m.emissive && m.emissiveIntensity === 1.1); if (bm) G.bumpers[k] = bm; });
+    buildBoosts(M.map);
     G.scene.add(root); G.track = root; G.trackId = mapId; G.gate = gate;
     if (gate) gate.userData.y0 = gate.position.y;
     resetGate();
   }
   // рухомі кілки: корпус «виростає» з підлоги (масштаб по осі), неонова кришка тьмяніє, коли кілок схований
+  // бусти: неонова смуга на підлозі з шевронами, що біжать уперед (текстура зсувається щокадру)
+  function chevronTex() {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+    g.clearRect(0, 0, 128, 128);
+    g.strokeStyle = '#fff'; g.lineWidth = 16; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(22, 92); g.lineTo(64, 44); g.lineTo(106, 92); g.stroke();
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  }
+  function buildBoosts(map) {
+    if (G.boosts) G.boosts.forEach(b => G.scene.remove(b));
+    G.boosts = []; G.boostTex = null;
+    if (!map.boost || !map.boost.length) return;
+    const tex = chevronTex(); G.boostTex = tex;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, color: lin(0x2fe8ff).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false });
+    for (const r of map.boost) {
+      const pos = [], uv = [], idx = [];
+      for (let i = r[0], k = 0; i <= r[1]; i++, k++) {
+        const o = i * 3, half = Math.max(0.6, (map.W[i] - map.Rf[i]) * 0.9);
+        for (const sd of [-1, 1]) {
+          pos.push(map.fp[o] + map.fu[o] * 0.04 + map.fr[o] * half * sd, map.fp[o + 1] + map.fu[o + 1] * 0.04 + map.fr[o + 1] * half * sd, map.fp[o + 2] + map.fu[o + 2] * 0.04 + map.fr[o + 2] * half * sd);
+          uv.push(sd < 0 ? 0 : 1, k * map.ds / 2.2);
+        }
+        if (k) { const a = (k - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+      const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 3; mesh.frustumCulled = false;
+      G.scene.add(mesh); G.boosts.push(mesh);
+    }
+  }
   function removePegs() { if (G.pegBody) { G.scene.remove(G.pegBody); G.scene.remove(G.pegCap); G.pegBody = G.pegCap = null; } }
   function buildPegs(map, chrome) {
     removePegs();
@@ -772,6 +803,7 @@
     if (d < 70) { G.cam.shake = Math.max(G.cam.shake || 0, 0.7 * (1 - d / 70)); dom.flash.classList.remove('on'); void dom.flash.offsetWidth; dom.flash.classList.add('on'); }
   }
   function updateFx(dt) {
+    if (G.boostTex) G.boostTex.offset.y -= dt * 2.4;   // шеврони біжать уперед
     if (S && S.strikes.length) { for (const e of S.strikes) spawnStrike(e); S.strikes.length = 0; }
     for (let i = G.bolts.length - 1; i >= 0; i--) {
       const b = G.bolts[i]; b.t += dt;
