@@ -407,6 +407,9 @@
     if (!R || !ov.classList.contains('visible') || !ov.classList.contains('ch3d')) { if (R) R.raf = 0; return; }
     R.raf = requestAnimationFrame(frame);
     const now = performance.now(), T = now / 1000;
+    // реальний крок кадру: на моніторах 120–240 Гц фіксовані 1/60 прискорювали уламки, і вони «поверталися»
+    // в талісмана раніше, ніж з'являвся наступний (старий на мить з'являвся цілим)
+    const fdt = Math.min(0.05, Math.max(0.001, (now - (R.lastNow || now - 16.7)) / 1000)); R.lastNow = now;
     for (let i = R.tweens.length - 1; i >= 0; i--) { const tw = R.tweens[i], k = Math.min(1, (now - tw.t0) / tw.ms); tw.fn(tw.ez(k)); if (k >= 1) { R.tweens.splice(i, 1); tw.res(); } }
     // лампочки: дві групи по черзі; під час розкриття — частіше
     const on = Math.floor(T / (R.fast ? 0.14 : 0.42)) % 2;
@@ -428,7 +431,7 @@
     // частини підстреленого пінгвіна: падають, відскакують від прилавка/підлоги
     // кілька вибухів можуть летіти одночасно: кожна група живе DEBRIS_LIFE с, потім тане й повертається в свого талісмана
     if (R.debris) for (let gi = R.debris.length - 1; gi >= 0; gi--) {
-      const g = R.debris[gi], dt = 1 / 60; g.t += dt;
+      const g = R.debris[gi], dt = fdt; g.t += dt;
       const fade = g.t > DEBRIS_LIFE - 0.4 ? Math.max(0.001, (DEBRIS_LIFE - g.t) / 0.4) : 1;
       for (const pp of g.parts) {
         const o = pp.o, v = o.userData.v, w = o.userData.w;
@@ -442,13 +445,13 @@
     }
     // уламки й конфеті
     for (let i = R.parts.length - 1; i >= 0; i--) {
-      const p = R.parts[i], dt = 1 / 60;
+      const p = R.parts[i], dt = fdt;
       p.v.y -= p.g * dt; p.o.position.addScaledVector(p.v, dt); p.o.rotation.x += p.w[0] * dt; p.o.rotation.y += p.w[1] * dt;
       if (p.drag) p.v.multiplyScalar(0.985);
       p.life -= dt; if (p.o.material && p.o.material.opacity !== undefined && p.life < 0.6) { p.o.material.transparent = true; p.o.material.opacity = Math.max(0, p.life / 0.6); }
       if (p.life <= 0) { R.scene.remove(p.o); R.parts.splice(i, 1); }
     }
-    for (const s of R.smokes) if (s.visible) { s.userData.age += 1 / 60; const a = s.userData.age; s.position.addScaledVector(s.userData.v, 1 / 60); s.scale.setScalar(1.5 + a * 5); s.material.opacity = Math.max(0, 0.5 * (1 - a / 1.5)); if (a > 1.5) s.visible = false; }
+    for (const s of R.smokes) if (s.visible) { s.userData.age += fdt; const a = s.userData.age; s.position.addScaledVector(s.userData.v, fdt); s.scale.setScalar(1.5 + a * 5); s.material.opacity = Math.max(0, 0.5 * (1 - a / 1.5)); if (a > 1.5) s.visible = false; }
     if (R.ring.visible) { const k = 1 + 0.06 * Math.sin(T * 8); R.ring.scale.set(R.ring.userData.s * k, R.ring.userData.s * k, 1); }
     const sh = R.shake; R.shake = Math.max(0, R.shake - 0.03);
     R.camera.position.set(CAM.pos[0] + Math.sin(T * 0.5) * 0.3 + (Math.random() - 0.5) * sh, CAM.pos[1] + (Math.random() - 0.5) * sh, CAM.pos[2]);
@@ -502,7 +505,7 @@
       f.position.copy(c); R.scene.add(f);
       R.parts.push({ o: f, v: new THREE.Vector3((Math.random() - 0.5) * 12, 4 + Math.random() * 9, 2 + Math.random() * 7), w: [Math.random() * 10, Math.random() * 10], g: 6, drag: true, life: 2.6 + Math.random() });
     }
-    p.userData.inFlight = true;
+    p.userData.inFlight = true; p.visible = false;   // шматки вже в сцені окремо; сам талісман ховаємо, щоб повернення шматків «додому» ніколи не було видно
     (R.debris || (R.debris = [])).push(grp);
     // наступний талісман «випірнає» вже за RESPAWN мс — уламки попереднього тим часом долітають і самі тануть
     await wait(RESPAWN);
@@ -510,7 +513,8 @@
     if (nx.userData.inFlight) {           // єдиний талісман (інші не завантажились) — забираємо його шматки додому одразу
       const g = R.debris.find(d => d.m === nx); if (g) { debrisHome(g); R.debris.splice(R.debris.indexOf(g), 1); }
     }
-    if (nx !== p) { p.visible = false; nx.visible = true; R.penguin = nx; }
+    if (nx !== p) { p.visible = false; R.penguin = nx; }
+    nx.visible = true;
     R.pgDown = false;
     const s0 = nx.userData.s0 || 1; nx.scale.setScalar(0.01);
     snd('flip', 0.5, 0.9);
