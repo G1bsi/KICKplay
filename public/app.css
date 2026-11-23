@@ -2317,3 +2317,10 @@ button > svg.kp-ico-only { margin-right: 0; vertical-align: -3px; }
 .kp-dock .kp-dock-ban:hover:not(:disabled) { background: rgba(var(--danger-rgb), .12); border-color: rgba(var(--danger-rgb), .35); color: #fff; }
 .kp-dock .kp-dock-ban.on { background: var(--danger); border-color: var(--danger); color: #fff; }
 .kp-dock .kp-dock-ban.on > svg { stroke: #fff; }
+
+/* акаунт у топбарі (сайт для кількох стрімерів): канал + вихід */
+.acct-chip { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px 0 11px; margin-left: auto; margin-right: 8px; border-radius: 999px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border); color: var(--text-muted); font: 700 13px/1 var(--font-ui); box-shadow: none; }
+.acct-chip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.acct-chip:hover { color: var(--text); border-color: var(--border-strong); background: rgba(255,255,255,.07); }
+.acct-chip + .bl-open { margin-left: 0; }

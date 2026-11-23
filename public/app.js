@@ -234,12 +234,32 @@ chatEvtSource.onmessage = (e) => {
   }
 };
 
+// Акаунт у топбарі: під яким каналом увійшли (сайт для кількох стрімерів) + вихід
+function renderAccount(st) {
+  if (!st || !st.channel || document.getElementById('acct-chip')) return;
+  const bar = document.querySelector('header.topbar'); if (!bar) return;
+  const b = document.createElement('button');
+  b.id = 'acct-chip'; b.type = 'button'; b.className = 'acct-chip'; b.title = 'Выйти из аккаунта';
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg><span></span>';
+  b.querySelector('span').textContent = st.channel;
+  b.onclick = async () => {
+    if (!confirm('Выйти из аккаунта ' + st.channel + '?')) return;
+    try { await fetch('/api/logout', { method: 'POST' }); } catch (e) { /* все одно виходимо */ }
+    try { localStorage.removeItem('botpw'); } catch (e) {}   // інакше сторінка входу одразу впустить назад
+    document.cookie = 'session=; path=/; max-age=0';
+    location.reload();
+  };
+  const bl = bar.querySelector('.bl-open');
+  bar.insertBefore(b, bl || null);
+}
+
 async function loadState() {
   const res = await fetch('/api/raffle/state');
   if (res.status === 401) { location.reload(); return; }
   state = await res.json();
   // блеклист (blacklist.js): синхронізація з сервером і фільтр заблокованих учасників
   if (typeof blApply === 'function') blApply(state);
+  renderAccount(state);
 
   const cmdInput = document.getElementById('raffle-cmd');
   if (document.activeElement !== cmdInput) {

@@ -9,11 +9,21 @@
    Глобали app.js: state, loadState, escapeHtml.
    ══════════════════════════════════════════════════════════════ */
 (function () {
-  const KEY = 'kp_blacklist';
+  // кожен стрімер (сайт для кількох стрімерів) має свій список: ключ — kp_blacklist:<канал>.
+  // Старий спільний ключ kp_blacklist один раз дістається першому, хто увійде в цьому браузері
+  const LEGACY = 'kp_blacklist';
+  let KEY = LEGACY;
   const norm = s => String(s || '').trim().replace(/^@+/, '').toLowerCase();
   let list = [];
-  try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); if (Array.isArray(v)) list = [...new Set(v.map(norm).filter(Boolean))]; } catch (e) { /* без localStorage — живемо з серверним */ }
-  let synced = false, pushing = null, lastSrv = '';
+  function loadKey(k) {
+    KEY = k;
+    try {
+      let raw = localStorage.getItem(k);
+      if (raw == null && k !== LEGACY && !localStorage.getItem('kp_blacklist_migrated')) { raw = localStorage.getItem(LEGACY); localStorage.setItem('kp_blacklist_migrated', k); }
+      const v = JSON.parse(raw || '[]'); list = Array.isArray(v) ? [...new Set(v.map(norm).filter(Boolean))] : [];
+    } catch (e) { list = []; }
+  }
+  let synced = false, pushing = null, lastSrv = '', tenant = null;
   const ICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg>';
 
   function save() { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* приватний режим */ } }
@@ -30,6 +40,8 @@
 
   // викликається з loadState() app.js на кожен стан із сервера
   window.blApply = function (st) {
+    // список саме цього стрімера (до першого стану з сервера не знаємо, хто увійшов)
+    if (tenant === null) { tenant = st.tenant || ''; loadKey(tenant ? LEGACY + ':' + tenant : LEGACY); render(); }
     const srv = Array.isArray(st.blacklist) ? st.blacklist.map(norm) : null;   // null — сервер без підтримки блеклиста
     if (srv && !pushing) {
       if (!synced) {
