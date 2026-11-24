@@ -16,6 +16,7 @@
   const E_WALL = 0.32, E_BALL = 0.22, FR_ROLL = 0.04, VMAX = 30, AIR = 0.012;
   const STUCK_V = 0.35, STUCK_T = 2.2;
   const BOOST_A = 16, BOOST_V = 14;   // прискорення на бусті (м/с²) і до якої швидкості вздовж траси
+  const BOOST_KEEP_A = 7;             // після стрілок і до фінішу: підтримка швидкості BOOST_V (м/с²)
   const BUMP = 7.5;             // швидкість, з якою хмарний бампер відкидає кульку
   const HASH = 8192;            // розмір хеш-таблиці (степінь 2)
 
@@ -349,9 +350,11 @@
       // буст: на ділянці зі стрілками кулька розганяється вздовж траси (до BOOST_V)
       if (s.alive[i] && s.zone[i] === 1 && m.boost.length) {
         const b = s.idx[i];
-        for (const r of m.boost) if (b >= r[0] && b <= r[1]) {
+        for (const r of m.boost) if (b >= r[0]) {
+          // на стрілках — розгін; після них буст тримає швидкість до кінця траси (м'якше, щоб не смикало)
+          const a = b <= r[1] ? BOOST_A : BOOST_KEEP_A;
           const o = b * 3, vf = s.vx[i] * m.ft[o] + s.vy[i] * m.ft[o + 1] + s.vz[i] * m.ft[o + 2];
-          if (vf < BOOST_V) { const d = Math.min(BOOST_A * DT, BOOST_V - vf); s.vx[i] += m.ft[o] * d; s.vy[i] += m.ft[o + 1] * d; s.vz[i] += m.ft[o + 2] * d; }
+          if (vf < BOOST_V && !m.open[b]) { const d = Math.min(a * DT, BOOST_V - vf); s.vx[i] += m.ft[o] * d; s.vy[i] += m.ft[o + 1] * d; s.vz[i] += m.ft[o + 2] * d; }
           break;
         }
       }

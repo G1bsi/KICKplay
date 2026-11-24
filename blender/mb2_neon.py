@@ -275,11 +275,11 @@ for sx in (-1, 1):
     box('MB2_ArchPost', fe['p'] + fe['R'] * sx * (fe['W'] + 1.0) + Vector((0, 0, 3.2)), (0.3, 0.3, 3.4), 'MB2_NeonGold')
 box('MB2_ArchTop', fe['p'] + Vector((0, 0, 6.6)), (fe['W'] + 1.3, 0.3, 0.3), 'MB2_NeonGold')
 
-# ── бусти: останні ~12 м спіралі + 4 м прямої до чаші (світні стрілки на підлозі, кульки розганяються) ──
+# ── бусти: вхід у спіраль, ~2 м до неї + перші ~14 м (світні стрілки на підлозі, кульки розганяються на весь спуск) ──
 _hel = [i for i, f in enumerate(fr) if abs(Vector((f['p'].x - HC.x, f['p'].y - HC.y)).length - HR) < 0.7 and f['p'].z < hz0 + 0.5]
-_he = max(_hel)
-boost = [[_he - 24, min(n - 2, _he + 8)]]
-print('BOOST', boost, 'helix end', _he, 'of', n)
+_hs = min(_hel)
+boost = [[max(0, _hs - 4), _hs + 28]]
+print('BOOST', boost, 'helix start', _hs, 'of', n)
 # ── експорт фізики ──
 fin_i = n - 1
 data = dict(version=1, ds=DS, ballR=0.5,
