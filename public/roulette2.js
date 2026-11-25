@@ -222,25 +222,22 @@
   const move = (to, ms, p) => new Promise(done => { S.anim = { from: S.x, to, ms, p, t0: performance.now(), done }; });
   function ensureItems(n) { while (S.items.length < n) S.items.push(S.pick()); }
 
-  // ── підміна startRoulette ──
-  async function startRoulette2(fast) {
-    if (!state.participants.length) return alert('Нет участников');
-    const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
-    const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()) && !(typeof isBlacklisted === 'function' && isBlacklisted(p)));   // тіньовий бан: у стрічці є, виграти не може
-    if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
-
+  // ── прокрут барабана — і для «Дефолту», і для інших режимів (window.rouletteSpin) ──
+  // opts: pool — хто крутиться у стрічці; pick() — async, повертає переможця (ролл random.org); fast; hint — підпис згори.
+  // Повертає переможця (або null, якщо прокрут перервали). Переможця НЕ записує — це робить той, хто викликав.
+  async function spin(opts) {
+    const fast = !!opts.fast;
     const overlay = document.getElementById('roulette-overlay');
     overlay.classList.add('visible', 'rl2');
-    if (!ensureStage()) { overlay.classList.remove('rl2'); return orig.start(fast); }
+    if (!ensureStage()) { overlay.classList.remove('rl2'); return opts.pick(); }   // без canvas — просто ролл
     const my = ++token;
-    phase = 'racing';
     const hint = document.getElementById('roulette-overlay-hint'), controls = document.getElementById('roulette-overlay-controls');
-    controls.style.display = 'none'; hint.textContent = 'Крутим барабан...';
+    controls.style.display = 'none'; hint.textContent = opts.hint || 'Крутим барабан...';
     ac();   // AudioContext — у межах жесту кліку, поки браузер дозволяє
 
     // барабан стартує одразу повною стрічкою й розганяється, поки чекаємо random.org;
     // гальмування рахуємо від поточної швидкості, коли переможець уже відомий (без «завислого» першого кадру)
-    const pool = state.participants;
+    const pool = opts.pool;
     const rnd = () => pool[Math.floor(Math.random() * pool.length)];
     S.pick = rnd; S.items = []; S.parts = []; S.won = 0; S.anim = null; S.win = -1;
     S.x = 8 * STEP; S.under = undefined; S.lastT = performance.now();
@@ -250,13 +247,13 @@
     whoosh(fast ? 1.3 : 2.4);
     if (!S.raf) S.raf = requestAnimationFrame(frame);
 
-    const winner = eligible[await rollInt(eligible.length)];      // ролл через random.org
-    if (my !== token) return;
+    const winner = await opts.pick();                              // ролл через random.org
+    if (my !== token || !winner) return null;
     // невеличкий мінімум розгону, щоб навіть миттєва відповідь виглядала як прокрут
     const minSpin = fast ? 250 : 700, waited = performance.now() - (S.t0spin || 0);
     S.t0spin = 0;
     await new Promise(r => setTimeout(r, Math.max(0, minSpin - waited)));
-    if (my !== token) return;
+    if (my !== token) return null;
 
     const P = 3, v = Math.max(400, S.free.v);                      // px/с у момент переходу на гальмування
     const decel = fast ? 1900 : 5000;
@@ -272,18 +269,33 @@
     const target = WINi * STEP + edge, ms = Math.max(fast ? 900 : 2500, (target - S.x) * P * 1000 / v);
     S.free = null;
     await move(target, ms, P);
-    if (my !== token) return;
+    if (my !== token) return null;
     await new Promise(r => setTimeout(r, fast ? 240 : 380));
-    if (my !== token) return;
+    if (my !== token) return null;
     await move(WINi * STEP, fast ? 400 : 520);                     // доводка точно в центр
-    if (my !== token) return;
+    if (my !== token) return null;
 
     S.won = performance.now(); lock(); burst(fast ? 110 : 140);
-    hint.innerHTML = '🎉 Победитель: <b>' + escapeHtml(winner) + '</b>';
-    controls.style.display = 'flex';
+    return winner;
+  }
+
+  // ── підміна startRoulette («Дефолт») ──
+  async function startRoulette2(fast) {
+    if (!state.participants.length) return alert('Нет участников');
+    const drawnNames = new Set(winnersHistory.map(w => String(w.name).toLowerCase()));
+    const eligible = state.participants.filter(p => !drawnNames.has(String(p).toLowerCase()) && !(typeof isBlacklisted === 'function' && isBlacklisted(p)));   // тіньовий бан: у стрічці є, виграти не може
+    if (!eligible.length) return alert('Все участники уже выпадали. Сбросьте розыгрыш и проведите новую регистрацию.');
+    if (!ensureStageProbe()) return orig.start(fast);
+    phase = 'racing';
+    const winner = await spin({ pool: state.participants, pick: async () => eligible[await rollInt(eligible.length)], fast });
+    if (!winner) return;
+    document.getElementById('roulette-overlay-hint').innerHTML = '🎉 Победитель: <b>' + escapeHtml(winner) + '</b>';
+    document.getElementById('roulette-overlay-controls').style.display = 'flex';
     phase = 'done';
     addWinner(winner);
   }
+  // чи є canvas 2D (інакше «Дефолт» — стара стрічка зі своїм addWinner)
+  function ensureStageProbe() { try { return !!document.createElement('canvas').getContext('2d'); } catch (e) { return false; } }
 
   function hide2() {
     token++;
@@ -296,5 +308,6 @@
   if (typeof orig.start === 'function') {
     window.startRoulette = startRoulette2;
     window.hideRouletteOverlay = hide2;
+    window.rouletteSpin = spin;
   }
 })();

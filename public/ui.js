@@ -10,7 +10,7 @@
 
   // ── плитки режимів: клік = той самий setGameMode, що й стрілки каруселі ──
   // свій колір (RGB) і короткий підпис для кожного режиму
-  const MODE_IMG = new Set(['roulette', 'revolver', 'cashhunt', 'royale', 'chatgame', 'marbles', 'plinko']);
+  const MODE_IMG = new Set(['roulette', 'revolver', 'cashhunt', 'royale', 'chatgame', 'marbles', 'plinko', 'dnd']);
   const MODE_LOOK = {
     roulette: { c: '255,196,61', sub: 'рулетка' },
     revolver: { c: '255,92,92', sub: 'барабан' },
@@ -19,6 +19,7 @@
     chatgame: { c: '80,190,255', sub: 'решает чат' },
     marbles:  { c: '255,110,200', sub: 'гонка шаров' },
     plinko:   { c: '84,226,140', sub: 'иксы · DOUBLE' },
+    dnd:      { c: '255,190,80', sub: 'кейсы · банкир' },
     race:     { c: '255,214,90', sub: 'гонка' },
   };
   function buildModeTiles() {
@@ -37,7 +38,7 @@
       if (MODE_IMG.has(m.id)) {
         const img = new Image(); img.alt = ''; img.decoding = 'async';
         img.onerror = () => { b.classList.remove('mt-has-img'); img.remove(); ico.textContent = m.icon; };
-        img.src = '/assets/img/modes/' + m.id + '.webp?v=20261122';
+        img.src = '/assets/img/modes/' + m.id + '.webp?v=20261125';
         ico.appendChild(img); b.classList.add('mt-has-img');
       } else ico.textContent = m.icon;
       const lab = b.querySelector('.mt-label'); lab.textContent = m.label;

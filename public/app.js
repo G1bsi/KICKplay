@@ -228,6 +228,8 @@ chatEvtSource.onmessage = (e) => {
     handleChatgameMessage(username, content);
     appendChatgameChatMsg(username, content, color, badges);
   }
+  // «Нищий кейс»: запам'ятати ніки з чату (підказки для поля гравця) і показати, що пише гравець
+  if (typeof dndChat === 'function') dndChat(username, content);
   // В режиме БАТЛ РОЯЛЬ — занимаем клетку по координате
   if (gameMode === 'royale' && !(typeof isBlacklisted === 'function' && isBlacklisted(username))) {
     royHandleMessage(username, content);
@@ -537,6 +539,7 @@ function setGameMode(mode) {
   if (typeof closeMarblesOverlay === 'function') closeMarblesOverlay();
   if (typeof closeMarbles2Overlay === 'function') closeMarbles2Overlay();
   if (typeof closePlinkoOverlay === 'function') closePlinkoOverlay(true);
+  if (typeof closeDndOverlay === 'function') closeDndOverlay(true);
   phase = 'idle';
 
   gameMode = mode;
@@ -597,6 +600,7 @@ async function startGame() {
   if (gameMode === 'royale') return startRoyale();
   if (gameMode === 'marbles') return (typeof startMarbles2Game === 'function') ? startMarbles2Game() : startMarblesGame();
   if (gameMode === 'plinko' && typeof startPlinko === 'function') return startPlinko();
+  if (gameMode === 'dnd' && typeof startDnd === 'function') return startDnd();
 
   const n = 1;   // Cash Hunt: завжди один переможець
   const res = await fetch('/api/raffle/start', {
@@ -612,6 +616,7 @@ async function startGame() {
 }
 
 async function reroll() {
+  if (gameMode === 'dnd' && typeof startDnd === 'function') return startDnd();
   if (gameMode === 'race' && typeof startF1Race === 'function') return startRaceGame();
   if (gameMode === 'race') {
     // В гонці ліміт до 300
@@ -2607,7 +2612,8 @@ function saveWinnersToServer() {
 
 function addWinner(name) {
   const seconds = getConfirmSeconds();
-  const confirmOn = document.getElementById('toggle-confirm').checked && seconds > 0; // 0 = времени не надо, ждать не нужно
+  /* «Нищий кейс» (dnd): гравець і так грав на очах — чекати відповіді в чаті не треба */
+  const confirmOn = gameMode !== 'dnd' && document.getElementById('toggle-confirm').checked && seconds > 0; // 0 = времени не надо, ждать не нужно
   const time = new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
   const entry = { name, time, status: confirmOn ? 'pending' : 'ok', message: null };
@@ -2618,7 +2624,8 @@ function addWinner(name) {
   /* батл-рояль має ВЛАСНУ заставку переможця (Chicken Dinner після перестрілки
      або банер з короною на мапі) — загальна поверх неї дублювалась і зайва.
      Решта конвеєра (історія, сервер, чат-анонс, таймер підтвердження) працює як скрізь */
-  if (gameMode !== 'royale') showAnnounce(name, seconds, confirmOn);
+  /* «Нищий кейс» показує власну картку виграшу — загальна заставка з таймером там зайва */
+  if (gameMode !== 'royale' && gameMode !== 'dnd') showAnnounce(name, seconds, confirmOn);
   renderRollSource();
 
   if (confirmOn) {
