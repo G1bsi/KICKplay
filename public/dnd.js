@@ -710,7 +710,6 @@
       '<div class="dnd-start-card" role="dialog" aria-label="Кто играет">' +
         '<button class="dnd-start-x" id="dnd-start-x" type="button" aria-label="Закрыть">' + ICO.no + '</button>' +
         '<div class="dnd-start-t">Кто играет в «Нищий кейс»?</div>' +
-        '<div class="dnd-start-s">Впиши ник — например, кто взял награду за баллы канала</div>' +
         '<div class="dnd-start-row"><input id="dnd-start-nick" type="text" list="dnd-start-list" autocomplete="off" spellcheck="false" placeholder="Ник игрока">' +
           '<button class="dnd-btn dnd-deal" id="dnd-start-go" type="button">' + ICO.ok + 'Играть</button></div>' +
         '<datalist id="dnd-start-list"></datalist>' +

@@ -192,7 +192,6 @@
   box-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 60px rgba(var(--winner-rgb), .12);
 }
 .dnd-start-t { font: 800 22px/1.15 var(--font-display); color: #fff; padding-right: 36px; }
-.dnd-start-s { margin-top: -6px; font: 600 13px/1.35 var(--font-ui); color: var(--text-muted); }
 .dnd-start-row { display: flex; gap: 10px; }
 .dnd-start-row input {
   flex: 1; min-width: 0; padding: 14px 16px; border-radius: 16px; outline: none;
