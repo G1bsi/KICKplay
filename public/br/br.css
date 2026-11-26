@@ -1,0 +1,146 @@
+/* ══════════════════════════════════════════════════════════════
+   br.css — Батл Рояль 2.0: 3D-острів у лобі та HUD фіналу.
+   Підключається після royale.css (лобі) і замість старого shootout.css.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── лобі: острів на всю сцену, списки поверх ── */
+#royale-overlay { background: #0b1322; padding: 10px 14px 12px; }
+#royale-overlay .rl-main { align-items: stretch; }
+#royale-overlay .rl-stage {
+  position: absolute; inset: 0; width: auto; aspect-ratio: auto; align-self: stretch;
+  border-radius: var(--r-xl); overflow: hidden;
+  background: linear-gradient(180deg, #4aa3ff 0%, #9fd4ff 60%, #e9f6ff 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), var(--shadow-3);
+}
+#royale-overlay .rl-map { display: none; }
+#royale-overlay .rl-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.br-labels { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+#royale-overlay .rl-stage.rl-loading::after {
+  content: 'Загружаем остров…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display, Unbounded, sans-serif); font-weight: 800; letter-spacing: 2px; color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+#royale-overlay .rl-tip { z-index: 4; }
+#royale-overlay .rl-side { z-index: 3; }
+#royale-overlay .rl-row .rl-num { background: var(--pc, var(--accent)); color: #10131c; }
+#royale-overlay .rl-row.rl-out .rl-num { background: var(--surface-4); color: var(--text-muted); }
+/* повідомлення гри — тост угорі по центру сцени */
+.rl-toast {
+  position: absolute; left: 50%; top: 14px; transform: translate(-50%, -10px); z-index: 4;
+  padding: 9px 18px; border-radius: var(--r-full); max-width: min(720px, 80%);
+  background: rgba(12, 14, 22, 0.84); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.1); color: #fff;
+  font-family: var(--font-ui); font-weight: 800; font-size: var(--fs-sm); letter-spacing: 0.3px; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rl-toast.rl-show { opacity: 1; transform: translate(-50%, 0); }
+/* банер переможця в лобі */
+#royale-overlay .rl-banner { z-index: 5; }
+#royale-overlay .rl-banner .rl-banner-c svg { width: 46px; height: 46px; }
+
+/* ── фінал ── */
+#royale-shootout {
+  position: fixed; inset: 0; z-index: calc(var(--z-overlay-top) + 1);
+  display: none; padding: 0; background: #0b1322; overflow: hidden;
+  font-family: var(--font-ui); color: #fff;
+}
+#royale-shootout.visible { display: block; }
+#so-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.so-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 3; }
+.so-chip {
+  display: flex; align-items: center; gap: 10px; padding: 6px 16px; border-radius: var(--r-full);
+  background: rgba(12, 14, 22, 0.8); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px);
+  font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.7);
+}
+.so-chip b { color: #fff; font-size: var(--fs-lg); font-weight: 800; }
+.so-chip.so-alive { background: #ffd23f; color: #3a2a00; border-color: transparent; }
+.so-chip.so-alive b { color: #1a1300; }
+.so-feed { position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 3; }
+.so-kf {
+  display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: var(--r-full);
+  background: rgba(12, 14, 22, 0.8); border: 1px solid rgba(255,255,255,0.08); font-size: var(--fs-sm); font-weight: 700;
+  animation: soKf .35s var(--ease-out, ease-out);
+}
+.so-kf b { font-weight: 800; }
+.so-kf span { color: rgba(255,255,255,0.75); text-decoration: line-through; text-decoration-color: #ff5a5a; }
+.so-kf i { display: flex; width: 18px; height: 18px; }
+.so-kf i svg { width: 18px; height: 18px; fill: none; stroke: #ffd23f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes soKf { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+.so-focus {
+  position: absolute; left: 14px; bottom: 14px; z-index: 3; display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; min-width: 260px; border-radius: var(--r-lg);
+  background: rgba(12, 14, 22, 0.82); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px);
+  opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s;
+}
+.so-focus.show { opacity: 1; transform: none; }
+.so-focus-dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 10px currentColor; }
+.so-focus-main { flex: 1; min-width: 0; }
+.so-focus-nick { font-weight: 800; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-focus-hp { position: relative; height: 14px; margin-top: 5px; border-radius: 7px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.so-focus-hp i { position: absolute; left: 0; top: 0; bottom: 0; background: #5dff7a; border-radius: 7px; transition: width .2s; }
+.so-focus-hp i.mid { background: #ffd23f; } .so-focus-hp i.low { background: #ff4b4b; }
+.so-focus-hp span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: #0b0f18; }
+.so-focus-k { display: flex; flex-direction: column; align-items: center; font-family: var(--font-mono); }
+.so-focus-k span { font-size: 9px; letter-spacing: 1px; color: rgba(255,255,255,0.55); }
+.so-focus-k b { font-size: var(--fs-xl); font-weight: 800; color: #ffd23f; line-height: 1; }
+.so-cambar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 6px;
+  padding: 6px; border-radius: var(--r-full); background: rgba(12, 14, 22, 0.8); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px); }
+.so-cambtn { min-width: 36px; height: 32px; padding: 0 12px; border-radius: var(--r-full); border: 0; cursor: pointer;
+  background: rgba(255,255,255,0.08); color: #fff; font-weight: 800; font-size: var(--fs-xs); font-family: var(--font-ui); }
+.so-cambtn:hover { background: rgba(255,255,255,0.16); }
+.so-cambtn.on { background: #ffd23f; color: #1a1300; }
+.so-camlabel { min-width: 140px; max-width: 220px; text-align: center; font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 700; color: rgba(255,255,255,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-count { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+  font-family: var(--font-display, Unbounded, sans-serif); font-weight: 800; font-size: clamp(64px, 12vw, 160px); color: #fff;
+  text-shadow: 0 6px 0 rgba(0,0,0,0.25), 0 0 40px rgba(255, 210, 63, 0.6); }
+.so-count.pop { animation: soPop .8s var(--ease-spring, cubic-bezier(.3,1.6,.5,1)); }
+@keyframes soPop { from { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } 40% { opacity: 1; } to { transform: translate(-50%, -50%) scale(1); } }
+.so-load { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; z-index: 5;
+  font-family: var(--font-display, Unbounded, sans-serif); font-weight: 800; letter-spacing: 2px; background: #0b1322; }
+.so-load.show { display: flex; }
+#royale-shootout .so-winner { position: absolute; left: 50%; top: auto; right: auto; bottom: 7%; padding: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; inset: auto auto 7% 50%; transform: translate(-50%, 30px); z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  opacity: 0; pointer-events: none; transition: opacity .5s, transform .6s var(--ease-spring, ease-out); text-align: center; }
+#royale-shootout .so-winner.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.so-win-k { font-family: var(--font-mono); font-weight: 700; letter-spacing: 4px; font-size: var(--fs-sm); color: #ffd23f; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+.so-win-n { font-family: var(--font-display, Unbounded, sans-serif); font-weight: 800; font-size: clamp(36px, 6vw, 84px); line-height: 1.05; color: #fff;
+  text-shadow: 0 4px 0 #c8901a, 0 10px 30px rgba(0,0,0,0.45); max-width: 90vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.so-win-s { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+.so-win-s span { padding: 6px 14px; border-radius: var(--r-full); background: rgba(12, 14, 22, 0.8); font-weight: 700; font-size: var(--fs-sm); color: rgba(255,255,255,0.8); }
+.so-win-s b { color: #ffd23f; font-weight: 800; }
+.so-win-x { margin-top: 10px; padding: 10px 28px; border-radius: var(--r-full); border: 0; cursor: pointer; background: #ffd23f; color: #1a1300; font-weight: 800; font-family: var(--font-ui); font-size: var(--fs-sm); }
+.so-win-x:hover { filter: brightness(1.08); }
+
+/* ── MOBA-лобі: мінімапа зліва внизу, списки праворуч ── */
+#royale-overlay .rl-alive-side { left: auto; right: 10px; top: 10px; bottom: auto; max-height: calc(52% - 16px); }
+#royale-overlay .rl-dead-side { right: 10px; bottom: 10px; max-height: calc(46% - 16px); }
+.rl-minimap {
+  position: absolute; left: 10px; bottom: 10px; z-index: 3; width: clamp(170px, 19vw, 250px);
+  padding: 6px; border-radius: 12px; background: rgba(12, 16, 26, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.rl-minimap canvas { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; cursor: crosshair; }
+.rl-mm-home {
+  display: block; width: 100%; margin-top: 6px; padding: 5px 0; border: 0; border-radius: 7px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.08); color: #fff; font: 700 11px var(--font-ui); letter-spacing: 0.5px;
+}
+.rl-mm-home:hover { background: rgba(255, 255, 255, 0.16); }
+#royale-overlay .rl-cv { cursor: grab; }
+#royale-overlay .rl-cv:active { cursor: grabbing; }
+
+/* ── острів на весь екран, без рамок: HUD і кнопки поверх ── */
+#royale-overlay { padding: 0; }
+#royale-overlay .rl-main { position: absolute; inset: 0; }
+#royale-overlay .rl-stage { border-radius: 0; box-shadow: none; }
+#royale-overlay .rl-hud { position: absolute; left: 0; right: 0; top: 0; z-index: 4; padding: 10px 14px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 14, 28, 0.55), rgba(6, 14, 28, 0)); }
+#royale-overlay .rl-hud > * { pointer-events: auto; }
+#royale-overlay .rl-title { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+#royale-overlay .rl-controls { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 4;
+  background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; }
+#royale-overlay .rl-controls button { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+#royale-overlay .rl-alive-side { top: 64px; }
+#royale-overlay .rl-minimap { left: 14px; bottom: 14px; }
+#royale-overlay .rl-test-btn { left: 14px; top: 14px; bottom: auto; z-index: 6; }
+#royale-overlay .rl-toast { top: 64px; }
+#royale-overlay .rl-test-form { top: 52px; bottom: auto; }

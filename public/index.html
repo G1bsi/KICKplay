@@ -12,7 +12,9 @@
 <link rel="stylesheet" href="/assets/app.css">
 <link rel="stylesheet" href="/assets/shell.css">
 <link rel="stylesheet" href="/assets/royale.css">
-<link rel="stylesheet" href="/assets/shootout.css">
+<link rel="stylesheet" href="/assets/br/br.css?v=20261127b">
+<link rel="stylesheet" href="/assets/br/br-dock.css?v=20261127e">
+<link rel="stylesheet" href="/assets/br/br-final.css?v=20261127j">
 <link rel="stylesheet" href="/assets/marbles.css">
 <link rel="stylesheet" href="/assets/marbles2/mb2.css?v=20261123m">
 <!-- стилі гонки лишаються навіть коли режим прихований: вони ховають розмітку #f1-overlay -->
@@ -264,7 +266,7 @@
 <div id="royale-overlay">
   <!-- Верхній HUD: ALIVE, фаза зони, стан входу, статус -->
   <div class="rl-hud">
-    <div class="rl-title">🪂 БАТЛ РОЯЛЬ</div>
+    <div class="rl-title"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 7 0 0 1 18 0z"/><path d="M3 11l9 9 9-9M12 11v9"/></svg>БАТЛ РОЯЛЬ</div>
     <div class="rl-chips">
       <span class="rl-chip rl-alive">ALIVE <b id="rl-alive-n">0</b></span>
       <span class="rl-chip" id="rl-zone-chip">ЗОНА <b>ОЖИДАНИЕ</b></span>
@@ -275,7 +277,7 @@
 
   <div class="rl-main">
     <aside class="rl-side rl-alive-side">
-      <div class="rl-side-head"><span class="rl-dot"></span>Живые<span class="rl-cnt" id="rl-alive-cnt">0</span></div>
+      <div class="rl-side-head"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Живые<span class="rl-cnt" id="rl-alive-cnt">0</span></div>
       <div class="rl-list" id="rl-alive-list"></div>
     </aside>
 
@@ -284,25 +286,53 @@
       <div class="rl-map" id="rl-map"></div>
       <div class="rl-tip" id="rl-tip"></div>
       <div class="rl-banner" id="rl-banner">
-        <div class="rl-banner-c">👑</div>
-        <div class="rl-banner-k">Winner winner chicken dinner</div>
+        <div class="rl-banner-c"><svg viewBox="0 0 24 24" fill="#ffd23f" aria-hidden="true"><path d="M3 18h18l-1.5-10-4.5 4-3-7-3 7-4.5-4z"/></svg></div>
+        <div class="rl-banner-k">Последний выживший</div>
         <div class="rl-banner-n" id="rl-banner-nick"></div>
       </div>
     </div>
 
     <aside class="rl-side rl-dead-side">
-      <div class="rl-side-head"><span class="rl-dot"></span>Выбыли<span class="rl-cnt" id="rl-dead-cnt">0</span></div>
+      <div class="rl-side-head"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-7 7v4l2 2v3h3v-2h4v2h3v-3l2-2v-4a7 7 0 0 0-7-7z"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/></svg>Выбыли<span class="rl-cnt" id="rl-dead-cnt">0</span></div>
       <div class="rl-list" id="rl-dead-list"></div>
     </aside>
   </div>
 
   <!-- Кнопки стрімера -->
-  <div class="rl-controls">
-    <button class="btn-gold" id="rl-zone-btn" onclick="royaleShrinkZone()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>ЗОНА</button>
-    <button class="btn-red" id="rl-red-btn" onclick="royaleRedZone()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>КРАСНАЯ ЗОНА</button>
-    <button class="btn-primary" id="rl-fight-btn" onclick="royLaunchFight()"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg>НАЧАТЬ ФИНАЛ</button>
-    <button class="btn-dark" onclick="royNewGame()">🆕 НОВАЯ</button>
-    <button class="btn-dark" onclick="closeRoyaleOverlay()">ЗАКРЫТЬ</button>
+  <!-- Панель стрімера в стилі «умінь» MOBA -->
+  <div class="rl-dock" id="rl-dock">
+    <div class="rl-dock-stats">
+      <div class="rl-g rl-g-alive" title="В живых">
+        <div class="rl-g-ic"><svg viewBox="0 0 44 44" aria-hidden="true"><circle class="rl-ring-bg" cx="22" cy="22" r="18"/><circle class="rl-ring-fg" id="rl-d-ring" cx="22" cy="22" r="18"/></svg><b id="rl-d-alive">0</b></div>
+        <span>живых</span>
+      </div>
+      <div class="rl-g rl-g-zone" title="Зона">
+        <div class="rl-g-ic"><canvas id="rl-d-zmap" width="88" height="88"></canvas></div>
+        <span id="rl-d-zone">зона</span>
+      </div>
+      <div class="rl-g rl-g-seat" title="Места на острове">
+        <div class="rl-g-ic"><svg viewBox="0 0 44 44" aria-hidden="true"><circle class="rl-ring-bg" cx="22" cy="22" r="18"/><circle class="rl-ring-fg" id="rl-d-sring" cx="22" cy="22" r="18"/></svg><b id="rl-d-seat">0</b></div>
+        <span id="rl-d-seat-k">мест</span>
+      </div>
+    </div>
+    <div class="rl-slots">
+      <button class="rl-slot rl-s-zone" id="rl-zone-btn" type="button" onclick="royaleShrinkZone()" title="Сжать зону">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="2.5" stroke-dasharray="3.2 2.6"/><rect x="8" y="8" width="8" height="8" rx="1.5"/><path d="M3.5 3.5 7 7M20.5 3.5 17 7M3.5 20.5 7 17M20.5 20.5 17 17"/></svg>
+        <span class="rl-slot-k">Зона</span>
+      </button>
+      <button class="rl-slot rl-s-red" id="rl-red-btn" type="button" onclick="royaleRedZone()" title="Ракетный удар">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v4"/><path d="M9 6.5h6l-.6 7.2a2.4 2.4 0 0 1-4.8 0z"/><path d="M9.6 9.5 7.5 8M14.4 9.5l2.1-1.5"/><path d="M4 21.5l2.5-2.5M20 21.5 17.5 19M12 22v-3"/></svg>
+        <span class="rl-slot-k">Ракеты</span>
+      </button>
+      <button class="rl-slot rl-s-fight" id="rl-fight-btn" type="button" onclick="royLaunchFight()" title="Начать финал">
+        <em class="rl-slot-n" id="rl-fight-n"></em><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg>
+        <span class="rl-slot-k">Финал</span>
+      </button>
+    </div>
+    <div class="rl-dock-side">
+      <button class="rl-mini" type="button" onclick="royNewGame()" title="Новая игра"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
+      <button class="rl-mini" type="button" onclick="closeRoyaleOverlay()" title="Закрыть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
   </div>
 
   <!-- Тестова панель-олівець: заливка ніків без стріма -->
@@ -320,48 +350,8 @@
   </div>
 </div>
 
-<!-- Екран перестрілки БР (фінал, PUBG) — canvas + DOM-HUD, керує shootout.js -->
-<div id="royale-shootout">
-  <canvas id="so-canvas"></canvas>
-  <div class="so-hud-top">
-    <div class="so-hud-box so-alive-box"><span class="so-hud-lbl">Alive</span><span class="so-hud-val" id="so-alive">0</span></div>
-    <div class="so-hud-box" id="so-zone-box"><span class="so-hud-lbl" id="so-zone-lbl">Зона</span><span class="so-hud-val" id="so-zone-timer">—</span></div>
-  </div>
-  <div class="so-killfeed" id="so-killfeed"></div>
-  <!-- Нижня панель «гравець у кадрі» (PUBG player bar): номер/колір, нік, HP, кіли -->
-  <div class="so-focus" id="so-focus">
-    <div class="so-focus-team" id="so-focus-num">1</div>
-    <div class="so-focus-main">
-      <div class="so-focus-nick" id="so-focus-nick"></div>
-      <div class="so-focus-hpbar"><div class="so-focus-hpfill" id="so-focus-hp"></div><span class="so-focus-hptxt" id="so-focus-hptxt">100/100</span></div>
-    </div>
-    <div class="so-focus-kills"><span class="so-focus-kl">Убито</span><span class="so-focus-kv" id="so-focus-kills">0</span></div>
-  </div>
-  <div class="so-cambar">
-    <button class="so-cambtn" onclick="rsoFocusNext(-1)" title="Предыдущий игрок">◀</button>
-    <div class="so-camlabel"><span class="so-cam-prefix">камера</span><span id="so-cam-chip"></span><span id="so-cam-name">авто</span></div>
-    <button class="so-cambtn" onclick="rsoFocusNext(1)" title="Следующий игрок">▶</button>
-    <button class="so-cambtn" id="so-fly-btn" onclick="rsoToggleFly()" title="Свободный полёт"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z"/></svg>Полёт</button>
-    <button class="so-cambtn" id="so-overview-btn" onclick="rsoToggleOverview()" title="К бою"><svg class="kp-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg>К бою</button>
-  </div>
-  <div class="so-flyhint" id="so-flyhint">WASD — движение · мышь — обзор · Space/E — вверх · C/Q — вниз · колесо — скорость</div>
-  <div id="so-countdown"></div>
-  <div class="so-winner" id="so-winner">
-    <canvas class="wc-fx" aria-hidden="true"></canvas>
-    <div class="wc-hero">
-      <div class="wc-rays" aria-hidden="true"></div>
-      <div class="wc-ring-solid" aria-hidden="true"></div>
-      <div class="wc-avatar"><span></span><img alt=""></div>
-      <div class="wc-crown">👑</div>
-    </div>
-    <div class="wc-card">
-      <div class="wc-label">Winner winner · chicken dinner</div>
-      <div class="wc-name so-winner-name" id="so-winner-name"></div>
-    </div>
-    <div class="wc-stats so-winner-stats" id="so-winner-stats"></div>
-    <button class="wc-close so-winner-close" onclick="RSO.stop()">Закрыть</button>
-  </div>
-</div>
+<!-- Фінал Батл Рояля 2.0 — HUD і canvas будує shootout.js -->
+<div id="royale-shootout"></div>
 
 <!-- Оверлей режима ЧАТ (Бонусбуря) -->
 <div id="chatgame-overlay">
@@ -500,6 +490,7 @@
   <div id="f1-done"><button class="btn-dark" onclick="f1Again()">🔄 Ещё гонка</button><button class="btn-primary" onclick="closeF1Race()">Закрыть</button></div>
 </div>
 
+<script src="/assets/kpsfx.js?v=20261126"></script>
 <script src="/assets/app.js"></script>
 <script src="/assets/ui.js"></script>
 <script src="/assets/blacklist.js"></script>
@@ -510,9 +501,10 @@
 <script src="/assets/wincard-modes.js"></script>
 <script src="/assets/plinko.js"></script>
 <!-- «Нищий кейс»: телефон банкіра — «Western Electric 500 Vintage Rotary Telephone» by Skyice (sketchfab.com/vicky12218), CC BY 4.0, змінено. Див. CREDITS.md -->
-<script src="/assets/dnd.js?v=20261126j"></script>
-<script src="/assets/royale.js"></script>
-<script src="/assets/shootout.js"></script>
+<script src="/assets/dnd.js?v=20261126k"></script>
+<script src="/assets/br/brcore.js?v=20261127b"></script>
+<script src="/assets/royale.js?v=20261127k"></script>
+<script src="/assets/shootout.js?v=20261127k"></script>
 <!-- Гонка прихована — не вантажимо ~70КБ на кожне відкриття панелі. Щоб повернути, розкоментуй:
 <script src="/assets/f1race.js"></script>
 -->

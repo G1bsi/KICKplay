@@ -1,0 +1,202 @@
+/* ══════════════════════════════════════════════════════════════
+   br-dock.css — панель стрімера в лобі Батл Рояля, зроблена з нуля як «панель умінь» MOBA:
+   квадратні слоти з іконками, гарячі клавіші Q / W / E, сектор «перезарядки», поки дія триває.
+   Списки «Живые / Выбыли» і верхні чипи сховані — цифри живуть у самій панелі.
+   Підключається ПІСЛЯ br.css.
+   ══════════════════════════════════════════════════════════════ */
+#royale-overlay .rl-side,
+#royale-overlay .rl-title,
+#royale-overlay .rl-chips { display: none !important; }
+#royale-overlay .rl-hud { background: none; }
+
+#royale-overlay {
+  --dk-ink: #070b16;
+  --dk-glass: linear-gradient(180deg, rgba(22, 30, 52, 0.92), rgba(9, 13, 26, 0.94));
+  --dk-line: rgba(255, 255, 255, 0.09);
+}
+
+/* ── панель ── */
+.rl-dock {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: stretch; gap: 14px; padding: 10px 12px;
+  border-radius: 22px; background: var(--dk-glass);
+  box-shadow: 0 0 0 1px var(--dk-line), 0 0 0 4px rgba(7, 11, 22, 0.55), 0 18px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-family: var(--font-display, Unbounded, sans-serif); user-select: none;
+}
+
+/* цифри зліва */
+.rl-dock-stats { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 2px 14px 2px 4px; border-right: 1px solid var(--dk-line); }
+.rl-st { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.rl-st b { min-width: 52px; text-align: right; font: 800 15px/1 var(--font-display, Unbounded, sans-serif); color: #fff; font-variant-numeric: tabular-nums; }
+.rl-st span { font: 700 10px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1.2px; text-transform: uppercase; color: rgba(255, 255, 255, 0.5); }
+.rl-st-alive b { font-size: 22px; color: #ffd84d; text-shadow: 0 0 16px rgba(255, 216, 77, 0.35); }
+.rl-st.rl-shut b { color: #ff8b7a; }
+.rl-st.rl-shut span { color: rgba(255, 139, 122, 0.8); }
+
+/* ── слоти ── */
+.rl-slots { display: flex; gap: 10px; align-items: flex-end; }
+.rl-slot {
+  --c1: #7a8bb8; --c2: #3b4a73; --glow: rgba(140, 160, 255, 0.45);
+  position: relative; width: 78px; height: 78px; padding: 0; border: 0; border-radius: 16px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  color: #fff; overflow: hidden; isolation: isolate;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--c1) 0%, var(--c2) 62%, #0d1324 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.16), inset 0 -10px 18px rgba(0, 0, 0, 0.35), 0 0 0 2px var(--dk-ink), 0 6px 14px rgba(0, 0, 0, 0.45);
+  transition: transform .12s ease, box-shadow .2s ease, filter .2s ease;
+}
+.rl-slot::before {   /* відблиск зверху */
+  content: ''; position: absolute; inset: 2px 2px 50% 2px; border-radius: 14px 14px 40% 40%; z-index: -1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+}
+.rl-slot svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 10px var(--glow)); }
+.rl-slot-k { font: 800 10px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 1px; text-transform: uppercase; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.rl-key {   /* гаряча клавіша в кутку */
+  position: absolute; left: 5px; top: 5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(7, 11, 22, 0.75); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  font: 800 10px/1 var(--font-display, Unbounded, sans-serif); font-style: normal; color: #fff;
+}
+.rl-slot-n {   /* скільки бійців у фіналі */
+  position: absolute; right: 5px; top: 5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  display: none; align-items: center; justify-content: center;
+  background: #fff; color: #10340a; font: 800 11px/1 var(--font-display, Unbounded, sans-serif); font-style: normal;
+}
+.rl-slot:hover:not(:disabled) { transform: translateY(-3px); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.3), inset 0 -10px 18px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--dk-ink), 0 10px 22px rgba(0, 0, 0, 0.5), 0 0 22px var(--glow); }
+.rl-slot:active:not(:disabled), .rl-slot.rl-press { transform: translateY(1px) scale(0.96); }
+.rl-slot:disabled { cursor: default; filter: saturate(0.15) brightness(0.62); }
+
+/* кольори слотів */
+.rl-s-zone  { --c1: #c9a0ff; --c2: #6a35c7; --glow: rgba(186, 140, 255, 0.7); }
+.rl-s-red   { --c1: #ff9a7c; --c2: #c42a22; --glow: rgba(255, 110, 80, 0.7); }
+.rl-s-fight { --c1: #b9ff8a; --c2: #2f9e1e; --glow: rgba(150, 255, 110, 0.75); }
+.rl-s-fight.rl-on { filter: none; animation: dkReady 1.1s ease-in-out infinite alternate; }
+.rl-s-fight.rl-on .rl-slot-n { display: flex; }
+@keyframes dkReady { from { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.3), 0 0 0 2px var(--dk-ink), 0 0 10px var(--glow); } to { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 0 2px var(--dk-ink), 0 0 34px var(--glow); } }
+
+/* «перезарядка»: темний сектор, що збігає за годинниковою стрілкою */
+@property --dk-a { syntax: '<angle>'; inherits: false; initial-value: 360deg; }
+.rl-slot.rl-cd::after {
+  content: ''; position: absolute; inset: 0; border-radius: 16px; z-index: 2; pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(5, 8, 18, 0.72) var(--dk-a), transparent var(--dk-a));
+  animation: dkCd var(--cd, 2400ms) linear forwards;
+}
+.rl-slot.rl-cd { filter: none; }
+@keyframes dkCd { from { --dk-a: 360deg; } to { --dk-a: 0deg; } }
+
+/* ── дрібні кнопки праворуч ── */
+.rl-dock-side { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--dk-line); }
+.rl-mini {
+  width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: background .15s, color .15s, transform .12s;
+}
+.rl-mini svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.rl-mini:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.rl-mini:active { transform: scale(0.94); }
+
+/* тост і підказка клітинки — в тон панелі */
+#royale-overlay .rl-toast { top: 18px; background: var(--dk-glass); border: 0; box-shadow: 0 0 0 1px var(--dk-line), 0 10px 26px rgba(0, 0, 0, 0.45);
+  font: 800 13px var(--font-display, Unbounded, sans-serif); letter-spacing: 0.4px; padding: 11px 22px; border-radius: 16px; }
+#royale-overlay .rl-tip { background: var(--dk-glass); border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--dk-line), 0 10px 26px rgba(0, 0, 0, 0.45); }
+/* мінімапа — та сама «скляна» рамка */
+#royale-overlay .rl-minimap { background: var(--dk-glass); border: 0; border-radius: 20px; padding: 8px;
+  box-shadow: 0 0 0 1px var(--dk-line), 0 0 0 4px rgba(7, 11, 22, 0.55), 0 18px 40px rgba(0, 0, 0, 0.5); }
+#royale-overlay .rl-minimap canvas { border-radius: 13px; }
+#royale-overlay .rl-mm-home { margin-top: 8px; padding: 7px 0; border: 0; border-radius: 10px; background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.8);
+  font: 800 10px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 1px; text-transform: uppercase; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+#royale-overlay .rl-mm-home:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+@media (max-width: 1100px) {
+  .rl-slot { width: 64px; height: 64px; }
+  .rl-slot svg { width: 28px; height: 28px; }
+  .rl-dock-stats { display: none; }
+}
+
+/* слот фіналу видно завжди (заблокований, поки фінал не готовий) — перекриває старе #rl-fight-btn{display:none} */
+#royale-overlay #rl-fight-btn.rl-slot { display: flex; }
+
+/* ── блок цифр (2026-11-27): три «датчики» — кільце живих, мінісітка зони, кільце місць ── */
+.rl-dock-stats { flex-direction: row; align-items: center; gap: 12px; padding: 0 14px 0 4px; }
+.rl-st { display: none; }
+.rl-g { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 50px; }
+.rl-g-ic { position: relative; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; }
+.rl-g-ic svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.rl-ring-bg { fill: rgba(255, 255, 255, 0.04); stroke: rgba(255, 255, 255, 0.12); stroke-width: 4; }
+.rl-ring-fg { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 113.1; stroke-dashoffset: 113.1; transition: stroke-dashoffset .6s ease, stroke .3s; }
+.rl-g-alive .rl-ring-fg { stroke: #ffd84d; filter: drop-shadow(0 0 4px rgba(255, 216, 77, 0.6)); }
+.rl-g-seat .rl-ring-fg { stroke: #5fd3ff; }
+.rl-g-seat.rl-shut .rl-ring-fg { stroke: #ff7a66; }
+.rl-g-ic b { position: relative; font: 800 15px/1 var(--font-display, Unbounded, sans-serif); color: #fff; font-variant-numeric: tabular-nums; }
+.rl-g-alive .rl-g-ic b { font-size: 16px; color: #ffe27a; }
+.rl-g-zone .rl-g-ic canvas { width: 40px; height: 40px; border-radius: 6px; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14); }
+.rl-g > span { font: 700 9px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1.1px; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
+.rl-g-seat.rl-shut > span { color: #ff9b8a; }
+
+/* ── фінал: HUD у тому ж «скляному» стилі ── */
+#royale-shootout { background: #1d4a2a; }
+#royale-shootout .so-chip, #royale-shootout .so-kf, #royale-shootout .so-focus, #royale-shootout .so-cambar, #royale-shootout .so-win-s span {
+  background: linear-gradient(180deg, rgba(22, 30, 52, 0.92), rgba(9, 13, 26, 0.94)); border: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 10px 24px rgba(0, 0, 0, 0.45); backdrop-filter: none;
+}
+#royale-shootout .so-chip { border-radius: 14px; font-family: var(--font-display, Unbounded, sans-serif); }
+#royale-shootout .so-chip.so-alive { background: linear-gradient(180deg, #ffe27a, #e9a51e); color: #3b2300; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 10px 24px rgba(0, 0, 0, 0.45); }
+#royale-shootout .so-kf { border-radius: 12px; }
+#royale-shootout .so-focus { border-radius: 18px; }
+#royale-shootout .so-cambar { border-radius: 18px; padding: 6px; }
+#royale-shootout .so-cambtn { border-radius: 10px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-family: var(--font-display, Unbounded, sans-serif); font-size: 10px; letter-spacing: 0.8px; }
+#royale-shootout .so-cambtn.on { background: linear-gradient(180deg, #ffe27a, #e9a51e); color: #3b2300; box-shadow: none; }
+#royale-shootout .so-win-x { border-radius: 14px; font-family: var(--font-display, Unbounded, sans-serif); padding: 12px 30px; box-shadow: 0 4px 0 #7a5208, 0 10px 22px rgba(0, 0, 0, 0.4); }
+
+/* ── картка клітинки (наведення): тайл-координата зі статусом зони, аватарки Kick, ніки кольорами гравців ── */
+#royale-overlay .rl-tip { --rt-c: #43e3a8; --rt-c2: #1aa06f; width: 216px; padding: 10px; border-radius: 16px; font-family: Manrope, system-ui, sans-serif;
+  background: var(--dk-glass); border: 0; backdrop-filter: none;
+  box-shadow: 0 0 0 1px var(--dk-line), 0 0 0 4px rgba(7, 11, 22, 0.45), 0 16px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  pointer-events: none; transform-origin: left center; }
+#royale-overlay .rl-tip.rl-show { display: block; animation: rtIn 0.16s ease-out; }
+#royale-overlay .rl-tip.rt-flip { transform-origin: right center; }
+@keyframes rtIn { from { opacity: 0; transform: translateX(-6px) scale(0.96); } to { opacity: 1; transform: none; } }
+/* стрілка до клітинки */
+#royale-overlay .rl-tip::before { content: ''; position: absolute; left: -7px; top: var(--rt-ay, 50%); width: 12px; height: 12px; margin-top: -6px; transform: rotate(45deg);
+  background: rgba(18, 25, 44, 0.96); box-shadow: -1px 1px 0 var(--dk-line); border-radius: 2px; }
+#royale-overlay .rl-tip.rt-flip::before { left: auto; right: -7px; box-shadow: 1px -1px 0 var(--dk-line); }
+#royale-overlay .rl-tip:has(.rt-storm) { --rt-c: #c07bff; --rt-c2: #7a3fd6; }
+#royale-overlay .rl-tip:has(.rt-red) { --rt-c: #ff5a45; --rt-c2: #c2261a; }
+.rl-tip .rt-top { display: flex; align-items: center; gap: 10px; }
+.rl-tip .rt-cell { position: relative; flex: 0 0 auto; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: baseline; justify-content: center; padding-top: 9px;
+  background: linear-gradient(160deg, var(--rt-c), var(--rt-c2)); color: #06120d;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.28), inset 0 -8px 14px rgba(0, 0, 0, 0.22), 0 0 0 2px var(--dk-ink), 0 0 18px color-mix(in srgb, var(--rt-c) 45%, transparent);
+  font-family: var(--font-display, Unbounded, sans-serif); line-height: 1; }
+.rl-tip .rt-cell b { font-size: 20px; font-weight: 900; }
+.rl-tip .rt-cell span { font-size: 13px; font-weight: 800; margin-left: 1px; opacity: 0.85; }
+.rl-tip .rt-cell::after { content: ''; position: absolute; inset: 5px; border-radius: 8px; border: 1px dashed rgba(6, 18, 13, 0.28); pointer-events: none; }
+.rl-tip .rt-red .rt-cell { animation: rtRed 0.7s ease-in-out infinite alternate; }
+@keyframes rtRed { to { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5), 0 0 0 2px var(--dk-ink), 0 0 26px var(--rt-c); } }
+.rl-tip .rt-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rl-tip .rt-st { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--rt-c); }
+.rl-tip .rt-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--rt-c); box-shadow: 0 0 8px var(--rt-c); }
+.rl-tip .rt-cnt { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, 0.62); white-space: nowrap; }
+.rl-tip .rt-cnt b { font-family: var(--font-display, Unbounded, sans-serif); font-size: 17px; color: #fff; margin-right: 2px; }
+.rl-tip .rt-cnt s { text-decoration: none; margin-left: 8px; font-size: 11px; color: #ff8a8a; font-weight: 800; }
+.rl-tip .rt-hint { margin-top: 9px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--dk-line);
+  font-size: 11.5px; line-height: 1.35; color: rgba(255, 255, 255, 0.6); }
+.rl-tip .rt-hint b { color: var(--rt-c); font-family: var(--font-display, Unbounded, sans-serif); font-size: 11px; padding: 1px 5px; border-radius: 5px; background: rgba(255, 255, 255, 0.07); }
+.rl-tip .rt-avs { display: flex; margin: 10px 0 2px 4px; }
+.rl-tip .rt-av { position: relative; width: 28px; height: 28px; margin-left: -6px; border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+  background: var(--pc); box-shadow: 0 0 0 2px #0c1222, 0 0 0 3.5px var(--pc); display: grid; place-items: center; }
+.rl-tip .rt-av em { font-style: normal; font-size: 12px; font-weight: 900; color: rgba(0, 0, 0, 0.6); }
+.rl-tip .rt-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.rl-tip .rt-av img.ok { opacity: 1; }
+.rl-tip .rt-av.rt-more { background: #1c2540; box-shadow: 0 0 0 2px #0c1222, 0 0 0 3.5px rgba(255, 255, 255, 0.2); color: #fff; font-size: 10.5px; font-weight: 800; }
+.rl-tip .rt-list { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.rl-tip .rt-n { display: flex; align-items: center; gap: 7px; padding: 3px 6px; border-radius: 7px; font-size: 12.5px; font-weight: 700; color: #fff; }
+.rl-tip .rt-n:nth-child(odd) { background: rgba(255, 255, 255, 0.035); }
+.rl-tip .rt-n i { width: 8px; height: 8px; border-radius: 3px; background: var(--pc); flex: 0 0 auto; }
+.rl-tip .rt-n span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-tip .rt-n em { font-style: normal; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.35); }
+.rl-tip .rt-n.rt-dead { opacity: 0.45; }
+.rl-tip .rt-n.rt-dead span { text-decoration: line-through; text-decoration-color: #ff5a45; }
+.rl-tip .rt-n.rt-dead i { background: #555c6e; }
+.rl-tip .rt-rest { margin-top: 4px; padding-left: 6px; font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.4); }

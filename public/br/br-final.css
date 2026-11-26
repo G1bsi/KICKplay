@@ -1,0 +1,156 @@
+/* ══════════════════════════════════════════════════════════════
+   br-final.css — HUD фіналу Батл Рояля (MOBA-подача, «скляні» плашки як у лобі):
+   рядок аватарок Kick зверху з ядром «в живих + таймер зони», анонси подій,
+   картка бійця в кадрі, панель камери, кілфід, картка чемпіона.
+   ══════════════════════════════════════════════════════════════ */
+#royale-shootout {
+  --sf-glass: linear-gradient(180deg, rgba(22, 30, 52, 0.93), rgba(9, 13, 26, 0.95));
+  --sf-line: rgba(255, 255, 255, 0.09);
+  --sf-gold: #ffd84d; --sf-gold2: #e9a51e; --sf-ink: #070b16;
+  --sf-shadow: 0 0 0 1px var(--sf-line), 0 0 0 4px rgba(7, 11, 22, 0.5), 0 14px 32px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-ui, Manrope, sans-serif); color: #fff; user-select: none;
+}
+#royale-shootout .sf-glass, #royale-shootout .sf-core, #royale-shootout .sf-hero, #royale-shootout .sf-dock { background: var(--sf-glass); box-shadow: var(--sf-shadow); }
+
+/* ── верхній рядок: аватарки | ядро | аватарки ── */
+.sf-top { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: flex-start; gap: 10px; max-width: calc(100vw - 340px); }
+.sf-roster { display: flex; gap: 5px; padding-top: 6px; min-width: 0; }
+.sf-roster-l { flex-direction: row-reverse; }
+.sf-pt { position: relative; width: 40px; flex: 0 0 40px; cursor: pointer; transition: transform .2s, opacity .3s, filter .3s; }
+.sf-pt:hover { transform: translateY(-2px); }
+.sf-pt-av { position: relative; width: 40px; height: 40px; border-radius: 11px; overflow: hidden; background: var(--pc, #556);
+  box-shadow: 0 0 0 2px var(--pc, #fff), 0 0 0 4px rgba(7, 11, 22, 0.8), 0 6px 14px rgba(0, 0, 0, 0.45); }
+.sf-av-l { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 800 14px/1 var(--font-display, Unbounded, sans-serif); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.25), rgba(0, 0, 0, 0.25)); }
+.sf-pt-av img, .sf-hero-av img, .sf-win-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+.sf-pt-av img.ok, .sf-hero-av img.ok, .sf-win-av img.ok { opacity: 1; }
+.sf-pt > i { display: block; height: 5px; margin-top: 6px; border-radius: 3px; background: rgba(7, 11, 22, 0.85); overflow: hidden; box-shadow: 0 0 0 1px rgba(7, 11, 22, 0.85); }
+.sf-pt > i b { display: block; height: 100%; background: linear-gradient(90deg, #4fdc52, #8dff6a); border-radius: 3px; transition: width .25s; }
+.sf-pt > em { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  background: var(--sf-gold); color: #2a1800; font: 800 10px/1 var(--font-display, Unbounded, sans-serif); font-style: normal; box-shadow: 0 0 0 2px var(--sf-ink); z-index: 1; }
+.sf-pt.foc .sf-pt-av { box-shadow: 0 0 0 2px var(--sf-gold), 0 0 0 4px rgba(7, 11, 22, 0.8), 0 0 18px rgba(255, 216, 77, 0.6); }
+.sf-pt.dead { opacity: 0.5; filter: grayscale(1); }
+.sf-pt.dead .sf-pt-av::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(45deg, transparent 44%, #ff4b4b 44% 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, #ff4b4b 44% 56%, transparent 56%), rgba(20, 0, 0, 0.35); }
+.sf-pt.sf-more { width: 40px; height: 40px; flex: 0 0 40px; margin-top: 0; border-radius: 11px; display: flex; align-items: center; justify-content: center; cursor: default;
+  background: var(--sf-glass); box-shadow: 0 0 0 1px var(--sf-line); font: 800 11px/1 var(--font-display, Unbounded, sans-serif); color: rgba(255, 255, 255, 0.75); }
+
+/* ядро: в живих + кільце таймера зони */
+.sf-core { flex: 0 0 auto; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 8px 14px 8px 16px; border-radius: 18px; }
+.sf-core-alive { grid-row: 1 / 3; display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.sf-core-alive b { font: 800 34px/1 var(--font-display, Unbounded, sans-serif); color: var(--sf-gold); text-shadow: 0 0 22px rgba(255, 216, 77, 0.45); font-variant-numeric: tabular-nums; }
+.sf-core-alive span { margin-top: 4px; font: 700 9px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+.sf-core-zone { position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.sf-core-zone svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.sf-zr-bg { fill: rgba(140, 90, 255, 0.12); stroke: rgba(255, 255, 255, 0.12); stroke-width: 4; }
+.sf-zr-fg { fill: none; stroke: #b48cff; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 113.1; stroke-dashoffset: 113.1; transition: stroke-dashoffset .3s linear; filter: drop-shadow(0 0 4px rgba(180, 140, 255, 0.7)); }
+.sf-zr-fg.hot { stroke: #ff7ad9; animation: sfPulse .6s ease-in-out infinite alternate; }
+.sf-core-zone b { position: relative; font: 800 14px/1 var(--font-display, Unbounded, sans-serif); color: #e3d4ff; font-variant-numeric: tabular-nums; }
+.sf-core-k { font: 700 8.5px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1px; text-transform: uppercase; color: rgba(227, 212, 255, 0.65); text-align: center; white-space: nowrap; }
+@keyframes sfPulse { to { stroke-width: 6; } }
+
+/* ── кілфід ── */
+.sf-feed { position: absolute; top: 14px; right: 14px; z-index: 4; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.sf-kf { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 12px; background: var(--sf-glass); box-shadow: 0 0 0 1px var(--sf-line), 0 8px 20px rgba(0, 0, 0, 0.4);
+  font: 800 12.5px/1 var(--font-ui, Manrope, sans-serif); transition: opacity .4s; }
+.sf-kf.new { animation: sfKf .45s cubic-bezier(.2, 1.4, .4, 1); }
+.sf-kf b { padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--pc, #888) 30%, transparent); box-shadow: inset 3px 0 0 var(--pc, #888); color: #fff; }
+.sf-kf b.sf-kf-env { background: rgba(180, 140, 255, 0.2); box-shadow: inset 3px 0 0 #b48cff; color: #e3d4ff; font-weight: 700; }
+.sf-kf i { display: flex; width: 18px; height: 18px; }
+.sf-kf i svg { width: 18px; height: 18px; fill: none; stroke: var(--sf-gold); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sf-kf i.sf-kf-head svg { stroke: #ff6b6b; }
+.sf-kf i.sf-kf-boom svg { stroke: #ff9b4a; }
+.sf-kf i.sf-kf-zone svg { stroke: #b48cff; }
+.sf-kf span { color: rgba(255, 255, 255, 0.6); text-decoration: line-through; text-decoration-color: rgba(255, 90, 90, 0.8); }
+@keyframes sfKf { from { opacity: 0; transform: translateX(30px) scale(0.9); } }
+
+/* ── анонси подій ── */
+.sf-announce { position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%) scale(0.7); z-index: 5; pointer-events: none; text-align: center; opacity: 0; }
+.sf-announce.show { animation: sfAnn 2.2s cubic-bezier(.2, 1.2, .3, 1) forwards; }
+@keyframes sfAnn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); } 14% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(0.95); } }
+.sf-ann-k { font: 800 clamp(30px, 4.2vw, 58px)/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 2px; white-space: nowrap;
+  color: #fff; -webkit-text-stroke: 2px var(--sf-ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--sf-ink), 0 0 40px var(--ann-glow, rgba(255, 216, 77, 0.6)); }
+.sf-ann-n { display: inline-block; margin-top: 10px; padding: 6px 16px; border-radius: 12px; background: var(--sf-glass); box-shadow: 0 0 0 1px var(--sf-line);
+  font: 800 15px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 0.5px; }
+.sf-ann-n:empty { display: none; }
+.sf-announce.gold .sf-ann-k { color: var(--sf-gold); --ann-glow: rgba(255, 200, 60, 0.7); }
+.sf-announce.red .sf-ann-k { color: #ff6b5a; --ann-glow: rgba(255, 80, 60, 0.7); }
+.sf-announce.purple .sf-ann-k { color: #d3a6ff; --ann-glow: rgba(190, 120, 255, 0.75); }
+
+/* ── картка бійця в кадрі ── */
+.sf-hero { position: absolute; left: 14px; bottom: 14px; z-index: 4; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 20px; min-width: 280px;
+  opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; }
+.sf-hero.show { opacity: 1; transform: none; }
+.sf-hero-av { position: relative; width: 60px; height: 60px; flex: 0 0 60px; border-radius: 50%; overflow: hidden; background: var(--pc, #556);
+  box-shadow: 0 0 0 3px var(--pc, #fff), 0 0 0 6px rgba(7, 11, 22, 0.85), 0 0 22px color-mix(in srgb, var(--pc, #fff) 45%, transparent); }
+.sf-hero-av .sf-av-l { font-size: 20px; }
+.sf-hero.dead .sf-hero-av { filter: grayscale(1); }
+.sf-hero-main { flex: 1; min-width: 0; }
+.sf-hero-nick { font: 800 16px/1.1 var(--font-display, Unbounded, sans-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.sf-hero-hp { position: relative; height: 16px; margin-top: 7px; border-radius: 8px; background: rgba(7, 11, 22, 0.85); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.sf-hero-hp em { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.55); transition: width .1s linear; }
+.sf-hero-hp i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #3fc94a, #8dff6a); border-radius: 8px; transition: width .2s; }
+.sf-hero-hp i.mid { background: linear-gradient(90deg, #e9a51e, #ffd84d); }
+.sf-hero-hp i.low { background: linear-gradient(90deg, #d42f25, #ff6b5a); }
+.sf-hero-hp span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 800 10px/1 var(--font-display, Unbounded, sans-serif); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+.sf-hero-st { display: flex; gap: 12px; margin-top: 7px; font: 700 10px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+.sf-hero-st b { font: 800 13px/1 var(--font-display, Unbounded, sans-serif); color: var(--sf-gold); margin-right: 3px; }
+
+/* ── панель камери ── */
+.sf-dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 6px; padding: 7px; border-radius: 20px; }
+.sf-b { height: 42px; min-width: 42px; padding: 0 10px; border: 0; border-radius: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.85); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); transition: background .15s, transform .12s, color .15s; }
+.sf-b svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.sf-b span { font: 800 10px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 0.8px; text-transform: uppercase; }
+.sf-b:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+.sf-b:active { transform: scale(0.95); }
+.sf-b.on { background: linear-gradient(180deg, #ffe27a, var(--sf-gold2)); color: #2a1800; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 16px rgba(255, 216, 77, 0.35); }
+.sf-cam { min-width: 150px; max-width: 200px; padding: 0 8px; display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.sf-cam span { font: 700 8.5px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255, 255, 255, 0.45); }
+.sf-cam b { margin-top: 5px; max-width: 100%; font: 800 13px/1 var(--font-display, Unbounded, sans-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-sep { width: 1px; height: 28px; margin: 0 4px; background: var(--sf-line); }
+
+/* ── відлік і завантаження ── */
+.sf-count { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none;
+  font: 800 clamp(70px, 12vw, 170px)/1 var(--font-display, Unbounded, sans-serif); color: #fff; -webkit-text-stroke: 3px var(--sf-ink); paint-order: stroke fill;
+  text-shadow: 0 8px 0 var(--sf-ink), 0 0 50px rgba(255, 216, 77, 0.6); }
+.sf-count.pop { animation: sfPop .8s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes sfPop { from { transform: translate(-50%, -50%) scale(2.4); opacity: 0; } 40% { opacity: 1; } to { transform: translate(-50%, -50%) scale(1); } }
+.sf-load { position: absolute; inset: 0; z-index: 6; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #10301c;
+  font: 800 14px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 2px; text-transform: uppercase; color: rgba(255, 255, 255, 0.85); }
+.sf-load.show { display: flex; }
+.sf-load-ring { width: 46px; height: 46px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, 0.15); border-top-color: var(--sf-gold); animation: sfSpin .9s linear infinite; }
+@keyframes sfSpin { to { transform: rotate(360deg); } }
+
+/* ── картка чемпіона ── */
+.sf-win { position: absolute; left: 50%; bottom: 6%; transform: translate(-50%, 40px); z-index: 5; display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 54px 30px 22px; border-radius: 26px; background: var(--sf-glass); box-shadow: var(--sf-shadow), 0 0 60px color-mix(in srgb, var(--pc, #ffd84d) 25%, transparent);
+  opacity: 0; pointer-events: none; transition: opacity .5s, transform .6s cubic-bezier(.2, 1.3, .4, 1); min-width: 380px; }
+.sf-win.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.sf-win-av { position: absolute; top: -48px; left: 50%; transform: translateX(-50%); width: 92px; height: 92px; border-radius: 50%; overflow: hidden; background: var(--pc, #556);
+  box-shadow: 0 0 0 4px var(--sf-gold), 0 0 0 8px rgba(7, 11, 22, 0.9), 0 0 40px rgba(255, 216, 77, 0.6); }
+.sf-win-av .sf-av-l { font-size: 30px; }
+.sf-win-rib { position: relative; padding: 7px 26px; font: 800 12px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 3px; color: #2a1800;
+  background: linear-gradient(180deg, #ffe27a, var(--sf-gold2)); clip-path: polygon(0 0, 100% 0, 94% 50%, 100% 100%, 0 100%, 6% 50%); }
+.sf-win-n { margin-top: 12px; max-width: 70vw; font: 800 clamp(34px, 5vw, 70px)/1.05 var(--font-display, Unbounded, sans-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #fff; -webkit-text-stroke: 2px var(--sf-ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--sf-gold2), 0 10px 26px rgba(0, 0, 0, 0.5); }
+.sf-win-s { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; width: 100%; }
+.sf-win-s div { padding: 10px 6px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px var(--sf-line); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.sf-win-s b { font: 800 20px/1 var(--font-display, Unbounded, sans-serif); color: var(--sf-gold); }
+.sf-win-s span { font: 700 9px/1 var(--font-ui, Manrope, sans-serif); letter-spacing: 1px; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }
+.sf-win-x { margin-top: 16px; padding: 12px 34px; border: 2px solid var(--sf-ink); border-radius: 14px; cursor: pointer; background: linear-gradient(180deg, #ffe27a, var(--sf-gold2)); color: #2a1800;
+  font: 800 13px/1 var(--font-display, Unbounded, sans-serif); letter-spacing: 1px; text-transform: uppercase; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 0 var(--sf-ink); transition: transform .12s; }
+.sf-win-x:hover { transform: translateY(-2px); }
+.sf-win-x:active { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 1px 0 var(--sf-ink); }
+
+@media (max-width: 1100px) {
+  .sf-roster { display: none; }
+  .sf-hero { min-width: 0; }
+  .sf-b span { display: none; }
+}
+
+/* фінал прямо на острові: малюється в полотні лобі, тож свій фон і канвас ховаємо, а лобійний HUD — на час бою прибираємо */
+#royale-shootout.sf-island { background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+#royale-shootout.sf-island #so-canvas { display: none; }
+#royale-overlay.rl-final-on .rl-dock, #royale-overlay.rl-final-on .rl-minimap, #royale-overlay.rl-final-on .br-labels,
+#royale-overlay.rl-final-on .rl-toast, #royale-overlay.rl-final-on .rl-banner { visibility: hidden !important; }

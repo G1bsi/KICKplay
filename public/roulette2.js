@@ -6,7 +6,7 @@
    • розмиття на швидкості, клацання щоразу, як картка проходить під стрілкою;
    • зупинка «на волосинку» (випадкове місце в межах картки) і доводка в центр;
    • переможець — золота картка з променями й конфеті.
-   Звуки — синтез WebAudio (без файлів). Без canvas 2D лишається стара стрічка.
+   Звуки — файли ElevenLabs (sfx/rl-*.mp3, kpsfx.js). Без canvas 2D лишається стара стрічка.
    ══════════════════════════════════════════════════════════════ */
 (function () {
   const orig = { start: window.startRoulette, hide: window.hideRouletteOverlay };
@@ -29,37 +29,12 @@
   }
   function hueOf(s) { let h = 2166136261; s = String(s).toLowerCase(); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 360; }
 
-  // ── звук: короткі клацання під стрілкою, «вжух» на старті, стук на зупинці ──
-  let AC = null;
-  function ac() { try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) {} return AC; }
-  function tick(speed) {
-    const a = ac(); if (!a) return;
-    const t = a.currentTime, o = a.createOscillator(), g = a.createGain(), f = a.createBiquadFilter();
-    o.type = 'square'; o.frequency.value = 1400 + Math.min(1, speed / 3000) * 900;
-    f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = 3;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
-    o.connect(f); f.connect(g); g.connect(a.destination); o.start(t); o.stop(t + 0.04);
-  }
-  function whoosh(dur) {
-    const a = ac(); if (!a) return;
-    const t = a.currentTime, len = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1);
-    const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
-    src.buffer = buf; f.type = 'bandpass'; f.Q.value = 1.2;
-    f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(2400, t + dur * 0.25); f.frequency.exponentialRampToValueAtTime(300, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(a.destination); src.start(t); src.stop(t + dur);
-  }
-  function lock() {
-    const a = ac(); if (!a) return;
-    const t = a.currentTime;
-    for (const [fr, v, d] of [[110, 0.5, 0.25], [880, 0.12, 0.6], [1320, 0.08, 0.8]]) {
-      const o = a.createOscillator(), g = a.createGain(); o.type = fr < 200 ? 'sine' : 'triangle';
-      o.frequency.setValueAtTime(fr * (fr < 200 ? 1.6 : 1), t); o.frequency.exponentialRampToValueAtTime(fr, t + 0.06);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + 0.02);
-    }
-  }
+  // ── звук (ElevenLabs, sfx/rl-*.mp3 через KPS): клацання під стрілкою, «вжух» на старті, удар-дзвін на зупинці ──
+  const snd = (n, v, r) => { if (window.KPS) KPS.play(n, v, r); };
+  function ac() { return window.KPS ? KPS.ctx() : null; }
+  function tick(speed) { snd('rl-tick', 0.45, 0.9 + Math.min(1, speed / 3000) * 0.35); }
+  function whoosh(dur) { snd('rl-whoosh', 0.55, Math.max(0.75, Math.min(1.35, 1.9 / dur))); }
+  function lock() { snd('rl-win', 0.8); }
 
   // ── сцена ──
   function ensureStage() {

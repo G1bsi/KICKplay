@@ -80,17 +80,11 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     return v;
   }
 
-  // ── звук: клік кілочка, «вжух» скидання, дзвін виграшу (WebAudio, без файлів) ──
-  let AC = null;
-  const ac = () => { try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) {} return AC; };
-  function tone(f, v, d, type) {
-    const a = ac(); if (!a) return; const t = a.currentTime, o = a.createOscillator(), g = a.createGain();
-    o.type = type || 'triangle'; o.frequency.value = f;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + 0.02);
-  }
-  const pegTick = (k) => tone(1200 + k * 60, 0.06, 0.06, 'square');
-  const winChime = () => { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => tone(f, 0.18, 0.5), i * 90)); };
+  // ── звук (ElevenLabs, sfx/pl-*.mp3 через KPS): кілочки, поява иксів, скидання, DOUBLE, виграш ──
+  const snd = (n, v, r) => { if (window.KPS) KPS.play(n, v, r); };
+  const ac = () => (window.KPS ? KPS.ctx() : null);
+  const pegTick = (k) => snd('pl-peg', 0.32, 0.85 + k * 0.035);
+  const winChime = () => snd('pl-win', 0.75);
 
   // ── DOM-оверлей ──
   function ensureDom() {
@@ -262,8 +256,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
       el.classList.remove('pl-hide', 'pl-pop'); void el.offsetWidth; el.classList.add('pl-pop');
       if (last) el.classList.add('pl-pop-big');
       S.flash[S.order[i]] = performance.now();
-      tone(380 + k * 55, last ? 0.2 : 0.1, last ? 0.7 : 0.18, last ? 'triangle' : 'sine');
-      if (last) setTimeout(() => tone(380 + k * 55 * 1.5, 0.14, 0.6), 120);
+      if (last) snd('pl-big', 0.85); else snd('pl-pop', 0.5, 0.8 + k * 0.045);
       await wait(last ? 900 : slow ? 750 : 210 + k * 14);
     }
     st.revealing = false;
@@ -385,7 +378,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     const whoN = $('pl-who-n');
     $('pl-who').classList.add('pl-rolling');
     let spin = true;
-    (async () => { while (spin) { whoN.textContent = pool[Math.floor(Math.random() * pool.length)]; tone(900, 0.03, 0.04, 'square'); await wait(70); } })();
+    (async () => { while (spin) { whoN.textContent = pool[Math.floor(Math.random() * pool.length)]; snd('rl-tick', 0.22, 1.25); await wait(70); } })();
     // тіньовий бан: у переборі ніків крутяться всі, кидає — лише допущений
     const drawPool = typeof blEligible === 'function' && blEligible(pool).length ? blEligible(pool) : pool;
     const [player] = await rollPick(drawPool, 1, 'Плинко: кто бросает шарик (из ' + drawPool.length + ')');
@@ -394,7 +387,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     if (my !== token) return;
     S.player = player; whoN.textContent = player; $('pl-who').classList.remove('pl-rolling');
     if (window.WC) WC.avatar($('pl-av'), player);
-    tone(660, 0.15, 0.3); tone(990, 0.12, 0.4);
+    snd('pl-pick', 0.7);
     await doShuffle(true, true);
     if (my !== token) return;
     S.state = 'ready';
@@ -408,7 +401,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
     $('pl-panel').classList.add('pl-locked');
     // точка скидання — crypto-випадкова, скидач плавно їде до неї
     S.tx = (rnd() * 2 - 1) * 7.2;
-    tone(400, 0.12, 0.5, 'sine');
+    snd('pl-drop', 0.7);
     await wait(900);
     if (my !== token) return;
     const seed = Math.floor(rnd() * 1e9); let a = seed >>> 0;
@@ -450,7 +443,7 @@ const MOVE = { g: 11, bounce: 1.3, vmax: 6.5, look: 1.55 };
   async function doDouble() {
     const my = token;
     S.doubles++;
-    tone(523, 0.16, 0.25); setTimeout(() => tone(784, 0.16, 0.25), 120); setTimeout(() => tone(1047, 0.2, 0.5), 240);
+    snd('pl-double', 0.8);
     const res = $('pl-result');
     res.innerHTML = '<div class="pl-res-k">Двойной шанс!</div><div class="pl-res-v pl-res-dbl">DOUBLE</div><div class="pl-res-x">все иксы ×2 · шарик падает ещё раз</div>';
     res.classList.add('show');

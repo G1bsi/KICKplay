@@ -84,7 +84,8 @@
 
   // ── звук: ефекти з ElevenLabs (public/sfx/dnd-*.mp3); клон на кожне відтворення — можуть накладатись ──
   const SFX = {}, VOL = { tick: 0.25, open: 0.8, good: 0.7, bad: 0.75, whoosh: 0.6, ring: 0.85, offer: 0.75, nodeal: 0.75, deal: 0.8, drumroll: 0.6, win: 0.85 };
-  for (const n of Object.keys(VOL)) { const a = new Audio('/assets/sfx/dnd-' + n + '.mp3?v=20261125'); a.preload = 'auto'; SFX[n] = a; }
+  const SFXV = { open: '20261126' };                     // версія окремого файлу, якщо його переробили
+  for (const n of Object.keys(VOL)) { const a = new Audio('/assets/sfx/dnd-' + n + '.mp3?v=' + (SFXV[n] || '20261125')); a.preload = 'auto'; SFX[n] = a; }
   let sfxLast = {};
   const VOLS = (() => { let v = { a: 0.8 }; try { const o = JSON.parse(localStorage.getItem('dnd_volume')) || {}; if (o.a >= 0) v.a = o.a; } catch (e) {} v.m = 1; v.s = 1; return v; })();
   const saveVols = () => { try { localStorage.setItem('dnd_volume', JSON.stringify({ a: VOLS.a })); } catch (e) {} };
@@ -548,7 +549,7 @@
     return { pos: p.clone().addScaledVector(dir, 3.1).add(new THREE.Vector3(0, 2.3, 0)), look: p.clone().add(new THREE.Vector3(0, 0.15, 0)) };
   }
   function setGlow(mats, hex, k) { for (const m of mats) { m.color.set(hex); m.emissive.set(hex).multiplyScalar(k == null ? 1 : k); } }
-  // кейс коротко здригається (замки «клацають») — пауза-напруга перед кришкою
+  // кейс коротко здригається — пауза-напруга перед кришкою (звук відкриття — м'який вжух із блиском, без клацань і скрипу)
   function shakeCase(ci, dur) {
     const c = R.cases[ci - 1], q0 = c.o.quaternion.clone(), p0 = c.o.position.clone(), qz = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
     return tween(dur || 420, k => {

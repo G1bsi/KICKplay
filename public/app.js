@@ -1756,88 +1756,6 @@ async function runRevolver(qualifiers) {
   addWinner(winner.name);
 }
 
-// Звук пострілу (інший від основного playTimeoutSound)
-// Звук пострілу револьвера (bang + металевий відгук)
-function playRevolverShot() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = audioCtx.currentTime;
-
-    // Основний удар ("bang") — шум + низький тон
-    const bufferSize = audioCtx.sampleRate * 0.25;
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
-    }
-    const noise = audioCtx.createBufferSource();
-    noise.buffer = buffer;
-
-    // Фільтр — надає характер пострілу
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, now);
-    filter.frequency.exponentialRampToValueAtTime(120, now + 0.15);
-
-    const noiseGain = audioCtx.createGain();
-    noiseGain.gain.setValueAtTime(2.5, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-
-    noise.connect(filter);
-    filter.connect(noiseGain);
-    noiseGain.connect(audioCtx.destination);
-    noise.start(now);
-
-    // Низькочастотний "boom"
-    const boom = audioCtx.createOscillator();
-    const boomGain = audioCtx.createGain();
-    boom.type = 'sine';
-    boom.frequency.setValueAtTime(90, now);
-    boom.frequency.exponentialRampToValueAtTime(30, now + 0.2);
-    boomGain.gain.setValueAtTime(1.2, now);
-    boomGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-    boom.connect(boomGain);
-    boomGain.connect(audioCtx.destination);
-    boom.start(now); boom.stop(now + 0.22);
-
-    // Металевий відгук гільзи
-    const clank = audioCtx.createOscillator();
-    const clankGain = audioCtx.createGain();
-    clank.type = 'triangle';
-    clank.frequency.setValueAtTime(600, now + 0.08);
-    clank.frequency.exponentialRampToValueAtTime(200, now + 0.3);
-    clankGain.gain.setValueAtTime(0, now);
-    clankGain.gain.setValueAtTime(0.3, now + 0.08);
-    clankGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    clank.connect(clankGain);
-    clankGain.connect(audioCtx.destination);
-    clank.start(now + 0.08); clank.stop(now + 0.38);
-  } catch(e) {}
-}
-
-// Звук прокрутки барабана (клацання механізму)
-function playRevolverSpin() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = audioCtx.currentTime;
-
-    // Серія клацань
-    const clicks = 7;
-    for (let i = 0; i < clicks; i++) {
-      const t = now + i * 0.06 * (1 + i * 0.04); // прискорення на початку, сповільнення в кінці
-      const osc = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(900 - i * 60, t);
-      osc.frequency.exponentialRampToValueAtTime(300, t + 0.04);
-      g.gain.setValueAtTime(0.25 - i * 0.02, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-      osc.connect(g); g.connect(audioCtx.destination);
-      osc.start(t); osc.stop(t + 0.07);
-    }
-  } catch(e) {}
-}
-
 // ── Режим «Чат» ──────────────────────────────────────────────────────────────
 // Рулетка выбирает победителя, бот перехватывает его сообщения,
 // стример нажимает «Сохранить» на нужном, список победителей справа.
@@ -2481,33 +2399,10 @@ async function startReveal() {
 
 let announceTimer = null;
 let announceSeconds = 0;
-let audioCtx = null;
 
+// сигнал «час вийшов» (ElevenLabs, sfx/timeout.mp3 через KPS)
 function playTimeoutSound() {
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = audioCtx.currentTime;
-
-    // Старий звук (3 короткі піпи 880Hz), відтворений двічі з паузою
-    function tripleBeep(startOffset) {
-      [0, 0.25, 0.5].forEach(offset => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.0001, now + startOffset + offset);
-        gain.gain.exponentialRampToValueAtTime(0.3, now + startOffset + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + offset + 0.2);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now + startOffset + offset);
-        osc.stop(now + startOffset + offset + 0.25);
-      });
-    }
-
-    tripleBeep(0);    // перший раз
-    tripleBeep(1.0);  // другий раз через 1 секунду
-  } catch (e) {}
+  if (window.KPS) KPS.play('timeout', 0.8);
 }
 
 function showAnnounce(name, seconds, confirmOn) {
