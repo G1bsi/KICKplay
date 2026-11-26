@@ -15,7 +15,7 @@
    ══════════════════════════════════════════════════════════════ */
 (function () {
 'use strict';
-const V = '20261127b';
+const V = '20261127c';
 const BASE = '/assets/models/br/';
 const cache = {};
 function loadGLB(name) {
